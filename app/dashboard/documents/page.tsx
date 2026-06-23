@@ -61,7 +61,7 @@ export default function DocumentsPage() {
           </span>
         )}
       </div>
-      <p className="client-dash-page-desc">المستندات المرفوعة مع طلباتك. الصيغ المسموحة: PDF, Word, Excel, PowerPoint, نص, صور.</p>
+      <p className="client-dash-page-desc">المستندات المرفوعة مع طلباتك. الصيغ المسموحة: PDF, Word, Excel, PowerPoint, نص (.txt), صور (.jpg, .png).</p>
 
       {!emailConfirmed && (
         <div className="client-dash-section" style={{ background: "#fef9e7", borderColor: "#fde68a" }}>
