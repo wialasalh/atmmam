@@ -1,4 +1,8 @@
-import { Settings, Bell } from "lucide-react";
+"use client";
+import { Settings, Bell, LogOut, User, ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 type AdminSection = "dashboard" | "orders" | "clients" | "tickets" | "followups" | "services" | "content" | "reports" | "team" | "settings";
 
@@ -14,18 +18,116 @@ const links: Array<{ key: AdminSection; label: string; href: string }> = [
   { key: "team", label: "الفريق", href: "/admin/team" },
 ];
 
-export function AdminOpsHeader({ active }: { active: AdminSection }) {
-  return <><header className="ops-header">
-    <a className="ops-brand" href="/"><img src="/assets/logo/atmmam-dashboard-lockup-hd-v2.png?v=2" alt="أتمم" /></a>
-    <nav>{links.map((link) => <a className={active === link.key ? "active" : ""} href={link.href} key={link.key}>{link.label}</a>)}</nav>
-    <div className="ops-account">
-      <a href="/admin/followups" aria-label="المتابعات" style={{ display:"flex", alignItems:"center", justifyContent:"center", width:32, height:32, borderRadius:8, color:"#8b9dad", textDecoration:"none" }}>
-        <Bell size={18} />
-      </a>
-      <a href="/admin/settings" aria-label="الإعدادات" style={{ display:"flex", alignItems:"center", justifyContent:"center", width:32, height:32, borderRadius:8, color:"#8b9dad", textDecoration:"none" }}>
-        <Settings size={18} />
-      </a>
-      <span>ح</span>
+function AdminUserMenu() {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("admin");
+  const [email, setEmail] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email) setEmail(user.email);
+    });
+    supabase.from("profiles").select("full_name").eq("role", "admin").single()
+      .then(({ data }) => { if (data?.full_name) setName(data.full_name); });
+  }, []);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  async function handleLogout() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/admin/login");
+  }
+
+  const initial = name.charAt(0).toUpperCase();
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button onClick={() => setOpen(!open)}
+        style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(255,255,255,0.1)", border:"none", borderRadius:24, padding:"5px 10px 5px 6px", cursor:"pointer", color:"#fff" }}>
+        <div style={{ width:30, height:30, borderRadius:"50%", background:"#e8d9c4", display:"grid", placeItems:"center", fontSize:".8rem", fontWeight:800, color:"#5a3e2b", flexShrink:0 }}>
+          {initial}
+        </div>
+        <span style={{ fontSize:".72rem", fontWeight:600, maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
+        <ChevronDown size={13} style={{ opacity:0.7, transform: open ? "rotate(180deg)" : "none", transition:"transform .2s" }} />
+      </button>
+
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 8px)", left:0, background:"#fff", border:"1px solid #e5ecf3", borderRadius:14, boxShadow:"0 8px 24px rgba(0,0,0,.12)", minWidth:220, zIndex:9999, overflow:"hidden" }}>
+          {/* معلومات المستخدم */}
+          <div style={{ padding:"14px 16px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36, height:36, borderRadius:"50%", background:"#073766", display:"grid", placeItems:"center", flexShrink:0 }}>
+              <span style={{ fontSize:".85rem", fontWeight:800, color:"#fff" }}>{initial}</span>
+            </div>
+            <div>
+              <div style={{ fontSize:".75rem", fontWeight:700, color:"#073766" }}>{name}</div>
+              <div style={{ fontSize:".62rem", color:"#8b9dad", marginTop:1 }}>{email}</div>
+              <div style={{ fontSize:".58rem", color:"#0875dc", marginTop:2, background:"#eaf4ff", padding:"1px 6px", borderRadius:8, display:"inline-block" }}>مدير النظام</div>
+            </div>
+          </div>
+
+          {/* روابط */}
+          <div style={{ padding:"6px 0" }}>
+            <a href="/admin/settings" onClick={() => setOpen(false)}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px", fontSize:".73rem", color:"#344d69", textDecoration:"none", cursor:"pointer" }}
+              onMouseEnter={e => (e.currentTarget.style.background="#f5f8fc")}
+              onMouseLeave={e => (e.currentTarget.style.background="transparent")}>
+              <Settings size={15} color="#8b9dad" /> الإعدادات
+            </a>
+            <a href="/admin/team" onClick={() => setOpen(false)}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px", fontSize:".73rem", color:"#344d69", textDecoration:"none" }}
+              onMouseEnter={e => (e.currentTarget.style.background="#f5f8fc")}
+              onMouseLeave={e => (e.currentTarget.style.background="transparent")}>
+              <User size={15} color="#8b9dad" /> إدارة الفريق
+            </a>
+          </div>
+
+          {/* تسجيل الخروج */}
+          <div style={{ borderTop:"1px solid #f0f4f8", padding:"6px 0" }}>
+            <button onClick={handleLogout}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px", fontSize:".73rem", color:"#dc2626", background:"none", border:"none", cursor:"pointer", width:"100%", textAlign:"right" }}
+              onMouseEnter={e => (e.currentTarget.style.background="#fef2f2")}
+              onMouseLeave={e => (e.currentTarget.style.background="transparent")}>
+              <LogOut size={15} /> تسجيل الخروج
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-  </header><nav className="ops-mobile-nav" aria-label="تنقل لوحة التحكم على الجوال">{links.slice(0, 5).map((link) => <a className={active === link.key ? "active" : ""} href={link.href} key={link.key}><span>{link.key === "orders" ? "▤" : link.key === "clients" ? "♙" : link.key === "followups" ? "◷" : link.key === "services" ? "◇" : "⌂"}</span>{link.label.replace("الخدمات والباقات", "الخدمات")}</a>)}</nav></>;
+  );
+}
+
+export function AdminOpsHeader({ active }: { active: AdminSection }) {
+  return (
+    <>
+      <header className="ops-header">
+        <a className="ops-brand" href="/"><img src="/assets/logo/atmmam-dashboard-lockup-hd-v2.png?v=2" alt="أتمم" /></a>
+        <nav>{links.map((link) => <a className={active === link.key ? "active" : ""} href={link.href} key={link.key}>{link.label}</a>)}</nav>
+        <div className="ops-account">
+          <a href="/admin/followups" aria-label="المتابعات"
+            style={{ display:"flex", alignItems:"center", justifyContent:"center", width:32, height:32, borderRadius:8, color:"rgba(255,255,255,0.7)", textDecoration:"none" }}>
+            <Bell size={18} />
+          </a>
+          <AdminUserMenu />
+        </div>
+      </header>
+      <nav className="ops-mobile-nav" aria-label="تنقل لوحة التحكم على الجوال">
+        {links.slice(0, 5).map((link) => (
+          <a className={active === link.key ? "active" : ""} href={link.href} key={link.key}>
+            <span>{link.key === "orders" ? "▤" : link.key === "clients" ? "♙" : link.key === "followups" ? "◷" : link.key === "services" ? "◇" : "⌂"}</span>
+            {link.label.replace("الخدمات والباقات", "الخدمات")}
+          </a>
+        ))}
+      </nav>
+    </>
+  );
 }
