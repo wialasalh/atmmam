@@ -137,7 +137,7 @@ export default function AdminTicketsPage() {
   async function loadTickets() {
     setLoading(true);
     try {
-      const url = statusFilter ? `/api/tickets?status=${statusFilter}` : "/api/tickets";
+      const url = statusFilter ? `/api/admin/tickets?status=${statusFilter}` : "/api/admin/tickets";
       const res = await fetch(url);
       if (res.ok) { const { data } = await res.json(); setTickets(data || []); }
     } catch {}
