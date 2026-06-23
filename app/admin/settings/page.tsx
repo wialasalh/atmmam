@@ -7,7 +7,7 @@ type Role="admin"|"manager"|"operator"|"viewer";
 type TeamMember={id?:string;full_name:string;contact:string;role:Role;active:boolean};
 type AuditLog={id:number;entity_type:string;entity_id:string;action:string;created_at:string;profiles?:{full_name?:string}|null};
 const roleLabels:Record<Role,string>={admin:"مدير النظام",manager:"مدير عمليات",operator:"موظف عمليات",viewer:"مشاهد"};
-const fallbackTeam:TeamMember[]=[{full_name:"حسن محمد",contact:"info@atmmam.com.sa",role:"admin",active:true},{full_name:"أحمد السبيعي",contact:"ahmed@atmmam.com.sa",role:"operator",active:true},{full_name:"نورة القحطاني",contact:"noura@atmmam.com.sa",role:"manager",active:true},{full_name:"سارة العتيبي",contact:"sarah@atmmam.com.sa",role:"operator",active:true}];
+const fallbackTeam:TeamMember[]=[{full_name:"admin",contact:"admin@atmmam.com.sa",role:"admin",active:true}];
 
 export default function SettingsPage(){
   const [tab,setTab]=useState("الفريق والصلاحيات");const [team,setTeam]=useState(fallbackTeam);const [auditLogs,setAuditLogs]=useState<AuditLog[]>([]);const [databaseMode,setDatabaseMode]=useState(false);const [notice,setNotice]=useState("");
