@@ -6,7 +6,7 @@ import { AdminOpsHeader } from "@/components/admin-ops-header";
 import { allowedOrderStatuses, canChangeOrderStatus, filterAdminOrders } from "@/lib/domain/orders";
 
 const statusTabs: Array<OrderStatus | "الكل"> = ["الكل", "جديد", "بانتظار المستندات", "قيد التنفيذ", "مكتمل"];
-const assignees = ["أحمد السبيعي", "نورة القحطاني", "سارة العتيبي"];
+const assignees = ["مدير النظام", "مدير النظام", "مدير النظام"];
 type CatalogItem = { id: string; name?: string; full_name?: string; phone?: string; email?: string; agency_id?: string };
 type Catalog = { clients: CatalogItem[]; services: CatalogItem[]; agencies: CatalogItem[]; profiles: CatalogItem[] };
 type DatabaseOrder = { id:string; reference_no:string; status:string; next_action_text?:string; next_action_at?:string; updated_at:string; clients?:CatalogItem|null; services?:CatalogItem|null; agencies?:CatalogItem|null; profiles?:CatalogItem|null };
