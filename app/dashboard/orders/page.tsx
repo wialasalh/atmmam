@@ -38,9 +38,17 @@ export default function OrdersPage() {
   const [filter, setFilter] = useState("");
 
   useEffect(() => {
-    fetch("/api/client/orders").then(r => r.json()).then(({ data }) => {
-      if (data) setOrders(data);
-    }).catch(() => {}).finally(() => setLoading(false));
+    async function load() {
+      try {
+        const res = await fetch("/api/client/orders");
+        if (res.ok) {
+          const { data } = await res.json();
+          if (data) setOrders(data);
+        }
+      } catch {}
+      setLoading(false);
+    }
+    load();
   }, []);
 
   const filtered = orders.filter(o => {
