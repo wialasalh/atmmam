@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Send, ChevronRight, AlertCircle, Building2, Globe, FileCheck, Award, Scale, Users, Calculator } from "lucide-react";
+import { Send, ChevronRight, AlertCircle, Building2, Globe, FileCheck, Award, Scale, Users, Calculator, MessageSquare, Lightbulb, ThumbsUp } from "lucide-react";
 import Link from "next/link";
+
+type ClientRecord = { id: string; name: string; client_type: string };
+type KbArticle = { id: string; title: string; body: string; category: string };
 
 const SERVICES = [
   { value: "تأسيس الشركات والمنشآت", label: "تأسيس الشركات والمنشآت", icon: Building2, color: "#0875dc", desc: "مؤسسة أو شركة ذات مسؤولية محدودة" },
@@ -13,7 +16,7 @@ const SERVICES = [
   { value: "الخدمات القانونية والتوثيق", label: "القانونية والتوثيق", icon: Scale, color: "#dc2626", desc: "عقود، توثيق، وثائق رسمية" },
   { value: "الموارد البشرية وحماية الأجور", label: "الموارد البشرية", icon: Users, color: "#0891b2", desc: "قوى، حماية الأجور، نطاقات" },
   { value: "الزكاة والضريبة والاستشارات", label: "الزكاة والضريبة", icon: Calculator, color: "#7c3aed", desc: "الزكاة، ضريبة القيمة المضافة" },
-  { value: "أخرى", label: "استفسار آخر", icon: ChevronRight, color: "#6b7280", desc: "موضوع غير مذكور" },
+  { value: "أخرى", label: "استفسار آخر", icon: MessageSquare, color: "#6b7280", desc: "موضوع غير مذكور" },
 ];
 
 const PRIORITIES = [
@@ -44,13 +47,15 @@ const EXTRA_FIELDS: Record<string, { label: string; placeholder: string; key: st
     { label: "عدد الموظفين المعنيين", placeholder: "مثال: موظف واحد، 5 موظفين...", key: "employees" },
   ],
   "الزكاة والضريبة والاستشارات": [
-    { label: "الموضوع الضريبي", placeholder: "مثال: التسجيل في ضريبة القيمة المضافة، إقرار زكوي...", key: "tax_topic" },
+    { label: "الموضوع الضريبي", placeholder: "مثال: التسجيل في ضريبة القيمة المضافة...", key: "tax_topic" },
     { label: "الفترة الزمنية المعنية (إن وجدت)", placeholder: "مثال: الربع الأول 2024", key: "period" },
   ],
 };
 
 export default function NewTicketPage() {
   const router = useRouter();
+  const [clients, setClients] = useState<ClientRecord[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -59,6 +64,36 @@ export default function NewTicketPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [step, setStep] = useState(1);
+  const [kbSuggestions, setKbSuggestions] = useState<KbArticle[]>([]);
+  const [loadingKb, setLoadingKb] = useState(false);
+  const [showKb, setShowKb] = useState(false);
+
+  // Load user's companies
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(({ data }) => {
+      if (data?.clients?.length) {
+        setClients(data.clients);
+        setSelectedClientId(data.clients[0].id);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Search KB when title changes
+  useEffect(() => {
+    if (!title.trim() || title.length < 5) { setKbSuggestions([]); return; }
+    const timer = setTimeout(async () => {
+      setLoadingKb(true);
+      try {
+        const res = await fetch(`/api/kb?q=${encodeURIComponent(title)}&category=${encodeURIComponent(category)}`);
+        if (res.ok) {
+          const { data } = await res.json();
+          if (data?.length) { setKbSuggestions(data.slice(0, 3)); setShowKb(true); }
+          else { setKbSuggestions([]); setShowKb(false); }
+        }
+      } catch {} finally { setLoadingKb(false); }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [title, category]);
 
   const selectedSvc = SERVICES.find(s => s.value === category);
   const extraDefs = category ? EXTRA_FIELDS[category] || [] : [];
@@ -93,7 +128,13 @@ export default function NewTicketPage() {
       const res = await fetch("/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), description: fullDescription, category, priority }),
+        body: JSON.stringify({
+          title: title.trim(),
+          description: fullDescription,
+          category,
+          priority,
+          client_id: selectedClientId || undefined,
+        }),
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error || "حدث خطأ"); setSaving(false); return; }
@@ -115,47 +156,48 @@ export default function NewTicketPage() {
       </div>
 
       {/* Progress */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
         {["اختر الخدمة", "تفاصيل الطلب", "الإرسال"].map((s, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-              <div style={{
-                width: 26, height: 26, borderRadius: "50%", display: "grid", placeItems: "center",
-                background: step > i + 1 ? "#15803d" : step === i + 1 ? "#0875dc" : "#e5eaf0",
-                color: step >= i + 1 ? "#fff" : "#8b9dad",
-                fontSize: ".62rem", fontWeight: 800, flexShrink: 0,
-              }}>
+              <div style={{ width: 26, height: 26, borderRadius: "50%", display: "grid", placeItems: "center", background: step > i + 1 ? "#15803d" : step === i + 1 ? "#0875dc" : "#e5eaf0", color: step >= i + 1 ? "#fff" : "#8b9dad", fontSize: ".62rem", fontWeight: 800, flexShrink: 0 }}>
                 {step > i + 1 ? "✓" : i + 1}
               </div>
-              <span style={{ fontSize: ".62rem", color: step === i + 1 ? "#0875dc" : "#8b9dad", fontWeight: step === i + 1 ? 700 : 400, whiteSpace: "nowrap" }}>
-                {s}
-              </span>
+              <span style={{ fontSize: ".62rem", color: step === i + 1 ? "#0875dc" : "#8b9dad", fontWeight: step === i + 1 ? 700 : 400, whiteSpace: "nowrap" }}>{s}</span>
             </div>
             {i < 2 && <div style={{ flex: 1, height: 1, background: step > i + 1 ? "#15803d" : "#e5eaf0", margin: "0 8px" }} />}
           </div>
         ))}
       </div>
 
-      {/* Step 1: Service selection */}
+      {/* Step 1: Service + Company */}
       {step === 1 && (
         <div>
-          <p style={{ fontSize: ".72rem", color: "#526983", marginBottom: 14, fontWeight: 600 }}>اختر الخدمة التي تحتاج دعماً فيها:</p>
+          {/* Company selector */}
+          {clients.length > 1 && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 8 }}>
+                تحت أي منشأة تتبع هذه التذكرة؟
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {clients.map(c => (
+                  <button key={c.id} type="button" onClick={() => setSelectedClientId(c.id)}
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", border: `1px solid ${selectedClientId === c.id ? "#0875dc" : "#e5eaf0"}`, borderRadius: 10, background: selectedClientId === c.id ? "#eaf4ff" : "#fff", cursor: "pointer", font: "inherit", fontSize: ".7rem", color: selectedClientId === c.id ? "#0875dc" : "#526983", fontWeight: 700, transition: "all .15s" }}>
+                    <Building2 size={14} />
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p style={{ fontSize: ".72rem", color: "#526983", marginBottom: 12, fontWeight: 600 }}>اختر الخدمة التي تحتاج دعماً فيها:</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
             {SERVICES.map(svc => {
               const Icon = svc.icon;
               return (
-                <button
-                  key={svc.value}
-                  onClick={() => handleServiceSelect(svc.value)}
-                  style={{
-                    border: `1px solid ${category === svc.value ? svc.color : "#e5eaf0"}`,
-                    background: category === svc.value ? `${svc.color}10` : "#fff",
-                    borderRadius: 12, padding: "14px 12px", cursor: "pointer",
-                    textAlign: "right", transition: "all .15s", font: "inherit",
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = svc.color; (e.currentTarget as HTMLElement).style.background = `${svc.color}08`; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = category === svc.value ? svc.color : "#e5eaf0"; (e.currentTarget as HTMLElement).style.background = category === svc.value ? `${svc.color}10` : "#fff"; }}
-                >
+                <button key={svc.value} onClick={() => handleServiceSelect(svc.value)}
+                  style={{ border: `1px solid ${category === svc.value ? svc.color : "#e5eaf0"}`, background: category === svc.value ? `${svc.color}10` : "#fff", borderRadius: 12, padding: "14px 12px", cursor: "pointer", textAlign: "right", transition: "all .15s", font: "inherit" }}>
                   <div style={{ width: 34, height: 34, borderRadius: 9, background: `${svc.color}15`, display: "grid", placeItems: "center", marginBottom: 9 }}>
                     <Icon size={17} color={svc.color} />
                   </div>
@@ -171,12 +213,16 @@ export default function NewTicketPage() {
       {/* Step 2+: Form */}
       {step >= 2 && (
         <form onSubmit={handleSubmit}>
-
-          {/* Selected service badge */}
+          {/* Selected service */}
           {selectedSvc && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, background: `${selectedSvc.color}10`, border: `1px solid ${selectedSvc.color}30`, borderRadius: 10, padding: "10px 14px", marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, background: `${selectedSvc.color}10`, border: `1px solid ${selectedSvc.color}30`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
               <selectedSvc.icon size={16} color={selectedSvc.color} />
               <span style={{ fontSize: ".7rem", color: selectedSvc.color, fontWeight: 700, flex: 1 }}>{selectedSvc.label}</span>
+              {clients.length > 0 && selectedClientId && (
+                <span style={{ fontSize: ".6rem", color: "#526983", background: "#f5f8fc", padding: "2px 8px", borderRadius: 8 }}>
+                  {clients.find(c => c.id === selectedClientId)?.name || ""}
+                </span>
+              )}
               <button type="button" onClick={() => { setCategory(""); setStep(1); }} style={{ border: 0, background: "transparent", color: "#8b9dad", cursor: "pointer", fontSize: ".62rem", textDecoration: "underline" }}>
                 تغيير
               </button>
@@ -184,30 +230,47 @@ export default function NewTicketPage() {
           )}
 
           {/* Title */}
-          <div style={{ marginBottom: 14 }}>
+          <div style={{ marginBottom: 10 }}>
             <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 6 }}>عنوان الطلب *</label>
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="ملخص مختصر لطلبك"
-              maxLength={200}
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="ملخص مختصر لطلبك" maxLength={200}
               style={{ width: "100%", height: 42, border: "1px solid #e5eaf0", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", color: "#344d69", boxSizing: "border-box", background: "#fafbfc", outline: "none" }}
               onFocus={e => e.target.style.borderColor = "#0875dc"}
-              onBlur={e => e.target.style.borderColor = "#e5eaf0"}
-            />
+              onBlur={e => e.target.style.borderColor = "#e5eaf0"} />
           </div>
 
+          {/* KB Suggestions */}
+          {showKb && kbSuggestions.length > 0 && (
+            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <Lightbulb size={14} color="#15803d" />
+                <span style={{ fontSize: ".65rem", fontWeight: 700, color: "#15803d" }}>وجدنا مقالات قد تساعدك:</span>
+              </div>
+              {kbSuggestions.map(art => (
+                <div key={art.id} style={{ background: "#fff", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px", marginBottom: 6 }}>
+                  <div style={{ fontSize: ".68rem", fontWeight: 700, color: "#15803d", marginBottom: 4 }}>{art.title}</div>
+                  <div style={{ fontSize: ".62rem", color: "#526983", lineHeight: 1.5, marginBottom: 6 }}>
+                    {art.body.substring(0, 120)}...
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" onClick={() => setShowKb(false)}
+                      style={{ fontSize: ".6rem", color: "#15803d", background: "none", border: "none", cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                      <ThumbsUp size={11} /> هذا يحل مشكلتي
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button type="button" onClick={() => setShowKb(false)} style={{ fontSize: ".6rem", color: "#8b9dad", background: "none", border: "none", cursor: "pointer", marginTop: 4 }}>
+                لم تحل مشكلتي، سأكمل إرسال التذكرة
+              </button>
+            </div>
+          )}
+
           {/* Priority */}
-          <div style={{ marginBottom: 14 }}>
+          <div style={{ marginBottom: 12 }}>
             <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 8 }}>مستوى الأهمية</label>
             <div style={{ display: "flex", gap: 8 }}>
               {PRIORITIES.map(p => (
-                <button key={p.value} type="button" onClick={() => setPriority(p.value)} style={{
-                  flex: 1, height: 44, border: `1px solid ${priority === p.value ? p.color : "#e5eaf0"}`,
-                  background: priority === p.value ? p.bg : "#fff",
-                  borderRadius: 8, cursor: "pointer", font: "inherit", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                  fontSize: ".65rem", fontWeight: 700, color: priority === p.value ? p.color : "#526983", transition: "all .15s", gap: 2,
-                }}>
+                <button key={p.value} type="button" onClick={() => setPriority(p.value)} style={{ flex: 1, height: 44, border: `1px solid ${priority === p.value ? p.color : "#e5eaf0"}`, background: priority === p.value ? p.bg : "#fff", borderRadius: 8, cursor: "pointer", font: "inherit", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: ".65rem", fontWeight: 700, color: priority === p.value ? p.color : "#526983", transition: "all .15s", gap: 2 }}>
                   <span>{p.label}</span>
                   <span style={{ fontSize: ".55rem", fontWeight: 400, color: "#8b9dad" }}>{p.desc}</span>
                 </button>
@@ -217,19 +280,15 @@ export default function NewTicketPage() {
 
           {/* Extra fields */}
           {extraDefs.length > 0 && (
-            <div style={{ background: "#f8fafc", border: "1px solid #e5eaf0", borderRadius: 10, padding: "14px 14px 8px", marginBottom: 14 }}>
+            <div style={{ background: "#f8fafc", border: "1px solid #e5eaf0", borderRadius: 10, padding: "12px 14px 8px", marginBottom: 12 }}>
               <p style={{ fontSize: ".63rem", color: "#526983", fontWeight: 700, marginBottom: 10 }}>معلومات إضافية تساعدنا على معالجة طلبك أسرع:</p>
               {extraDefs.map(field => (
                 <div key={field.key} style={{ marginBottom: 10 }}>
                   <label style={{ display: "block", fontSize: ".62rem", color: "#425c76", fontWeight: 700, marginBottom: 5 }}>{field.label}</label>
-                  <input
-                    value={extraFields[field.key] || ""}
-                    onChange={e => setExtraFields(prev => ({ ...prev, [field.key]: e.target.value }))}
-                    placeholder={field.placeholder}
+                  <input value={extraFields[field.key] || ""} onChange={e => setExtraFields(prev => ({ ...prev, [field.key]: e.target.value }))} placeholder={field.placeholder}
                     style={{ width: "100%", height: 38, border: "1px solid #e5eaf0", borderRadius: 8, padding: "0 12px", font: "inherit", fontSize: ".7rem", color: "#344d69", boxSizing: "border-box", background: "#fff", outline: "none" }}
                     onFocus={e => e.target.style.borderColor = "#0875dc"}
-                    onBlur={e => e.target.style.borderColor = "#e5eaf0"}
-                  />
+                    onBlur={e => e.target.style.borderColor = "#e5eaf0"} />
                 </div>
               ))}
             </div>
@@ -238,15 +297,10 @@ export default function NewTicketPage() {
           {/* Description */}
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 6 }}>تفاصيل الطلب *</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="اشرح طلبك أو مشكلتك بوضوح حتى يتمكن فريقنا من المساعدة بسرعة..."
-              rows={5}
+            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="اشرح طلبك أو مشكلتك بوضوح..." rows={5}
               style={{ width: "100%", border: "1px solid #e5eaf0", borderRadius: 10, padding: "10px 14px", font: "inherit", fontSize: ".75rem", color: "#344d69", resize: "vertical", background: "#fafbfc", boxSizing: "border-box", lineHeight: 1.6, outline: "none" }}
               onFocus={e => e.target.style.borderColor = "#0875dc"}
-              onBlur={e => e.target.style.borderColor = "#e5eaf0"}
-            />
+              onBlur={e => e.target.style.borderColor = "#e5eaf0"} />
           </div>
 
           {error && (
