@@ -236,7 +236,7 @@ export default function CompaniesPage() {
               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
-          <button onClick={() => setShowAddModal(true)} className="client-dash-primary-btn" style={{ height:38, gap:6 }}>
+          <button onClick={() => setShowAddModal(true)} className="client-dash-primary-btn" style={{ height:42, padding:"0 20px", gap:8, fontSize:".75rem", fontWeight:700, borderRadius:10, whiteSpace:"nowrap" }}>
             <Plus size={15} /> إضافة منشأة
           </button>
         </div>
