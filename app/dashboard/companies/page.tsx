@@ -31,6 +31,36 @@ type FormData = {
   phone: string; saudization_percentage: string;
 };
 
+// ── Validation helpers ──────────────────────────
+function validatePhone(phone: string): string | null {
+  if (!phone) return null;
+  if (!/^05\d{8}$/.test(phone.trim())) return "رقم الجوال يجب أن يبدأ بـ 05 ويكون 10 أرقام";
+  return null;
+}
+
+function validateTaxNumber(tax: string): string | null {
+  if (!tax) return null;
+  if (!/^3\d{14}$/.test(tax.trim())) return "الرقم الضريبي يجب أن يكون 15 رقماً ويبدأ بـ 3";
+  return null;
+}
+
+function getExpiryStatus(dateStr: string): "expired" | "soon" | "ok" | null {
+  if (!dateStr) return null;
+  const expiry = new Date(dateStr);
+  const now = new Date();
+  const diffDays = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return "expired";
+  if (diffDays <= 30) return "soon";
+  return "ok";
+}
+
+function countUploadedDocs(company: Company | null): number {
+  if (!company) return 0;
+  const fields = ["commercial_register_doc","company_license_doc","national_id_doc","zakat_tax_doc","national_address_doc"];
+  return fields.filter(f => company[f as keyof Company]).length;
+}
+// ─────────────────────────────────────────────────
+
 const emptyForm: FormData = {
   name: "", city: "", tax_number: "", commercial_number: "",
   commercial_register_date: "", commercial_register_expiry: "",
@@ -104,6 +134,7 @@ export default function CompaniesPage() {
   const [addError, setAddError] = useState("");
   const [docUrls, setDocUrls] = useState<Record<string, string>>({});
   const [openSection, setOpenSection] = useState<string>("basic");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const selected = companies.find(c => c.id === selectedId) || null;
   const progress = calcProgress(form, selected);
@@ -155,6 +186,18 @@ export default function CompaniesPage() {
 
   async function handleSave() {
     if (!selected) return;
+    // Validate fields before save
+    const errors: Record<string, string> = {};
+    const phoneErr = validatePhone(form.phone);
+    if (phoneErr) errors.phone = phoneErr;
+    const taxErr = validateTaxNumber(form.tax_number);
+    if (taxErr) errors.tax_number = taxErr;
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setMessage({ text: "يوجد أخطاء في البيانات — تحقق من الحقول المحددة", type: "error" });
+      return;
+    }
+    setFieldErrors({});
     setSaving(true); setMessage(null);
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.from("clients").update({
@@ -391,7 +434,10 @@ export default function CompaniesPage() {
                 </div>
                 <div>
                   <FieldLabel icon={Hash} label="الرقم الضريبي" />
-                  <input value={form.tax_number} onChange={e => setForm({...form,tax_number:e.target.value})} placeholder="15 رقماً" className="form-input" />
+                  <input value={form.tax_number} onChange={e => { setForm({...form,tax_number:e.target.value}); setFieldErrors(prev => ({...prev, tax_number: ""})); }}
+                    placeholder="15 رقماً يبدأ بـ 3" className="form-input"
+                    style={{ borderColor: fieldErrors.tax_number ? "#dc2626" : undefined }} />
+                  {fieldErrors.tax_number && <p style={{ margin:"4px 0 0", fontSize:".6rem", color:"#dc2626" }}>{fieldErrors.tax_number}</p>}
                 </div>
                 <div>
                   <FieldLabel icon={FileText} label="رقم السجل التجاري" />
@@ -448,7 +494,10 @@ export default function CompaniesPage() {
                 </div>
                 <div>
                   <FieldLabel icon={Phone} label="جوال المنشأة" />
-                  <input value={form.phone} onChange={e => setForm({...form, phone:e.target.value})} placeholder="05XXXXXXXX" className="form-input" maxLength={10} />
+                  <input value={form.phone} onChange={e => { setForm({...form, phone:e.target.value}); setFieldErrors(prev => ({...prev, phone: ""})); }}
+                    placeholder="05XXXXXXXX" className="form-input" maxLength={10}
+                    style={{ borderColor: fieldErrors.phone ? "#dc2626" : undefined }} />
+                  {fieldErrors.phone && <p style={{ margin:"4px 0 0", fontSize:".6rem", color:"#dc2626" }}>{fieldErrors.phone}</p>}
                 </div>
                 <div>
                   <FieldLabel icon={Globe} label="حالة المنشأة" />
@@ -525,7 +574,12 @@ export default function CompaniesPage() {
               </div>
               <div style={{ flex:1, textAlign:"right" }}>
                 <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>الوثائق والمستندات الرسمية</h3>
-                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>ارفع مستندات منشأتك لتكتمل خدماتك</p>
+                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>
+                  ارفع مستندات منشأتك لتكتمل خدماتك
+                  <span style={{ marginRight:8, background: countUploadedDocs(selected) === 5 ? "#f0fdf4" : "#fef9ee", color: countUploadedDocs(selected) === 5 ? "#15803d" : "#b45309", padding:"1px 8px", borderRadius:10, fontWeight:700 }}>
+                    {countUploadedDocs(selected)}/5 مرفوعة
+                  </span>
+                </p>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "docs" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
                 <polyline points="6 9 12 15 18 9" />
