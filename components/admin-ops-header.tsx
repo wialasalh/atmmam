@@ -1,7 +1,6 @@
 "use client";
 import { Settings, Bell, LogOut, User, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 type AdminSection = "dashboard" | "orders" | "clients" | "tickets" | "followups" | "services" | "content" | "reports" | "team" | "settings";
@@ -26,12 +25,18 @@ function AdminUserMenu() {
   const router = useRouter();
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.email) setEmail(user.email);
-    });
-    supabase.from("profiles").select("full_name").eq("role", "admin").single()
-      .then(({ data }) => { if (data?.full_name) setName(data.full_name); });
+    // نجلب بيانات الأدمن الحقيقي من قاعدة البيانات
+    fetch("/api/admin/team")
+      .then(r => r.ok ? r.json() : null)
+      .then(payload => {
+        const members = payload?.members || payload?.data || [];
+        const adminUser = members.find((m: any) => m.role === "admin");
+        if (adminUser) {
+          setName(adminUser.full_name || "admin");
+          setEmail("admin@atmmam.com.sa");
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
