@@ -867,3 +867,93 @@ div[style*="max-height: 220px"]::-webkit-scrollbar-thumb {
   background: #d0d9e3;
   border-radius: 99px;
 }
+
+
+/* ── Ticket Chat UI ── */
+.ticket-chat-bubble-me {
+  background: #0875dc;
+  color: #fff;
+  border-radius: 12px 4px 12px 12px;
+  padding: 10px 14px;
+  font-size: .72rem;
+  line-height: 1.6;
+  max-width: 72%;
+  white-space: pre-wrap;
+}
+.ticket-chat-bubble-other {
+  background: #f5f8fc;
+  color: #344d69;
+  border-radius: 4px 12px 12px 12px;
+  padding: 10px 14px;
+  font-size: .72rem;
+  line-height: 1.6;
+  max-width: 72%;
+  border: 1px solid #e5eaf0;
+  white-space: pre-wrap;
+}
+.ticket-message-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid #f0f3f8;
+  background: #fafbfc;
+}
+.ticket-message-input {
+  flex: 1;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: .72rem;
+  color: #344d69;
+  background: #fff;
+  outline: none;
+}
+.ticket-message-input:focus { border-color: #0875dc; }
+.ticket-send-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 0;
+  background: #0875dc;
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.ticket-send-btn:disabled { opacity: .4; cursor: not-allowed; }
+.ticket-messages-list {
+  min-height: 180px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ticket-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ticket-detail-meta {
+  display: flex;
+  gap: 10px;
+  font-size: .62rem;
+  color: #8b9dad;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.ticket-urgent-badge {
+  background: #fef2f2;
+  color: #dc2626;
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-size: .58rem;
+  font-weight: 700;
+}
+.spin { animation: dashSpin .8s linear infinite; }
+@keyframes dashSpin { to { transform: rotate(360deg); } }
