@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Building2, Plus, Save, Upload, MapPin, Hash, Briefcase,
   FileText, Users, Globe, Clock, Calendar, X, Check,
-  AlertCircle, ChevronDown, ExternalLink, Trash2, CheckCircle2
+  AlertCircle, ChevronDown, ExternalLink, Trash2, CheckCircle2, Phone
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -28,6 +28,7 @@ type FormData = {
   company_activity: string; company_address: string; entity_size: string;
   employee_count: string; company_scope: string; company_status: string;
   national_id: string; unified_register_number: string; notes: string;
+  phone: string; saudization_percentage: string;
 };
 
 const emptyForm: FormData = {
@@ -36,6 +37,7 @@ const emptyForm: FormData = {
   company_activity: "", company_address: "", entity_size: "",
   employee_count: "", company_scope: "", company_status: "active",
   national_id: "", unified_register_number: "", notes: "",
+  phone: "", saudization_percentage: "",
 };
 
 const entitySizes = [
@@ -133,6 +135,8 @@ export default function CompaniesPage() {
       company_scope: c.company_scope || "", company_status: c.company_status || "active",
       national_id: c.national_id || "", unified_register_number: c.unified_register_number || "",
       notes: c.notes || "",
+      phone: c.phone || "",
+      saudization_percentage: (c as any).saudization_percentage || "",
     });
   }
 
@@ -167,6 +171,8 @@ export default function CompaniesPage() {
       national_id: form.national_id || null,
       unified_register_number: form.unified_register_number || null,
       notes: form.notes || null,
+      phone: form.phone || null,
+      saudization_percentage: form.saudization_percentage ? parseFloat(form.saudization_percentage) : null,
     }).eq("id", selected.id);
     setMessage(error ? { text: "فشل الحفظ، حاول مرة أخرى", type: "error" } : { text: "✓ تم حفظ البيانات بنجاح", type: "success" });
     setSaving(false);
@@ -442,6 +448,10 @@ export default function CompaniesPage() {
                   <CityDropdown value={form.city} onChange={v => setForm({...form, city:v})} />
                 </div>
                 <div>
+                  <FieldLabel icon={Phone} label="جوال المنشأة" />
+                  <input value={form.phone} onChange={e => setForm({...form, phone:e.target.value})} placeholder="05XXXXXXXX" className="form-input" maxLength={10} />
+                </div>
+                <div>
                   <FieldLabel icon={Globe} label="حالة المنشأة" />
                   <CustomDropdown
                     value={form.company_status}
@@ -449,6 +459,12 @@ export default function CompaniesPage() {
                     options={statuses.map(s => ({ value: s.value, label: s.label }))}
                     placeholder="اختر حالة المنشأة"
                   />
+                </div>
+                <div style={{ gridColumn:"1/-1" }}>
+                  <FieldLabel icon={FileText} label="ملاحظات إضافية" />
+                  <textarea value={form.notes} onChange={e => setForm({...form, notes:e.target.value})} placeholder="أي معلومات إضافية تخص المنشأة..." rows={3}
+                    style={{ width:"100%", border:"1px solid #e5eaf0", borderRadius:10, padding:"10px 14px", font:"inherit", fontSize:".72rem", color:"#344d69", resize:"vertical", background:"#fafbfc", boxSizing:"border-box", lineHeight:1.6, outline:"none" }}
+                    onFocus={e => e.target.style.borderColor="#0875dc"} onBlur={e => e.target.style.borderColor="#e5eaf0"} />
                 </div>
               </div>
             </div>}
