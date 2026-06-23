@@ -500,6 +500,10 @@ export default function CompaniesPage() {
                     placeholder="اختر حجم الكيان"
                   />
                 </div>
+                <div>
+                  <FieldLabel icon={Users} label="نسبة السعودة الحالية %" />
+                  <input type="number" min="0" max="100" value={form.saudization_percentage} onChange={e => setForm({...form, saudization_percentage:e.target.value})} placeholder="مثال: 35" className="form-input" />
+                </div>
                 <div style={{ gridColumn:"1/-1" }}>
                   <FieldLabel icon={Globe} label="نطاق المنشأة (نطاقات)" />
                   <CustomDropdown
