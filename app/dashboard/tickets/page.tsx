@@ -38,17 +38,19 @@ export default function TicketsPage() {
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    Promise.all([
+      supabase.auth.getUser(),
+      fetch("/api/tickets").then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
+    ]).then(([{ data: { user } }, json]) => {
       if (user?.email_confirmed_at) setEmailConfirmed(true);
-    });
-    loadTickets();
+      setTickets(json.data || []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   async function loadTickets() {
-    try {
-      const res = await fetch("/api/tickets");
-      if (res.ok) { const { data } = await res.json(); setTickets(data || []); }
-    } catch {}
+    const res = await fetch("/api/tickets").catch(() => null);
+    if (res?.ok) { const { data } = await res.json(); setTickets(data || []); }
     setLoading(false);
   }
 
