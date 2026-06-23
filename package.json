@@ -1,0 +1,34 @@
+{
+  "name": "atmmam-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "check": "pnpm lint && pnpm test && pnpm build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy": "next build && npx vercel --prod"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.2",
+    "@types/pg": "^8.20.0",
+    "lucide-react": "^1.21.0",
+    "next": "^15.4.0",
+    "pg": "^8.22.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "supabase": "^2.107.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.9"
+  }
+}
