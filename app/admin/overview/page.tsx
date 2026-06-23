@@ -19,7 +19,7 @@ function getGreeting() {
   return "مساء النور";
 }
 
-const TEAM = ["أحمد السبيعي", "سارة العتيبي", "نورة القحطاني"];
+const TEAM = ["مدير النظام", "مدير النظام", "مدير النظام"];
 
 export default function AdminOverviewPage() {
   const [orders, setOrders] = useState(initialAdminOrders);
