@@ -371,8 +371,8 @@ export default function CompaniesPage() {
                 <Hash size={16} color="#0875dc" />
               </div>
               <div style={{ flex:1, textAlign:"right" }}>
-                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>البيانات التجارية الأساسية</h3>
-                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>المعلومات الرسمية للمنشأة</p>
+                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>الهوية التجارية</h3>
+                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>السجل التجاري والبيانات الرسمية للمنشأة</p>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "basic" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
                 <polyline points="6 9 12 15 18 9" />
@@ -420,8 +420,8 @@ export default function CompaniesPage() {
                 <Briefcase size={16} color="#15803d" />
               </div>
               <div style={{ flex:1, textAlign:"right" }}>
-                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>النشاط والموقع</h3>
-                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>تفاصيل النشاط التجاري والعنوان</p>
+                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>النشاط والعنوان التجاري</h3>
+                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>نوع النشاط والموقع الجغرافي للمنشأة</p>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "activity" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
                 <polyline points="6 9 12 15 18 9" />
@@ -462,8 +462,8 @@ export default function CompaniesPage() {
                 <Users size={16} color="#b45309" />
               </div>
               <div style={{ flex:1, textAlign:"right" }}>
-                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>الموارد البشرية والتصنيف</h3>
-                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>حجم المنشأة ونطاق العمل</p>
+                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>التصنيف والقوى العاملة</h3>
+                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>حجم المنشأة ونطاقات وزارة الموارد البشرية</p>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "hr" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
                 <polyline points="6 9 12 15 18 9" />
@@ -505,8 +505,8 @@ export default function CompaniesPage() {
                 <FileText size={16} color="#7c3aed" />
               </div>
               <div style={{ flex:1, textAlign:"right" }}>
-                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>مستندات المنشأة</h3>
-                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>ارفع المستندات الرسمية لاستكمال ملف المنشأة</p>
+                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>الوثائق والمستندات الرسمية</h3>
+                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>ارفع مستندات منشأتك لتكتمل خدماتك</p>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "docs" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
                 <polyline points="6 9 12 15 18 9" />
