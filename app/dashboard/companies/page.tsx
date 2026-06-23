@@ -363,7 +363,7 @@ export default function CompaniesPage() {
           )}
 
           {/* ── Card 1: البيانات الأساسية ── */}
-          <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+          <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
             <div style={{ padding:"16px 20px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:"#eaf4ff", display:"grid", placeItems:"center", flexShrink:0 }}>
                 <Hash size={16} color="#0875dc" />
@@ -446,7 +446,7 @@ export default function CompaniesPage() {
           </div>
 
           {/* ── Card 3: الموارد البشرية ── */}
-          <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+          <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
             <div style={{ padding:"16px 20px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:"#fef9ee", display:"grid", placeItems:"center", flexShrink:0 }}>
                 <Users size={16} color="#b45309" />
@@ -485,7 +485,7 @@ export default function CompaniesPage() {
           </div>
 
           {/* ── Card 4: المستندات ── */}
-          <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:16, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+          <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:16, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
             <div style={{ padding:"16px 20px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:"#f5f3ff", display:"grid", placeItems:"center", flexShrink:0 }}>
                 <FileText size={16} color="#7c3aed" />
