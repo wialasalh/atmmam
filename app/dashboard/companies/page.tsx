@@ -189,6 +189,7 @@ export default function CompaniesPage() {
     if (!user) { setSaving(false); return; }
     const { data, error } = await supabase.from("clients").insert({
       name: newCompany.name.trim(),
+      phone: "0000000000",
       tax_number: newCompany.tax_number.trim() || null,
       company_activity: newCompany.company_activity.trim() || null,
       client_type: newCompany.client_type,
