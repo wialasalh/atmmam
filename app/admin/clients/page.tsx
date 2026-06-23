@@ -32,12 +32,13 @@ export default function AdminClientsPage() {
   useEffect(() => { loadClients(); }, []);
 
   async function loadClients() {
-    const supabase = createSupabaseBrowserClient();
-    const { data } = await supabase
-      .from("clients")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) setClients(data as ClientRecord[]);
+    try {
+      const res = await fetch("/api/admin/clients");
+      if (res.ok) {
+        const { data } = await res.json();
+        if (data) setClients(data as ClientRecord[]);
+      }
+    } catch {}
     setLoading(false);
   }
 
