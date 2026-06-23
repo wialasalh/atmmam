@@ -101,22 +101,13 @@ export default function CompaniesPage() {
   const [newCompany, setNewCompany] = useState({ name: "", tax_number: "", company_activity: "", client_type: "company" as "company" | "person" });
   const [addError, setAddError] = useState("");
   const [docUrls, setDocUrls] = useState<Record<string, string>>({});
-  const [cityOpen, setCityOpen] = useState(false);
-  const [cityQuery, setCityQuery] = useState("");
-  const cityRef = useRef<HTMLDivElement>(null);
 
   const selected = companies.find(c => c.id === selectedId) || null;
   const progress = calcProgress(form, selected);
 
   useEffect(() => { loadCompanies(); }, []);
   useEffect(() => { if (selected) { populateForm(selected); loadDocUrls(selected); } }, [selected]);
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (cityRef.current && !cityRef.current.contains(e.target as Node)) setCityOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+
 
   async function loadCompanies() {
     try {
@@ -220,7 +211,6 @@ export default function CompaniesPage() {
     setTimeout(() => setMessage(null), 3000);
   }
 
-  const filteredCities = cityQuery ? saudiCities.filter(c => c.includes(cityQuery)) : saudiCities;
 
   if (loading) return (
     <div className="client-dash-page">
@@ -440,29 +430,10 @@ export default function CompaniesPage() {
                 </div>
                 <div>
                   <FieldLabel icon={MapPin} label="المدينة" />
-                  <div ref={cityRef} style={{ position:"relative" }}>
-                    <div onClick={() => setCityOpen(!cityOpen)} className="form-input"
-                      style={{ display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
-                      <span style={{ color:form.city?"#2a4a6a":"#b0bcc9", fontSize:".72rem" }}>{form.city || "اختر المدينة"}</span>
-                      <ChevronDown size={13} color="#8b9dad" />
-                    </div>
-                    {cityOpen && (
-                      <div style={{ position:"absolute", top:"100%", right:0, left:0, zIndex:50, background:"#fff", border:"1px solid #dfe7ef", borderRadius:10, marginTop:4, boxShadow:"0 8px 24px rgba(0,0,0,.1)", overflow:"hidden" }}>
-                        <div style={{ padding:"8px 10px", borderBottom:"1px solid #eef2f7" }}>
-                          <input autoFocus value={cityQuery} onChange={e => setCityQuery(e.target.value)} placeholder="ابحث..."
-                            style={{ width:"100%", border:0, outline:0, font:"inherit", fontSize:".7rem", color:"#2a4a6a" }} />
-                        </div>
-                        <div style={{ maxHeight:200, overflowY:"auto" }}>
-                          {filteredCities.map(c => (
-                            <div key={c} onClick={() => { setForm({...form,city:c}); setCityOpen(false); setCityQuery(""); }}
-                              style={{ padding:"8px 14px", fontSize:".7rem", cursor:"pointer", background:form.city===c?"#eaf4ff":"transparent", color:form.city===c?"#0875dc":"#2a4a6a", fontWeight:form.city===c?700:400 }}>
-                              {c}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <select value={form.city} onChange={e => setForm({...form, city:e.target.value})} className="form-input">
+                    <option value="">اختر المدينة</option>
+                    {saudiCities.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
                 <div>
                   <FieldLabel icon={Globe} label="حالة المنشأة" />
