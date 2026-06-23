@@ -172,7 +172,6 @@ export default function CompaniesPage() {
       unified_register_number: form.unified_register_number || null,
       notes: form.notes || null,
       phone: form.phone || null,
-      saudization_percentage: form.saudization_percentage ? parseFloat(form.saudization_percentage) : null,
     }).eq("id", selected.id);
     setMessage(error ? { text: "فشل الحفظ، حاول مرة أخرى", type: "error" } : { text: "✓ تم حفظ البيانات بنجاح", type: "success" });
     setSaving(false);
