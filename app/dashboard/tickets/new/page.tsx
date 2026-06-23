@@ -27,8 +27,11 @@ const ALLOWED_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "image/jpeg",
   "image/png",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-powerpoint",
+  "text/plain",
 ];
-const ALLOWED_EXT = [".pdf", ".docx", ".xlsx", ".jpg", ".jpeg", ".png"];
+const ALLOWED_EXT = [".pdf", ".docx", ".xlsx", ".jpg", ".jpeg", ".png", ".pptx", ".ppt", ".txt"];
 const MAX_SIZE_MB = 10;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
@@ -79,7 +82,7 @@ const EXTRA_FIELDS: Record<string, { label: string; placeholder: string; key: st
 function validateFile(file: File): string | null {
   const ext = "." + file.name.split(".").pop()?.toLowerCase();
   if (!ALLOWED_EXT.includes(ext) && !ALLOWED_TYPES.includes(file.type)) {
-    return `نوع الملف غير مسموح. الصيغ المقبولة: PDF, DOCX, XLSX, JPG, PNG`;
+    return `نوع الملف غير مسموح. الصيغ المقبولة: PDF, Word, Excel, PowerPoint, صور, نص`;
   }
   if (file.size > MAX_SIZE_BYTES) {
     return `حجم الملف (${(file.size / 1024 / 1024).toFixed(1)} MB) يتجاوز الحد المسموح (${MAX_SIZE_MB} MB)`;
@@ -425,7 +428,7 @@ export default function NewTicketPage() {
             <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 8 }}>
               <Paperclip size={13} style={{ display: "inline", verticalAlign: "middle", marginLeft: 5 }} />
               المرفقات (اختياري)
-              <span style={{ fontWeight: 400, color: "#8b9dad", marginRight: 6 }}>PDF, DOCX, XLSX, JPG, PNG — بحد أقصى {MAX_SIZE_MB} MB لكل ملف</span>
+              <span style={{ fontWeight: 400, color: "#8b9dad", marginRight: 6 }}>PDF, Word, Excel, PowerPoint, صور, نص — بحد أقصى {MAX_SIZE_MB} MB</span>
             </label>
 
             {/* Drop zone */}
@@ -449,13 +452,13 @@ export default function NewTicketPage() {
                 اسحب الملفات هنا أو <span style={{ color: "#0875dc", textDecoration: "underline" }}>اختر من جهازك</span>
               </p>
               <p style={{ margin: 0, fontSize: ".6rem", color: "#aab5c3" }}>
-                الصيغ المقبولة: .pdf .docx .xlsx .jpg .png
+                الصيغ المقبولة: .pdf .docx .xlsx .jpg .png .pptx .txt
               </p>
               <input
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png"
+                accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png,.pptx,.ppt,.txt"
                 style={{ display: "none" }}
                 onChange={e => { if (e.target.files) { addFiles(e.target.files); e.target.value = ""; } }}
               />
