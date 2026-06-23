@@ -10,7 +10,7 @@ export async function GET() {
     supabase.from("clients").select("id,name,phone,email").is("deleted_at", null).order("name"),
     supabase.from("services").select("id,name,agency_id").eq("active", true).order("name"),
     supabase.from("agencies").select("id,name,logo_url").eq("active", true).order("name"),
-    supabase.from("profiles").select("id,full_name,role").eq("active", true).order("full_name"),
+    supabase.from("profiles").select("id,full_name,role").eq("active", true).in("role", ["admin","manager","operator"]).order("full_name"),
     supabase.from("orders").select("id,reference_no,client_id,service_id,assignee_id,clients(name),services(name),profiles!orders_assignee_id_fkey(full_name)").is("deleted_at", null).not("status", "in", "(completed,cancelled)").order("updated_at", { ascending: false }),
   ]);
   const error = clients.error ?? services.error ?? agencies.error ?? profiles.error ?? orders.error;
