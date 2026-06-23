@@ -48,17 +48,17 @@ const entitySizes = [
 
 const scopes = [
   { value: "", label: "اختر نطاق المنشأة" },
-  { value: "platinum", label: "🏆 البلاتيني" },
-  { value: "high_green", label: "🟢 الأخضر العالي" },
-  { value: "medium_green", label: "🟢 الأخضر المتوسط" },
-  { value: "low_green", label: "🟡 الأخضر المنخفض" },
-  { value: "red", label: "🔴 الأحمر" },
+  { value: "platinum", label: "البلاتيني" },
+  { value: "high_green", label: "الأخضر العالي" },
+  { value: "medium_green", label: "الأخضر المتوسط" },
+  { value: "low_green", label: "الأخضر المنخفض" },
+  { value: "red", label: "الأحمر" },
 ];
 
 const statuses = [
-  { value: "active", label: "نشطة ✓", color: "#15803d", bg: "#f0fdf4" },
-  { value: "suspended", label: "معلقة ⚠", color: "#b45309", bg: "#fef9ee" },
-  { value: "struck_off", label: "مشطوبة ✗", color: "#dc2626", bg: "#fef2f2" },
+  { value: "active", label: "نشطة", color: "#15803d", bg: "#f0fdf4" },
+  { value: "suspended", label: "معلقة", color: "#b45309", bg: "#fef9ee" },
+  { value: "struck_off", label: "مشطوبة", color: "#dc2626", bg: "#fef2f2" },
 ];
 
 const saudiCities = [
@@ -434,9 +434,12 @@ export default function CompaniesPage() {
                 </div>
                 <div>
                   <FieldLabel icon={Globe} label="حالة المنشأة" />
-                  <select value={form.company_status} onChange={e => setForm({...form,company_status:e.target.value})} className="form-input">
-                    {statuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
+                  <CustomDropdown
+                    value={form.company_status}
+                    onChange={v => setForm({...form, company_status:v})}
+                    options={statuses.map(s => ({ value: s.value, label: s.label }))}
+                    placeholder="اختر حالة المنشأة"
+                  />
                 </div>
               </div>
             </div>
@@ -461,15 +464,21 @@ export default function CompaniesPage() {
                 </div>
                 <div>
                   <FieldLabel icon={Building2} label="حجم الكيان" />
-                  <select value={form.entity_size} onChange={e => setForm({...form,entity_size:e.target.value})} className="form-input">
-                    {entitySizes.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
+                  <CustomDropdown
+                    value={form.entity_size}
+                    onChange={v => setForm({...form, entity_size:v})}
+                    options={entitySizes.filter(s => s.value !== "").map(s => ({ value: s.value, label: s.label }))}
+                    placeholder="اختر حجم الكيان"
+                  />
                 </div>
                 <div style={{ gridColumn:"1/-1" }}>
                   <FieldLabel icon={Globe} label="نطاق المنشأة (نطاقات)" />
-                  <select value={form.company_scope} onChange={e => setForm({...form,company_scope:e.target.value})} className="form-input">
-                    {scopes.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
+                  <CustomDropdown
+                    value={form.company_scope}
+                    onChange={v => setForm({...form, company_scope:v})}
+                    options={scopes.filter(s => s.value !== "").map(s => ({ value: s.value, label: s.label }))}
+                    placeholder="اختر نطاق المنشأة"
+                  />
                 </div>
               </div>
             </div>
@@ -533,6 +542,65 @@ export default function CompaniesPage() {
     </div>
   );
 }
+
+function CustomDropdown({ value, onChange, options, placeholder }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find(o => o.value === value);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <div onClick={() => setOpen(!open)} className="form-input"
+        style={{ display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none" }}>
+        <span style={{ color: value ? "#2a4a6a" : "#b0bcc9", fontSize:".72rem" }}>
+          {selected?.label || placeholder}
+        </span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+      {open && (
+        <div style={{
+          position:"absolute", top:"calc(100% + 4px)", right:0, left:0,
+          zIndex:9999, background:"#fff", border:"1px solid #dfe7ef",
+          borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,.12)", overflow:"hidden"
+        }}>
+          <div style={{ maxHeight:220, overflowY:"auto", background:"#fff" }}>
+            <div onClick={() => { onChange(""); setOpen(false); }}
+              style={{ padding:"8px 14px", fontSize:".7rem", cursor:"pointer", color:"#8b9dad", borderBottom:"1px solid #f5f5f5" }}>
+              اختر...
+            </div>
+            {options.map(o => (
+              <div key={o.value} onClick={() => { onChange(o.value); setOpen(false); }}
+                style={{
+                  padding:"8px 14px", fontSize:".7rem", cursor:"pointer",
+                  background: value === o.value ? "#eaf4ff" : "#fff",
+                  color: value === o.value ? "#0875dc" : "#2a4a6a",
+                  fontWeight: value === o.value ? 700 : 400,
+                }}>
+                {o.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function CityDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
