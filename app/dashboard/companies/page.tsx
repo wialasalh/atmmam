@@ -557,7 +557,7 @@ export default function CompaniesPage() {
                       )}
                       <label style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:".6rem", color:current?"#526983":"#0875dc", background:current?"#f0f4f8":"#eaf4ff", border:`1px solid ${current?"#e5eaf0":"#bddcff"}`, padding:"5px 10px", borderRadius:7, cursor:"pointer", fontWeight:700 }}>
                         <Upload size={11} /> {isUploading ? "..." : current ? "تحديث" : "رفع"}
-                        <input type="file" hidden accept=".pdf,.jpg,.jpeg,.png,.docx"
+                        <input type="file" hidden accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx,.xls,.pptx,.ppt,.txt"
                           onChange={e => e.target.files?.[0] && handleUpload(field, e.target.files[0])}
                           disabled={isUploading} />
                       </label>
