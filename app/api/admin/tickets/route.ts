@@ -3,29 +3,25 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-const serviceClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
-
 export async function GET(req: Request) {
   try {
+    const serviceClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
-    const search = searchParams.get("search");
 
     let query = serviceClient
       .from("tickets")
-      .select(`
-        id, title, status, priority, category, created_at, updated_at,
-        clients:client_id(id, name, phone, company_status),
-        profiles:assigned_to(id, full_name)
-      `)
+      .select("id, title, status, priority, category, created_at, updated_at, client_id, assigned_to")
       .order("created_at", { ascending: false });
 
-    if (status && status !== "الكل") query = query.eq("status", status);
-    if (search) query = query.ilike("title", \`%\${search}%\`);
+    if (status && status !== "الكل") {
+      query = query.eq("status", status);
+    }
 
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
