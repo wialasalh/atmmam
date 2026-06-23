@@ -101,6 +101,7 @@ export default function CompaniesPage() {
   const [newCompany, setNewCompany] = useState({ name: "", tax_number: "", company_activity: "", client_type: "company" as "company" | "person" });
   const [addError, setAddError] = useState("");
   const [docUrls, setDocUrls] = useState<Record<string, string>>({});
+  const [openSection, setOpenSection] = useState<string>("basic");
 
   const selected = companies.find(c => c.id === selectedId) || null;
   const progress = calcProgress(form, selected);
@@ -364,16 +365,20 @@ export default function CompaniesPage() {
 
           {/* ── Card 1: البيانات الأساسية ── */}
           <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
-            <div style={{ padding:"16px 20px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
+            <button onClick={() => setOpenSection(openSection === "basic" ? "" : "basic")}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"16px 20px", border:0, background: openSection === "basic" ? "#f8fafc" : "#fff", cursor:"pointer", borderBottom: openSection === "basic" ? "1px solid #f0f4f8" : "none", borderRadius: openSection === "basic" ? "16px 16px 0 0" : 16 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:"#eaf4ff", display:"grid", placeItems:"center", flexShrink:0 }}>
                 <Hash size={16} color="#0875dc" />
               </div>
-              <div>
+              <div style={{ flex:1, textAlign:"right" }}>
                 <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>البيانات التجارية الأساسية</h3>
                 <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>المعلومات الرسمية للمنشأة</p>
               </div>
-            </div>
-            <div style={{ padding:"18px 20px" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "basic" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {openSection === "basic" && <div style={{ padding:"18px 20px" }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
                 <div style={{ gridColumn:"1/-1" }}>
                   <FieldLabel icon={Building2} label="اسم المنشأة *" />
@@ -404,21 +409,25 @@ export default function CompaniesPage() {
                   <input value={form.unified_register_number} onChange={e => setForm({...form,unified_register_number:e.target.value})} placeholder="رقم السجل الموحد" className="form-input" />
                 </div>
               </div>
-            </div>
+            </div>}
           </div>
 
           {/* ── Card 2: النشاط والموقع ── */}
           <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
-            <div style={{ padding:"16px 20px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
+            <button onClick={() => setOpenSection(openSection === "activity" ? "" : "activity")}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"16px 20px", border:0, background: openSection === "activity" ? "#f8fafc" : "#fff", cursor:"pointer", borderBottom: openSection === "activity" ? "1px solid #f0f4f8" : "none", borderRadius: openSection === "activity" ? "16px 16px 0 0" : 16 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:"#f0fdf4", display:"grid", placeItems:"center", flexShrink:0 }}>
                 <Briefcase size={16} color="#15803d" />
               </div>
-              <div>
+              <div style={{ flex:1, textAlign:"right" }}>
                 <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>النشاط والموقع</h3>
                 <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>تفاصيل النشاط التجاري والعنوان</p>
               </div>
-            </div>
-            <div style={{ padding:"18px 20px" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "activity" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {openSection === "activity" && <div style={{ padding:"18px 20px" }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
                 <div style={{ gridColumn:"1/-1" }}>
                   <FieldLabel icon={Briefcase} label="النشاط التجاري" />
@@ -442,21 +451,25 @@ export default function CompaniesPage() {
                   />
                 </div>
               </div>
-            </div>
+            </div>}
           </div>
 
           {/* ── Card 3: الموارد البشرية ── */}
           <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
-            <div style={{ padding:"16px 20px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
+            <button onClick={() => setOpenSection(openSection === "hr" ? "" : "hr")}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"16px 20px", border:0, background: openSection === "hr" ? "#f8fafc" : "#fff", cursor:"pointer", borderBottom: openSection === "hr" ? "1px solid #f0f4f8" : "none", borderRadius: openSection === "hr" ? "16px 16px 0 0" : 16 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:"#fef9ee", display:"grid", placeItems:"center", flexShrink:0 }}>
                 <Users size={16} color="#b45309" />
               </div>
-              <div>
+              <div style={{ flex:1, textAlign:"right" }}>
                 <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>الموارد البشرية والتصنيف</h3>
                 <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>حجم المنشأة ونطاق العمل</p>
               </div>
-            </div>
-            <div style={{ padding:"18px 20px" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "hr" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {openSection === "hr" && <div style={{ padding:"18px 20px" }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
                 <div>
                   <FieldLabel icon={Users} label="عدد الموظفين" />
@@ -481,21 +494,25 @@ export default function CompaniesPage() {
                   />
                 </div>
               </div>
-            </div>
+            </div>}
           </div>
 
           {/* ── Card 4: المستندات ── */}
           <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:16, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
-            <div style={{ padding:"16px 20px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
+            <button onClick={() => setOpenSection(openSection === "docs" ? "" : "docs")}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"16px 20px", border:0, background: openSection === "docs" ? "#f8fafc" : "#fff", cursor:"pointer", borderBottom: openSection === "docs" ? "1px solid #f0f4f8" : "none", borderRadius: openSection === "docs" ? "16px 16px 0 0" : 16 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:"#f5f3ff", display:"grid", placeItems:"center", flexShrink:0 }}>
                 <FileText size={16} color="#7c3aed" />
               </div>
-              <div>
+              <div style={{ flex:1, textAlign:"right" }}>
                 <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>مستندات المنشأة</h3>
                 <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>ارفع المستندات الرسمية لاستكمال ملف المنشأة</p>
               </div>
-            </div>
-            <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:10 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "docs" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {openSection === "docs" && <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:10 }}>
               {DOC_FIELDS.map(({ field, label, desc, required }) => {
                 const current = selected[field as keyof Company] as string | null;
                 const url = docUrls[field];
@@ -529,7 +546,7 @@ export default function CompaniesPage() {
                   </div>
                 );
               })}
-            </div>
+            </div>}
           </div>
 
           {/* ── Save Button ── */}
