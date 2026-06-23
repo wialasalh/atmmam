@@ -399,11 +399,11 @@ export default function CompaniesPage() {
                 </div>
                 <div>
                   <FieldLabel icon={Calendar} label="تاريخ إصدار السجل" />
-                  <input type="date" value={form.commercial_register_date} onChange={e => setForm({...form,commercial_register_date:e.target.value})} className="form-input" />
+                  <input type="date" value={form.commercial_register_date} onChange={e => setForm({...form,commercial_register_date:e.target.value})} className="form-input" dir="ltr" style={{textAlign:"right"}} />
                 </div>
                 <div>
                   <FieldLabel icon={Clock} label="تاريخ انتهاء السجل" />
-                  <input type="date" value={form.commercial_register_expiry} onChange={e => setForm({...form,commercial_register_expiry:e.target.value})} className="form-input" />
+                  <input type="date" value={form.commercial_register_expiry} onChange={e => setForm({...form,commercial_register_expiry:e.target.value})} className="form-input" dir="ltr" style={{textAlign:"right"}} />
                 </div>
                 <div>
                   <FieldLabel icon={Hash} label="رقم الهوية الوطنية" />
