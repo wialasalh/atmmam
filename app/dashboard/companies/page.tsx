@@ -408,7 +408,7 @@ export default function CompaniesPage() {
           </div>
 
           {/* ── Card 2: النشاط والموقع ── */}
-          <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+          <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
             <div style={{ padding:"16px 20px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:"#f0fdf4", display:"grid", placeItems:"center", flexShrink:0 }}>
                 <Briefcase size={16} color="#15803d" />
@@ -428,12 +428,9 @@ export default function CompaniesPage() {
                   <FieldLabel icon={MapPin} label="عنوان المنشأة" />
                   <input value={form.company_address} onChange={e => setForm({...form,company_address:e.target.value})} placeholder="المدينة - الحي - الشارع - المبنى" className="form-input" />
                 </div>
-                <div>
+                <div style={{ position:"relative" }}>
                   <FieldLabel icon={MapPin} label="المدينة" />
-                  <select value={form.city} onChange={e => setForm({...form, city:e.target.value})} className="form-input">
-                    <option value="">اختر المدينة</option>
-                    {saudiCities.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <CityDropdown value={form.city} onChange={v => setForm({...form, city:v})} />
                 </div>
                 <div>
                   <FieldLabel icon={Globe} label="حالة المنشأة" />
@@ -536,6 +533,65 @@ export default function CompaniesPage() {
     </div>
   );
 }
+
+function CityDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filtered = query ? saudiCities.filter(c => c.includes(query)) : saudiCities;
+
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <div onClick={() => setOpen(!open)} className="form-input"
+        style={{ display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none" }}>
+        <span style={{ color: value ? "#2a4a6a" : "#b0bcc9", fontSize:".72rem" }}>{value || "اختر المدينة"}</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+      {open && (
+        <div style={{
+          position:"absolute", top:"calc(100% + 4px)", right:0, left:0,
+          zIndex:9999, background:"#fff", border:"1px solid #dfe7ef",
+          borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,.12)", overflow:"hidden"
+        }}>
+          <div style={{ padding:"8px 10px", borderBottom:"1px solid #eef2f7", background:"#fff" }}>
+            <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
+              placeholder="ابحث عن مدينة..."
+              style={{ width:"100%", border:0, outline:0, font:"inherit", fontSize:".7rem", color:"#2a4a6a", background:"transparent" }} />
+          </div>
+          <div style={{ maxHeight:220, overflowY:"auto", background:"#fff" }}>
+            <div onClick={() => { onChange(""); setOpen(false); setQuery(""); }}
+              style={{ padding:"8px 14px", fontSize:".7rem", cursor:"pointer", color:"#8b9dad", borderBottom:"1px solid #f5f5f5" }}>
+              الكل
+            </div>
+            {filtered.map(c => (
+              <div key={c} onClick={() => { onChange(c); setOpen(false); setQuery(""); }}
+                style={{
+                  padding:"8px 14px", fontSize:".7rem", cursor:"pointer",
+                  background: value === c ? "#eaf4ff" : "#fff",
+                  color: value === c ? "#0875dc" : "#2a4a6a",
+                  fontWeight: value === c ? 700 : 400,
+                }}>
+                {c}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function FieldLabel({ icon: Icon, label }: { icon: React.ComponentType<{ size?: number; color?: string }>; label: string }) {
   return (
