@@ -1,12 +1,36 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Send, ChevronRight, AlertCircle, Building2, Globe, FileCheck, Award, Scale, Users, Calculator, MessageSquare, Lightbulb, ThumbsUp } from "lucide-react";
+import {
+  Send, ChevronRight, AlertCircle, Building2, Globe, FileCheck,
+  Award, Scale, Users, Calculator, MessageSquare, Lightbulb,
+  ThumbsUp, Upload, X, File, CheckCircle2, Paperclip
+} from "lucide-react";
 import Link from "next/link";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type ClientRecord = { id: string; name: string; client_type: string };
 type KbArticle = { id: string; title: string; body: string; category: string };
+
+type UploadedFile = {
+  file: File;
+  id: string;
+  status: "pending" | "uploading" | "done" | "error";
+  path?: string;
+  error?: string;
+};
+
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "image/jpeg",
+  "image/png",
+];
+const ALLOWED_EXT = [".pdf", ".docx", ".xlsx", ".jpg", ".jpeg", ".png"];
+const MAX_SIZE_MB = 10;
+const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
 const SERVICES = [
   { value: "تأسيس الشركات والمنشآت", label: "تأسيس الشركات والمنشآت", icon: Building2, color: "#0875dc", desc: "مؤسسة أو شركة ذات مسؤولية محدودة" },
@@ -52,8 +76,20 @@ const EXTRA_FIELDS: Record<string, { label: string; placeholder: string; key: st
   ],
 };
 
+function validateFile(file: File): string | null {
+  const ext = "." + file.name.split(".").pop()?.toLowerCase();
+  if (!ALLOWED_EXT.includes(ext) && !ALLOWED_TYPES.includes(file.type)) {
+    return `نوع الملف غير مسموح. الصيغ المقبولة: PDF, DOCX, XLSX, JPG, PNG`;
+  }
+  if (file.size > MAX_SIZE_BYTES) {
+    return `حجم الملف (${(file.size / 1024 / 1024).toFixed(1)} MB) يتجاوز الحد المسموح (${MAX_SIZE_MB} MB)`;
+  }
+  return null;
+}
+
 export default function NewTicketPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [title, setTitle] = useState("");
@@ -67,8 +103,9 @@ export default function NewTicketPage() {
   const [kbSuggestions, setKbSuggestions] = useState<KbArticle[]>([]);
   const [loadingKb, setLoadingKb] = useState(false);
   const [showKb, setShowKb] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [dragOver, setDragOver] = useState(false);
 
-  // Load user's companies
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(({ data }) => {
       if (data?.clients?.length) {
@@ -78,7 +115,6 @@ export default function NewTicketPage() {
     }).catch(() => {});
   }, []);
 
-  // Search KB when title changes
   useEffect(() => {
     if (!title.trim() || title.length < 5) { setKbSuggestions([]); return; }
     const timer = setTimeout(async () => {
@@ -104,12 +140,69 @@ export default function NewTicketPage() {
     setStep(2);
   }
 
+  // ── File handling ──────────────────────────────────────────
+  function addFiles(files: FileList | File[]) {
+    const arr = Array.from(files);
+    const newEntries: UploadedFile[] = [];
+    for (const file of arr) {
+      const validationError = validateFile(file);
+      newEntries.push({
+        file,
+        id: `${Date.now()}-${Math.random()}`,
+        status: validationError ? "error" : "pending",
+        error: validationError || undefined,
+      });
+    }
+    setUploadedFiles(prev => [...prev, ...newEntries]);
+  }
+
+  function removeFile(id: string) {
+    setUploadedFiles(prev => prev.filter(f => f.id !== id));
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  }
+
+  async function uploadFilesToSupabase(ticketId: string): Promise<string[]> {
+    const supabase = createSupabaseBrowserClient();
+    const paths: string[] = [];
+
+    for (const entry of uploadedFiles) {
+      if (entry.status === "error") continue;
+      setUploadedFiles(prev => prev.map(f => f.id === entry.id ? { ...f, status: "uploading" } : f));
+      const safeName = entry.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `tickets/${ticketId}/${Date.now()}-${safeName}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("ticket-attachments")
+        .upload(path, entry.file, { upsert: false });
+
+      if (uploadErr) {
+        setUploadedFiles(prev => prev.map(f => f.id === entry.id ? { ...f, status: "error", error: "فشل رفع الملف" } : f));
+      } else {
+        setUploadedFiles(prev => prev.map(f => f.id === entry.id ? { ...f, status: "done", path } : f));
+        paths.push(path);
+      }
+    }
+    return paths;
+  }
+
+  // ── Submit ─────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !description.trim() || !category) {
       setError("يرجى تعبئة جميع الحقول المطلوبة");
       return;
     }
+    // Block if any file has a validation error
+    const hasFileErrors = uploadedFiles.some(f => f.status === "error" && !f.path);
+    if (hasFileErrors) {
+      setError("يوجد ملفات غير صالحة. احذفها أو استبدلها قبل الإرسال.");
+      return;
+    }
+
     setSaving(true);
     setError("");
 
@@ -125,6 +218,7 @@ export default function NewTicketPage() {
       : description.trim();
 
     try {
+      // 1. Create ticket
       const res = await fetch("/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -138,12 +232,32 @@ export default function NewTicketPage() {
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error || "حدث خطأ"); setSaving(false); return; }
-      router.push(`/dashboard/tickets/${json.data.id}`);
+
+      const ticketId = json.data.id;
+
+      // 2. Upload files and attach paths to ticket
+      const validFiles = uploadedFiles.filter(f => f.status !== "error");
+      if (validFiles.length > 0) {
+        const paths = await uploadFilesToSupabase(ticketId);
+        if (paths.length > 0) {
+          // Store attachment paths on the ticket record
+          await fetch(`/api/tickets/${ticketId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ attachments: paths }),
+          });
+        }
+      }
+
+      router.push(`/dashboard/tickets/${ticketId}`);
     } catch {
       setError("حدث خطأ في الاتصال");
       setSaving(false);
     }
   }
+
+  const pendingFiles = uploadedFiles.filter(f => f.status === "pending" || f.status === "uploading" || f.status === "done");
+  const errorFiles = uploadedFiles.filter(f => f.status === "error");
 
   return (
     <div className="client-dash-page">
@@ -170,24 +284,31 @@ export default function NewTicketPage() {
         ))}
       </div>
 
-      {/* Step 1: Service + Company */}
+      {/* Step 1 */}
       {step === 1 && (
         <div>
-          {/* Company selector */}
-          {clients.length > 1 && (
+          {/* Company selector — always shown if user has clients */}
+          {clients.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 8 }}>
-                تحت أي منشأة تتبع هذه التذكرة؟
+                <Building2 size={13} style={{ display: "inline", verticalAlign: "middle", marginLeft: 5 }} />
+                المنشأة المعنية بهذه التذكرة
               </label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {clients.map(c => (
                   <button key={c.id} type="button" onClick={() => setSelectedClientId(c.id)}
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", border: `1px solid ${selectedClientId === c.id ? "#0875dc" : "#e5eaf0"}`, borderRadius: 10, background: selectedClientId === c.id ? "#eaf4ff" : "#fff", cursor: "pointer", font: "inherit", fontSize: ".7rem", color: selectedClientId === c.id ? "#0875dc" : "#526983", fontWeight: 700, transition: "all .15s" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", border: `1.5px solid ${selectedClientId === c.id ? "#0875dc" : "#e5eaf0"}`, borderRadius: 10, background: selectedClientId === c.id ? "#eaf4ff" : "#fff", cursor: "pointer", font: "inherit", fontSize: ".7rem", color: selectedClientId === c.id ? "#0875dc" : "#526983", fontWeight: 700, transition: "all .15s" }}>
                     <Building2 size={14} />
                     {c.name}
+                    {selectedClientId === c.id && <CheckCircle2 size={14} color="#0875dc" />}
                   </button>
                 ))}
               </div>
+              {selectedClientId && (
+                <p style={{ fontSize: ".6rem", color: "#8b9dad", marginTop: 6, margin: "6px 0 0" }}>
+                  ✓ سيتم ربط التذكرة بـ <strong style={{ color: "#0875dc" }}>{clients.find(c => c.id === selectedClientId)?.name}</strong>
+                </p>
+              )}
             </div>
           )}
 
@@ -210,16 +331,17 @@ export default function NewTicketPage() {
         </div>
       )}
 
-      {/* Step 2+: Form */}
+      {/* Step 2+ */}
       {step >= 2 && (
         <form onSubmit={handleSubmit}>
-          {/* Selected service */}
+          {/* Selected service + company badge */}
           {selectedSvc && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, background: `${selectedSvc.color}10`, border: `1px solid ${selectedSvc.color}30`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
               <selectedSvc.icon size={16} color={selectedSvc.color} />
               <span style={{ fontSize: ".7rem", color: selectedSvc.color, fontWeight: 700, flex: 1 }}>{selectedSvc.label}</span>
-              {clients.length > 0 && selectedClientId && (
-                <span style={{ fontSize: ".6rem", color: "#526983", background: "#f5f8fc", padding: "2px 8px", borderRadius: 8 }}>
+              {selectedClientId && clients.length > 0 && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".6rem", color: "#0875dc", background: "#eaf4ff", border: "1px solid #bddcff", padding: "3px 10px", borderRadius: 8, fontWeight: 700 }}>
+                  <Building2 size={11} />
                   {clients.find(c => c.id === selectedClientId)?.name || ""}
                 </span>
               )}
@@ -248,15 +370,10 @@ export default function NewTicketPage() {
               {kbSuggestions.map(art => (
                 <div key={art.id} style={{ background: "#fff", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px", marginBottom: 6 }}>
                   <div style={{ fontSize: ".68rem", fontWeight: 700, color: "#15803d", marginBottom: 4 }}>{art.title}</div>
-                  <div style={{ fontSize: ".62rem", color: "#526983", lineHeight: 1.5, marginBottom: 6 }}>
-                    {art.body.substring(0, 120)}...
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" onClick={() => setShowKb(false)}
-                      style={{ fontSize: ".6rem", color: "#15803d", background: "none", border: "none", cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-                      <ThumbsUp size={11} /> هذا يحل مشكلتي
-                    </button>
-                  </div>
+                  <div style={{ fontSize: ".62rem", color: "#526983", lineHeight: 1.5, marginBottom: 6 }}>{art.body.substring(0, 120)}...</div>
+                  <button type="button" onClick={() => setShowKb(false)} style={{ fontSize: ".6rem", color: "#15803d", background: "none", border: "none", cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                    <ThumbsUp size={11} /> هذا يحل مشكلتي
+                  </button>
                 </div>
               ))}
               <button type="button" onClick={() => setShowKb(false)} style={{ fontSize: ".6rem", color: "#8b9dad", background: "none", border: "none", cursor: "pointer", marginTop: 4 }}>
@@ -303,6 +420,95 @@ export default function NewTicketPage() {
               onBlur={e => e.target.style.borderColor = "#e5eaf0"} />
           </div>
 
+          {/* ── File Uploader ───────────────────────────────────── */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 8 }}>
+              <Paperclip size={13} style={{ display: "inline", verticalAlign: "middle", marginLeft: 5 }} />
+              المرفقات (اختياري)
+              <span style={{ fontWeight: 400, color: "#8b9dad", marginRight: 6 }}>PDF, DOCX, XLSX, JPG, PNG — بحد أقصى {MAX_SIZE_MB} MB لكل ملف</span>
+            </label>
+
+            {/* Drop zone */}
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                border: `2px dashed ${dragOver ? "#0875dc" : "#d1dde8"}`,
+                borderRadius: 12,
+                padding: "24px 16px",
+                textAlign: "center",
+                cursor: "pointer",
+                background: dragOver ? "#eaf4ff" : "#fafbfc",
+                transition: "all .2s",
+              }}
+            >
+              <Upload size={24} color={dragOver ? "#0875dc" : "#aab5c3"} style={{ marginBottom: 8 }} />
+              <p style={{ margin: "0 0 4px", fontSize: ".72rem", color: "#526983", fontWeight: 600 }}>
+                اسحب الملفات هنا أو <span style={{ color: "#0875dc", textDecoration: "underline" }}>اختر من جهازك</span>
+              </p>
+              <p style={{ margin: 0, fontSize: ".6rem", color: "#aab5c3" }}>
+                الصيغ المقبولة: .pdf .docx .xlsx .jpg .png
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png"
+                style={{ display: "none" }}
+                onChange={e => { if (e.target.files) { addFiles(e.target.files); e.target.value = ""; } }}
+              />
+            </div>
+
+            {/* File list */}
+            {uploadedFiles.length > 0 && (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                {uploadedFiles.map(uf => (
+                  <div key={uf.id} style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "8px 12px", borderRadius: 8,
+                    border: `1px solid ${uf.status === "error" ? "#fecaca" : uf.status === "done" ? "#bbf7d0" : "#e5eaf0"}`,
+                    background: uf.status === "error" ? "#fef2f2" : uf.status === "done" ? "#f0fdf4" : "#fff",
+                  }}>
+                    <File size={15} color={uf.status === "error" ? "#dc2626" : uf.status === "done" ? "#15803d" : "#526983"} style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: ".68rem", fontWeight: 600, color: "#1e3a56", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {uf.file.name}
+                      </div>
+                      {uf.error ? (
+                        <div style={{ fontSize: ".58rem", color: "#dc2626", marginTop: 2 }}>{uf.error}</div>
+                      ) : (
+                        <div style={{ fontSize: ".58rem", color: "#8b9dad", marginTop: 2 }}>
+                          {(uf.file.size / 1024).toFixed(0)} KB
+                          {uf.status === "uploading" && " — جاري الرفع..."}
+                          {uf.status === "done" && " — ✓ تم الرفع"}
+                        </div>
+                      )}
+                    </div>
+                    {uf.status !== "uploading" && (
+                      <button type="button" onClick={() => removeFile(uf.id)}
+                        style={{ border: 0, background: "none", cursor: "pointer", color: "#aab5c3", flexShrink: 0, display: "flex", alignItems: "center" }}>
+                        <X size={15} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Error summary for invalid files */}
+            {errorFiles.length > 0 && (
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                <AlertCircle size={13} color="#dc2626" />
+                <span style={{ fontSize: ".62rem", color: "#dc2626", fontWeight: 600 }}>
+                  {errorFiles.length} ملف غير صالح — احذفها لإكمال الإرسال
+                </span>
+              </div>
+            )}
+          </div>
+          {/* ─────────────────────────────────────────────────── */}
+
           {error && (
             <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 14px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
               <AlertCircle size={14} color="#dc2626" />
@@ -314,7 +520,8 @@ export default function NewTicketPage() {
             <button type="button" onClick={() => setStep(1)} style={{ height: 42, padding: "0 16px", border: "1px solid #e5eaf0", borderRadius: 10, background: "#fff", color: "#526983", font: "inherit", fontSize: ".72rem", cursor: "pointer" }}>
               رجوع
             </button>
-            <button type="submit" disabled={saving} style={{ flex: 1, height: 42, border: 0, borderRadius: 10, background: saving ? "#93c5fd" : "#0875dc", color: "#fff", font: "inherit", fontSize: ".75rem", fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <button type="submit" disabled={saving || errorFiles.length > 0}
+              style={{ flex: 1, height: 42, border: 0, borderRadius: 10, background: saving ? "#93c5fd" : errorFiles.length > 0 ? "#e5eaf0" : "#0875dc", color: saving || errorFiles.length > 0 ? "#aab5c3" : "#fff", font: "inherit", fontSize: ".75rem", fontWeight: 700, cursor: saving || errorFiles.length > 0 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               <Send size={15} /> {saving ? "جاري الإرسال..." : "إرسال الطلب"}
             </button>
           </div>
