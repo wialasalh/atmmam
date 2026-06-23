@@ -633,6 +633,116 @@ export default function CompaniesPage() {
   );
 }
 
+function DatePickerField({ value, onChange, placeholder }: {
+  value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(() => value ? parseInt(value.split("-")[0]) : today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => value ? parseInt(value.split("-")[1]) - 1 : today.getMonth());
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const MONTHS_AR = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+  const DAYS_AR = ["ح","ن","ث","ر","خ","ج","س"];
+
+  function getDaysInMonth(year: number, month: number) {
+    return new Date(year, month + 1, 0).getDate();
+  }
+  function getFirstDayOfMonth(year: number, month: number) {
+    return new Date(year, month, 1).getDay();
+  }
+
+  function handleSelect(day: number) {
+    const m = String(viewMonth + 1).padStart(2, "0");
+    const d = String(day).padStart(2, "0");
+    onChange(`${viewYear}-${m}-${d}`);
+    setOpen(false);
+  }
+
+  function formatDisplay(val: string) {
+    if (!val) return "";
+    const parts = val.split("-");
+    if (parts.length !== 3) return val;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+
+  const daysInMonth = getDaysInMonth(viewYear, viewMonth);
+  const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
+  const selectedDay = value ? parseInt(value.split("-")[2]) : null;
+  const selectedMonth = value ? parseInt(value.split("-")[1]) - 1 : null;
+  const selectedYear = value ? parseInt(value.split("-")[0]) : null;
+
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <div onClick={() => setOpen(!open)} className="form-input"
+        style={{ display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none" }}>
+        <span style={{ color: value ? "#2a4a6a" : "#b0bcc9", fontSize:".72rem" }}>
+          {value ? formatDisplay(value) : placeholder || "اختر التاريخ"}
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+      </div>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", right:0, zIndex:9999, background:"#fff", border:"1px solid #dfe7ef", borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,.12)", padding:14, minWidth:260 }}>
+          {/* Header */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+            <button type="button" onClick={() => { if(viewMonth===0){setViewMonth(11);setViewYear(y=>y-1);}else setViewMonth(m=>m-1); }}
+              style={{ border:0, background:"#f5f8fc", borderRadius:6, width:28, height:28, cursor:"pointer", fontSize:".8rem" }}>›</button>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <select value={viewMonth} onChange={e => setViewMonth(parseInt(e.target.value))}
+                style={{ border:"1px solid #e5eaf0", borderRadius:6, padding:"2px 6px", font:"inherit", fontSize:".68rem", background:"#fff" }}>
+                {MONTHS_AR.map((m,i) => <option key={i} value={i}>{m}</option>)}
+              </select>
+              <input type="number" value={viewYear} onChange={e => setViewYear(parseInt(e.target.value) || viewYear)}
+                style={{ border:"1px solid #e5eaf0", borderRadius:6, padding:"2px 6px", width:60, font:"inherit", fontSize:".68rem", textAlign:"center" }} />
+            </div>
+            <button type="button" onClick={() => { if(viewMonth===11){setViewMonth(0);setViewYear(y=>y+1);}else setViewMonth(m=>m+1); }}
+              style={{ border:0, background:"#f5f8fc", borderRadius:6, width:28, height:28, cursor:"pointer", fontSize:".8rem" }}>‹</button>
+          </div>
+          {/* Days header */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
+            {DAYS_AR.map(d => <div key={d} style={{ textAlign:"center", fontSize:".6rem", color:"#8b9dad", fontWeight:700, padding:"2px 0" }}>{d}</div>)}
+          </div>
+          {/* Days grid */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
+            {Array.from({length: firstDay}).map((_,i) => <div key={`e${i}`} />)}
+            {Array.from({length: daysInMonth}).map((_,i) => {
+              const day = i + 1;
+              const isSelected = selectedDay === day && selectedMonth === viewMonth && selectedYear === viewYear;
+              const isToday = today.getDate() === day && today.getMonth() === viewMonth && today.getFullYear() === viewYear;
+              return (
+                <button key={day} type="button" onClick={() => handleSelect(day)}
+                  style={{ border:0, borderRadius:6, padding:"4px 0", fontSize:".68rem", cursor:"pointer", fontWeight: isSelected ? 700 : 400,
+                    background: isSelected ? "#0875dc" : isToday ? "#eaf4ff" : "transparent",
+                    color: isSelected ? "#fff" : isToday ? "#0875dc" : "#344d69" }}>
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+          {/* Clear */}
+          {value && (
+            <button type="button" onClick={() => { onChange(""); setOpen(false); }}
+              style={{ width:"100%", marginTop:8, border:"1px solid #e5eaf0", borderRadius:8, padding:"5px 0", font:"inherit", fontSize:".65rem", color:"#8b9dad", cursor:"pointer", background:"#fafbfc" }}>
+              مسح التاريخ
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function CustomDropdown({ value, onChange, options, placeholder }: {
   value: string;
   onChange: (v: string) => void;
