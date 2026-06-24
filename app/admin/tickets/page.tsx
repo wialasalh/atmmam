@@ -20,7 +20,7 @@ type AdminTicket = {
   updated_at: string;
   user_id: string;
   client_id?: string | null;
-  attachments?: string[] | null;
+  files?: string[] | null;
   profiles?: { full_name: string; email: string } | null;
   clients?: {
     id: string;
@@ -163,8 +163,8 @@ export default function AdminTicketsPage() {
     }
 
     // 2. Ticket attachments (uploaded at ticket creation)
-    if (ticket.attachments?.length) {
-      for (const path of ticket.attachments) {
+    if (ticket.files?.length) {
+      for (const path of ticket.files) {
         const fileName = path.split("/").pop() || path;
         const { data } = await supabase.storage
           .from("ticket-attachments")
@@ -343,7 +343,7 @@ export default function AdminTicketsPage() {
               </div>
 
               {/* ── Facility Panel ─────────────────────────────── */}
-              {(selected.clients || (selected.attachments && selected.attachments.length > 0)) && (
+              {(selected.clients || (selected.files && selected.files.length > 0)) && (
                 <div className="tkt-facility-panel">
                   <button
                     className="tkt-facility-toggle"
@@ -409,7 +409,7 @@ export default function AdminTicketsPage() {
                       )}
 
                       {/* Ticket attachments (uploaded by user at ticket creation) */}
-                      {selected.attachments && selected.attachments.length > 0 && !selected.clients && (
+                      {selected.files && selected.files.length > 0 && !selected.clients && (
                         <div className="tkt-docs-section">
                           <p className="tkt-docs-title">
                             <FileText size={13} /> مرفقات التذكرة
