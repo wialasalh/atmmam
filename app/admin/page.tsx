@@ -22,7 +22,7 @@ export default function AdminOrdersPage() {
   const [orders, setOrders] = useState(initialAdminOrders);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "الكل">("الكل");
-  const [selectedId, setSelectedId] = useState(initialAdminOrders[0].id);
+  const [selectedId, setSelectedId] = useState(undefined);
   const [showCreate, setShowCreate] = useState(false);
   const [notice, setNotice] = useState("");
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>({});
