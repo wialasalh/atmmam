@@ -28,8 +28,7 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_SUPABASE_URL)
       void fetchAdminOrdersFromApi().then((data) => { if (data) setOrders(data); });
-    fetch("/api/admin/team").then(r=>r.json()).then(d=>{const m=(d.members||d.data||[]).find((x:any)=>x.role==="admin");if(m?.full_name)setAdminName(m.full_name);}).catch(()=>{});
-    else setOrders(readAdminOrders());
+    fetch("/api/admin/team").then(r=>r.json()).then(d=>{const m=(d.members||d.data||[]).find((x)=>x.role==="admin");if(m?.full_name)setAdminName(m.full_name);}).catch(()=>{});
   }, []);
 
   const stats = useMemo(() => ({
