@@ -23,7 +23,6 @@ export async function GET(req: Request) {
         id, title, status, priority, category,
         created_at, updated_at, user_id, client_id,
         assigned_to, attachments,
-        profiles!tickets_user_id_fkey ( full_name, email ),
         clients (
           id, name, client_type,
           tax_number, commercial_number,
