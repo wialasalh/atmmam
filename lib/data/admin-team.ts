@@ -49,7 +49,9 @@ export async function createTeamMember(input: { email: string; password: string;
   if (authError) throw new Error(authError.message);
 
   const supabase = await createSupabaseServerClient();
+  const { data: { user: actor } } = await supabase.auth.getUser();
   await supabase.from("audit_logs").insert({
+    actor_id: actor?.id || null,
     entity_type: "profile",
     entity_id: authUser.user.id,
     action: "user_created",
@@ -78,7 +80,9 @@ export async function inviteTeamMember(input: { email: string; role: string; inv
     token,
   });
 
+  const { data: { user: actor2 } } = await supabase.auth.getUser();
   await supabase.from("audit_logs").insert({
+    actor_id: actor2?.id || null,
     entity_type: "team_invitation",
     entity_id: data.user?.id || input.email,
     action: "user_invited",
@@ -113,6 +117,7 @@ export async function changeTeamMemberPassword(input: { profileId: string; newPa
   if (error) throw new Error(error.message);
 
   await supabase.from("audit_logs").insert({
+    actor_id: user.id,
     entity_type: "profile",
     entity_id: input.profileId,
     action: "password_changed",
@@ -155,6 +160,7 @@ export async function updateTeamMember(input: { profileId: string; role?: string
   if (error) throw new Error(`Unable to update team member: ${error.message}`);
 
   await supabase.from("audit_logs").insert({
+    actor_id: user.id,
     entity_type: "profile",
     entity_id: input.profileId,
     action: "profile_updated",
@@ -202,6 +208,7 @@ export async function deleteTeamMember(profileId: string) {
   if (authError) throw new Error(authError.message);
 
   await supabase.from("audit_logs").insert({
+    actor_id: user.id,
     entity_type: "profile",
     entity_id: profileId,
     action: "user_deleted",
@@ -224,6 +231,7 @@ export async function listInvitations() {
 
 export async function cancelInvitation(invitationId: string) {
   const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from("team_invitations")
     .update({ status: "cancelled" })
@@ -233,6 +241,7 @@ export async function cancelInvitation(invitationId: string) {
   if (error) throw new Error(`Unable to cancel invitation: ${error.message}`);
 
   await supabase.from("audit_logs").insert({
+    actor_id: user?.id || null,
     entity_type: "team_invitation",
     entity_id: invitationId,
     action: "invitation_cancelled",

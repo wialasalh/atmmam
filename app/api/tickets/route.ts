@@ -191,7 +191,7 @@ export async function POST(request: Request) {
       user_id: user.id,
       client_id: resolvedClientId,
       title: title.trim(),
-      description: description.trim(),
+      body: description.trim(),
       category: category || "استفسار",
       priority: priority || "عادية",
       status: "جديدة",

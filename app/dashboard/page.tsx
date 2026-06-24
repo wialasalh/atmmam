@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ClipboardList, FileText, MessageSquare, TrendingUp, ArrowLeft, Clock, CheckCircle, AlertCircle, Plus, Building2 } from "lucide-react";
 import Link from "next/link";
 
-type Order = { id: string; reference_no: string; service_name?: string; status: string; created_at: string; };
+type Order = { id: string; reference_no: string; service_name?: string; status: string; created_at: string; notes?: string|null; };
 type Ticket = { id: string; title: string; status: string; updated_at: string; priority: string; };
 
 const statusLabels: Record<string, { label: string; color: string; bg: string }> = {
@@ -13,6 +13,7 @@ const statusLabels: Record<string, { label: string; color: string; bg: string }>
   waiting_documents:   { label: "بانتظار المستندات",   color: "#7c3aed", bg: "#f5f3ff" },
   completed:           { label: "مكتمل",               color: "#15803d", bg: "#f0fdf4" },
   cancelled:           { label: "ملغي",                color: "#6b7280", bg: "#f3f4f6" },
+  blocked:             { label: "معلق",                color: "#e67e22", bg: "#fffbeb" },
   "جديدة":            { label: "جديدة",               color: "#0875dc", bg: "#eaf4ff" },
   "قيد المراجعة":     { label: "قيد المراجعة",        color: "#b45309", bg: "#fef9ee" },
   "بانتظار العميل":   { label: "بانتظار ردك",         color: "#7c3aed", bg: "#f5f3ff" },
@@ -151,13 +152,18 @@ export default function DashboardHome() {
                 <div style={{ fontSize: ".72rem", fontWeight: 700, color: "#1e3a56", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {order.service_name || order.reference_no}
                 </div>
-                <div style={{ fontSize: ".58rem", color: "#8b9dad", marginTop: 2 }}>
-                  {new Date(order.created_at).toLocaleDateString("ar-SA")}
+                  <div style={{ fontSize: ".58rem", color: "#8b9dad", marginTop: 2 }}>
+                    {new Date(order.created_at).toLocaleDateString("ar-SA")}
+                  </div>
+                  {order.notes && ["cancelled","blocked"].includes(order.status) ? (
+                    <div style={{ fontSize: ".55rem", color: order.status==="cancelled"?"#dc2626":"#e67e22", marginTop: 2 }}>
+                      {order.status==="cancelled"?"سبب الإلغاء:":"سبب التعليق:"} {order.notes}
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-              <span style={{ fontSize: ".58rem", padding: "3px 8px", borderRadius: 20, color: s.color, background: s.bg, fontWeight: 700, flexShrink: 0 }}>
-                {s.label}
-              </span>
+                <span style={{ fontSize: ".58rem", padding: "3px 8px", borderRadius: 20, color: s.color, background: s.bg, fontWeight: 700, flexShrink: 0 }}>
+                  {s.label}
+                </span>
             </div>
           );
         })}

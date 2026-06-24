@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
-import { User, Save, Building2 } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { User, Save, Building2, Camera } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-type Profile = { id:string; full_name:string; email:string; phone:string; };
+type Profile = { id:string; full_name:string; email:string; phone:string; avatar_url?:string };
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile|null>(null);
@@ -11,6 +11,8 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(true);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -27,6 +29,27 @@ export default function ProfilePage() {
       finally { setLoading(false); }
     })();
   }, []);
+
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+    if (file.size > 2 * 1024 * 1024) { setMsg("⚠️ الملف كبير جداً. الحد الأقصى 2MB"); setTimeout(() => setMsg(""), 3000); return; }
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("userId", profile.id);
+      const res = await fetch("/api/account/avatar", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) { setMsg("❌ " + (data.error || "فشل رفع الصورة")); }
+      else {
+        setProfile(p => p ? { ...p, avatar_url: data.url } : p);
+        setMsg("✅ تم تغيير الصورة");
+      }
+    } catch { setMsg("❌ حدث خطأ في الاتصال"); }
+    setAvatarUploading(false);
+    setTimeout(() => setMsg(""), 3000);
+  }
 
   async function handleSave() {
     if (!profile) return;
@@ -57,13 +80,22 @@ export default function ProfilePage() {
 
       {profile && (
         <div style={{display:"flex",alignItems:"center",gap:14,background:"#fff",border:"1px solid #e5ecf3",borderRadius:16,padding:"20px",marginBottom:16,boxShadow:"0 1px 3px rgba(0,0,0,.04)"}}>
-          <div style={{width:56,height:56,borderRadius:16,background:"#073766",display:"grid",placeItems:"center",flexShrink:0}}>
-            <span style={{fontSize:"1.4rem",fontWeight:800,color:"#fff"}}>{profile.full_name?.charAt(0)||"؟"}</span>
+          <div onClick={() => fileRef.current?.click()} style={{width:56,height:56,borderRadius:16,background:"#073766",display:"grid",placeItems:"center",flexShrink:0,cursor:"pointer",position:"relative",overflow:"hidden"}}>
+            {profile.avatar_url ? (
+              <img src={profile.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}} />
+            ) : (
+              <span style={{fontSize:"1.4rem",fontWeight:800,color:"#fff"}}>{profile.full_name?.charAt(0)||"؟"}</span>
+            )}
+            {avatarUploading && <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.4)",display:"grid",placeItems:"center"}}><div style={{width:16,height:16,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .6s linear infinite"}} /></div>}
           </div>
-          <div>
+          <div style={{flex:1}}>
             <div style={{fontWeight:800,fontSize:".9rem",color:"#073766"}}>{profile.full_name}</div>
             <div style={{fontSize:".72rem",color:"#8b9dad",marginTop:2}}>{profile.email}</div>
+            <button onClick={() => fileRef.current?.click()} style={{background:"none",border:"none",color:"#0875dc",fontSize:".6rem",cursor:"pointer",padding:0,marginTop:4,display:"inline-flex",alignItems:"center",gap:4}}>
+              <Camera size={11}/> تغيير الصورة
+            </button>
           </div>
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleAvatarUpload} style={{display:"none"}} />
         </div>
       )}
 

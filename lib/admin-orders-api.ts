@@ -2,7 +2,7 @@ import type { AdminOrder, OrderStatus } from "@/lib/admin-orders";
 
 type Relation={id?:string;name?:string;full_name?:string;phone?:string;email?:string};
 type DatabaseOrder={id:string;reference_no:string;status:string;next_action_text?:string;next_action_at?:string;updated_at:string;clients?:Relation|null;services?:Relation|null;agencies?:Relation|null;profiles?:Relation|null};
-const statusMap:Record<string,OrderStatus>={new:"جديد",waiting_documents:"بانتظار المستندات",in_progress:"قيد التنفيذ",completed:"مكتمل",blocked:"قيد التنفيذ",cancelled:"مكتمل"};
+const statusMap:Record<string,OrderStatus>={new:"جديد",waiting_documents:"بانتظار المستندات",in_progress:"قيد التنفيذ",completed:"مكتمل",cancelled:"ملغي",blocked:"معلق"};
 
 export async function fetchAdminOrdersFromApi():Promise<AdminOrder[]|null>{
   const response=await fetch("/api/admin/orders",{cache:"no-store"});if(!response.ok)return null;

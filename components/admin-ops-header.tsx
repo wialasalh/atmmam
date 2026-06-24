@@ -22,22 +22,31 @@ function AdminUserMenu() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("admin");
   const [email, setEmail] = useState("");
+  const [avatar, setAvatar] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
+  async function loadUser() {
+    try {
+      const r = await fetch("/api/admin/team");
+      if (!r.ok) return;
+      const payload = await r.json();
+      const members = payload?.members || payload?.data || [];
+      const me = members.find((m: any) => m.id === payload?.currentUserId);
+      if (me) {
+        setName(me.full_name || "admin");
+        setEmail(me.email || "admin@atmmam.com.sa");
+        setAvatar(me.avatar_url || "");
+      }
+    } catch {}
+  }
+
+  useEffect(() => { loadUser(); }, []);
+
   useEffect(() => {
-    // نجلب بيانات الأدمن الحقيقي من قاعدة البيانات
-    fetch("/api/admin/team")
-      .then(r => r.ok ? r.json() : null)
-      .then(payload => {
-        const members = payload?.members || payload?.data || [];
-        const adminUser = members.find((m: any) => m.role === "admin");
-        if (adminUser) {
-          setName(adminUser.full_name || "admin");
-          setEmail("admin@atmmam.com.sa");
-        }
-      })
-      .catch(() => {});
+    const onFocus = () => loadUser();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   useEffect(() => {
@@ -60,8 +69,8 @@ function AdminUserMenu() {
     <div ref={ref} style={{ position: "relative" }}>
       <button onClick={() => setOpen(!open)}
         style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(255,255,255,0.1)", border:"none", borderRadius:24, padding:"5px 10px 5px 6px", cursor:"pointer", color:"#fff" }}>
-        <div style={{ width:30, height:30, borderRadius:"50%", background:"#e8d9c4", display:"grid", placeItems:"center", fontSize:".8rem", fontWeight:800, color:"#5a3e2b", flexShrink:0 }}>
-          {initial}
+        <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", background:"#e8d9c4", display:"grid", placeItems:"center", fontSize:".8rem", fontWeight:800, color:"#5a3e2b", flexShrink:0 }}>
+          {avatar ? <img src={avatar} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : initial}
         </div>
         <span style={{ fontSize:".72rem", fontWeight:600, maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
         <ChevronDown size={13} style={{ opacity:0.7, transform: open ? "rotate(180deg)" : "none", transition:"transform .2s" }} />
@@ -71,8 +80,8 @@ function AdminUserMenu() {
         <div style={{ position:"absolute", top:"calc(100% + 8px)", left:0, background:"#fff", border:"1px solid #e5ecf3", borderRadius:14, boxShadow:"0 8px 24px rgba(0,0,0,.12)", minWidth:220, zIndex:9999, overflow:"hidden" }}>
           {/* معلومات المستخدم */}
           <div style={{ padding:"14px 16px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:"50%", background:"#073766", display:"grid", placeItems:"center", flexShrink:0 }}>
-              <span style={{ fontSize:".85rem", fontWeight:800, color:"#fff" }}>{initial}</span>
+            <div style={{ width:36, height:36, borderRadius:"50%", overflow:"hidden", background:"#073766", display:"grid", placeItems:"center", flexShrink:0 }}>
+              {avatar ? <img src={avatar} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <span style={{ fontSize:".85rem", fontWeight:800, color:"#fff" }}>{initial}</span>}
             </div>
             <div>
               <div style={{ fontSize:".75rem", fontWeight:700, color:"#073766" }}>{name}</div>

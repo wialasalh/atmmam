@@ -1,10 +1,14 @@
 import type { AdminOrder, OrderStatus } from "@/lib/admin-orders";
 
+const allStatuses: OrderStatus[] = ["جديد", "بانتظار المستندات", "قيد التنفيذ", "مكتمل", "ملغي", "معلق"];
+
 const transitions: Record<OrderStatus, OrderStatus[]> = {
-  "جديد": ["بانتظار المستندات", "قيد التنفيذ"],
-  "بانتظار المستندات": ["قيد التنفيذ"],
-  "قيد التنفيذ": ["بانتظار المستندات", "مكتمل"],
-  "مكتمل": [],
+  "جديد": allStatuses.filter((s) => s !== "جديد"),
+  "بانتظار المستندات": allStatuses.filter((s) => s !== "بانتظار المستندات"),
+  "قيد التنفيذ": allStatuses.filter((s) => s !== "قيد التنفيذ"),
+  "مكتمل": allStatuses.filter((s) => s !== "مكتمل"),
+  "ملغي": allStatuses.filter((s) => s !== "ملغي"),
+  "معلق": allStatuses.filter((s) => s !== "معلق"),
 };
 
 export function allowedOrderStatuses(current: OrderStatus) { return [current, ...transitions[current]]; }
@@ -14,6 +18,6 @@ export function filterAdminOrders(orders: AdminOrder[], query: string, status: O
   return orders.filter((order) => {
     if (status !== "الكل" && order.status !== status) return false;
     if (!normalized) return true;
-    return `${order.id} ${order.client} ${order.service} ${order.agency} ${order.assignee}`.toLocaleLowerCase("ar").includes(normalized);
+    return `${order.id} ${order.client} ${order.service} ${order.agency} ${order.assignee} ${order.phone} ${order.email}`.toLocaleLowerCase("ar").includes(normalized);
   });
 }

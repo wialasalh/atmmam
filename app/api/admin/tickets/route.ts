@@ -21,9 +21,8 @@ export async function GET(req: Request) {
       .from("tickets")
       .select(`
         id, title, status, priority, category,
-        created_at, updated_at, user_id, client_id,
-        assigned_to, attachments,
-        profiles!tickets_user_id_fkey ( full_name, email ),
+        created_at, updated_at, client_id,
+        assigned_to,
         clients (
           id, name, client_type,
           tax_number, commercial_number,

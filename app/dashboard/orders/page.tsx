@@ -11,6 +11,7 @@ const STATUS_CONFIG: Record<string,{label:string;color:string;bg:string}> = {
   waiting_documents:{label:"بانتظار المستندات",color:"#7c3aed",bg:"#f5f3ff"},
   completed:{label:"مكتمل",color:"#15803d",bg:"#f0fdf4"},
   cancelled:{label:"ملغي",color:"#6b7280",bg:"#f3f4f6"},
+  blocked:{label:"معلق",color:"#e67e22",bg:"#fffbeb"},
 };
 
 export default function OrdersPage() {
@@ -69,7 +70,7 @@ export default function OrdersPage() {
           <Search size={13} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",color:"#8b9dad"}}/>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ابحث برقم الطلب..." style={{width:"100%",border:"1px solid #e5ecf3",borderRadius:8,padding:"8px 32px 8px 12px",fontSize:".72rem",outline:"none",boxSizing:"border-box"}}/>
         </div>
-        {["","new","in_progress","waiting_documents","completed"].map(s=>(
+        {["","new","in_progress","waiting_documents","completed","cancelled","blocked"].map(s=>(
           <button key={s} onClick={()=>setFilter(s)} style={{padding:"7px 14px",borderRadius:8,border:"1px solid",fontSize:".68rem",cursor:"pointer",fontWeight:filter===s?700:400,borderColor:filter===s?"#0875dc":"#e5ecf3",background:filter===s?"#eaf4ff":"#fff",color:filter===s?"#0875dc":"#6b7280"}}>
             {s===""?"الكل":STATUS_CONFIG[s]?.label||s}
           </button>
@@ -98,6 +99,12 @@ export default function OrdersPage() {
                     <span style={{fontSize:".65rem",padding:"2px 8px",borderRadius:20,background:cfg.bg,color:cfg.color,fontWeight:600}}>{cfg.label}</span>
                   </div>
                   <div style={{fontSize:".72rem",color:"#8b9dad"}}>{order.service_name||"خدمة"}</div>
+                  {order.notes && ["cancelled","blocked"].includes(order.status) ? (
+                    <div style={{fontSize:".65rem",color:order.status==="cancelled"?"#dc2626":"#e67e22",marginTop:4,display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontWeight:600}}>{order.status==="cancelled"?"سبب الإلغاء:":"سبب التعليق:"}</span>
+                      {order.notes}
+                    </div>
+                  ) : null}
                 </div>
                 <div style={{fontSize:".65rem",color:"#b0bcc9",flexShrink:0}}>{fmt(order.created_at)}</div>
               </div>

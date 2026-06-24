@@ -9,7 +9,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 type TicketDetail = {
   id: string;
   title: string;
-  description: string;
+  body: string;
   category: string;
   priority: string;
   status: string;
@@ -25,6 +25,15 @@ type Message = {
   body: string;
   created_at: string;
   profiles?: { full_name: string };
+};
+
+type StatusHistory = {
+  id: string;
+  from_status: string | null;
+  to_status: string;
+  note: string | null;
+  created_at: string;
+  profiles?: { full_name: string } | null;
 };
 
 const STATUS_STYLE: Record<string, { color: string; bg: string; border: string; icon: React.ReactNode; label: string }> = {
@@ -55,6 +64,7 @@ export default function TicketDetailPage() {
   const ticketId = params.id as string;
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [history, setHistory] = useState<StatusHistory[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -75,6 +85,7 @@ export default function TicketDetailPage() {
     });
     loadTicket();
     loadMessages();
+    loadHistory();
   }, []);
 
   useEffect(() => {
@@ -95,6 +106,13 @@ export default function TicketDetailPage() {
     try {
       const res = await fetch(`/api/tickets/${ticketId}/messages`);
       if (res.ok) { const { data } = await res.json(); setMessages(data || []); }
+    } catch {}
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch(`/api/tickets/${ticketId}/history`);
+      if (res.ok) { const { data } = await res.json(); setHistory(data || []); }
     } catch {}
   }
 
@@ -162,8 +180,39 @@ export default function TicketDetailPage() {
           <span style={{ fontSize: ".58rem", color: "#aab5c3" }}>· {formatDate(ticket.created_at)}</span>
         </div>
         <p style={{ margin: 0, fontSize: ".72rem", color: "#425c76", lineHeight: 1.7, background: "#f8fafc", borderRadius: 10, padding: "10px 14px", whiteSpace: "pre-wrap", borderRight: "3px solid #e5eaf0" }}>
-          {ticket.description}
+          {ticket.body}
         </p>
+
+        {/* Activity Timeline */}
+        {history.length > 0 && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #f0f3f8" }}>
+            <div style={{ fontSize: ".6rem", color: "#8b9dad", fontWeight: 700, marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+              <RefreshCw size={11} /> سجل التحديثات
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              {history.map(h => {
+                const fc = STATUS_STYLE[h.from_status || ""];
+                const tc = STATUS_STYLE[h.to_status];
+                return (
+                  <div key={h.id} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: tc?.color || "#8b9dad", marginTop: 5, flexShrink: 0 }} />
+                    <div style={{ flex: 1, fontSize: ".62rem", color: "#425c76" }}>
+                      {h.from_status ? (
+                        <><span style={{ color: fc?.color }}>{h.from_status}</span> ← <span style={{ color: tc?.color }}>{h.to_status}</span></>
+                      ) : (
+                        <span style={{ color: tc?.color }}>{h.to_status}</span>
+                      )}
+                      {h.note && <span style={{ color: "#8b9dad" }}> — {h.note}</span>}
+                      <div style={{ fontSize: ".55rem", color: "#aab5c3", marginTop: 1 }}>
+                        {h.profiles?.full_name || "النظام"} · {formatTime(h.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Waiting notice */}
