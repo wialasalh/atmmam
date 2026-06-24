@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { AdminOpsHeader } from "@/components/admin-ops-header";
-import { Search, FileText, ExternalLink, Eye, Edit2, Trash2, UserCheck, UserX, AlertTriangle, Users, Building2, UserCog, Activity, X, Phone, Mail, CreditCard, User, FileCheck, Clock, Save, Ban, CheckCircle, MoreHorizontal } from "lucide-react";
+import { Search, FileText, ExternalLink, Eye, Edit2, Trash2, UserCheck, UserX, AlertTriangle, Users, Building2, UserCog, Activity, X, Phone, Mail, CreditCard, User, FileCheck, Clock, Save, Ban, CheckCircle, MoreHorizontal, KeyRound } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type ClientRecord = {
@@ -60,6 +60,9 @@ export default function AdminClientsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [noticeType, setNoticeType] = useState<"success" | "error">("success");
+  const [passModal, setPassModal] = useState<string | null>(null);
+  const [newPass, setNewPass] = useState("");
+  const [passLoading, setPassLoading] = useState(false);
 
   useEffect(() => { loadClients(); }, []);
 
@@ -125,35 +128,63 @@ export default function AdminClientsPage() {
     } catch { showNotice("حدث خطأ", "error"); }
   }
 
-  const accountClients = useMemo(() =>
-    clients.filter(c => c.user_id === selected?.user_id),
-    [clients, selected?.user_id]
-  );
+  async function changeClientPassword() {
+    if (!passModal || newPass.length < 6) {
+      showNotice("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "error");
+      return;
+    }
+    setPassLoading(true);
+    try {
+      const res = await fetch("/api/admin/clients/password", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userId: passModal, newPassword: newPass }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showNotice(err.error || "تعذر تغيير كلمة المرور", "error");
+      } else {
+        showNotice("تم تغيير كلمة المرور بنجاح");
+      }
+    } catch { showNotice("حدث خطأ في الاتصال", "error"); }
+    setPassLoading(false);
+    setPassModal(null);
+    setNewPass("");
+  }
 
-  const userGroupCounts = useMemo(() => {
-    const map = new Map<string, number>();
+  const userGroupMap = useMemo(() => {
+    const map = new Map<string, { profile: ClientRecord["profiles"]; clients: ClientRecord[] }>();
     clients.forEach(c => {
-      if (c.user_id) map.set(c.user_id, (map.get(c.user_id) || 0) + 1);
+      const key = c.user_id || `__orphan__${c.id}`;
+      if (!map.has(key)) map.set(key, { profile: c.profiles, clients: [] });
+      map.get(key)!.clients.push(c);
     });
     return map;
   }, [clients]);
 
-  const filtered = useMemo(() => {
+  const accountRows = useMemo(() => {
     const q = search.trim().toLocaleLowerCase("ar");
-    if (!q) return clients;
-    return clients.filter((c) =>
-      `${c.name} ${c.phone} ${c.email || ""} ${c.commercial_number || ""} ${c.national_id || ""} ${c.profiles?.full_name || ""}`
-        .toLocaleLowerCase("ar").includes(q)
-    );
-  }, [clients, search]);
+    const rows: { key: string; profile: ClientRecord["profiles"]; clients: ClientRecord[] }[] = [];
+    for (const [key, group] of userGroupMap) {
+      if (q && !`${group.profile?.full_name || ""} ${group.clients.map(c => c.name).join(" ")} ${group.clients.map(c => c.phone).join(" ")}`
+        .toLocaleLowerCase("ar").includes(q)) continue;
+      rows.push({ key, profile: group.profile, clients: group.clients });
+    }
+    return rows;
+  }, [userGroupMap, search]);
+
+  const selectedAccount = useMemo(() => {
+    if (!selected) return undefined;
+    return accountRows.find(a => a.clients.some(c => c.id === selected.id));
+  }, [selected, accountRows]);
 
   const stats = useMemo(() => ({
     total: clients.length,
     active: clients.filter(c => c.active).length,
     inactive: clients.filter(c => !c.active).length,
     companies: clients.filter(c => c.client_type === "company").length,
-    sharedAccounts: [...userGroupCounts.values()].filter(n => n > 1).length,
-  }), [clients, userGroupCounts]);
+    sharedAccounts: [...userGroupMap.values()].filter(g => g.clients.length > 1).length,
+  }), [clients, userGroupMap]);
 
   const renderInput = (label: string, field: string, value: string, onChange: (v: string) => void, type = "text") => (
     <div>
@@ -231,7 +262,7 @@ export default function AdminClientsPage() {
                 </td></tr></tbody></table>
               </div>
             </div>
-          ) : filtered.length === 0 ? (
+            ) : accountRows.length === 0 ? (
             <div className="ops-table-card">
               <div className="ops-table-scroll">
                 <table><tbody><tr><td className="ops-empty" colSpan={6}>
@@ -248,78 +279,74 @@ export default function AdminClientsPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>العميل</th>
-                      <th>الجوال</th>
-                      <th>الحالة</th>
                       <th>صاحب الحساب</th>
-                      <th>السجل التجاري</th>
-                      <th>تاريخ التسجيل</th>
+                      <th>العملاء</th>
+                      <th>عدد العملاء</th>
+                      <th>الجوالات</th>
+                      <th>السجلات التجارية</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((c) => {
-                      const sharedCount = c.user_id ? (userGroupCounts.get(c.user_id) || 1) : 1;
-                      const isShared = sharedCount > 1;
+                    {accountRows.map((acc) => {
+                      const isActive = acc.clients.some(c => c.active);
+                      const isThisSelected = selectedAccount?.key === acc.key;
                       return (
-                      <tr key={c.id} onClick={() => { setSelected(c); setEditing(null); }}
+                      <tr key={acc.key} onClick={() => { setSelected(acc.clients[0]); setEditing(null); }}
                         style={{
-                          cursor: "pointer", opacity: c.active ? 1 : .55, transition: "background .1s",
-                          background: selected?.id === c.id ? "#f5f8fc" : undefined,
-                          borderLeft: isShared ? "3px solid #b45309" : undefined,
+                          cursor: "pointer", opacity: isActive ? 1 : .55, transition: "background .1s",
+                          background: isThisSelected ? "#f5f8fc" : undefined,
+                          borderLeft: acc.clients.length > 1 ? "3px solid #b45309" : undefined,
                         }}
-                        onMouseEnter={e => { if (selected?.id !== c.id) e.currentTarget.style.background = "#fafbfc"; }}
-                        onMouseLeave={e => { if (selected?.id !== c.id) e.currentTarget.style.background = ""; }}>
+                        onMouseEnter={e => { if (!isThisSelected) e.currentTarget.style.background = "#fafbfc"; }}
+                        onMouseLeave={e => { if (!isThisSelected) e.currentTarget.style.background = ""; }}>
                         <td>
                           <div className="ops-owner">
-                            <i style={{ background: typeColors[c.client_type]?.bg, color: typeColors[c.client_type]?.text }}>
-                              {(c.name || "?").charAt(0)}
+                            <i style={{ background: "#eaf4ff", color: "#073766" }}>
+                              {((acc.profile?.full_name || "?").charAt(0))}
                             </i>
                             <div>
-                              <strong>{c.name}</strong>
-                              <span style={{
+                              <strong>{acc.profile?.full_name || "بدون حساب"}</strong>
+                              {acc.clients.length > 1 && <span style={{
                                 display: "inline-block", fontSize: ".5rem", padding: "1px 6px", borderRadius: 4,
-                                background: typeColors[c.client_type]?.bg, color: typeColors[c.client_type]?.text, marginTop: 2,
+                                background: "#fef9ee", color: "#b45309", marginTop: 2,
                               }}>
-                                {c.client_type === "company" ? "مؤسسة" : "فرد"}
-                              </span>
+                                {acc.clients.length} عملاء
+                              </span>}
                             </div>
                           </div>
                         </td>
-                        <td style={{ fontSize: ".68rem", color: "#5a6b7d", direction: "ltr", textAlign: "right" }}>{c.phone}</td>
-                        <td>
-                          <span style={{
-                            display: "inline-flex", alignItems: "center", gap: 4,
-                            background: c.active ? statusColors.active.bg : statusColors.inactive.bg,
-                            color: c.active ? statusColors.active.text : statusColors.inactive.text,
-                            fontSize: ".6rem", padding: "3px 10px", borderRadius: 20, fontWeight: 600,
-                          }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.active ? statusColors.active.dot : statusColors.inactive.dot }} />
-                            {c.active ? "نشط" : "موقوف"}
-                          </span>
-                        </td>
                         <td style={{ fontSize: ".62rem" }}>
-                          {c.profiles ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                              <span style={{ color: isShared ? "#b45309" : "#5a6b7d", fontWeight: isShared ? 600 : 400 }}>
-                                {c.profiles.full_name}
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 72, overflowY: "auto" }}>
+                            {acc.clients.map((c, i) => (
+                              <span key={c.id} style={{
+                                display: "inline-flex", alignItems: "center", gap: 3,
+                                color: c.active ? "#344d69" : "#b0bcc9",
+                                fontSize: ".6rem",
+                              }}>
+                                <span style={{
+                                  width: 5, height: 5, borderRadius: "50%", flexShrink: 0,
+                                  background: c.active ? "#22c55e" : "#ef4444",
+                                }} />
+                                {c.name}
+                                <span style={{ color: "#8b9dad", fontSize: ".5rem" }}>
+                                  ({c.client_type === "company" ? "مؤسسة" : "فرد"})
+                                </span>
                               </span>
-                              {isShared && <span style={{ fontSize: ".5rem", color: "#b45309", background: "#fef9ee", padding: "1px 5px", borderRadius: 3, alignSelf: "flex-start", marginTop: 1 }}>
-                                {sharedCount} عملاء
-                              </span>}
-                            </div>
-                          ) : <span style={{ color: "#b0bcc9" }}>—</span>}
+                            ))}
+                          </div>
+                        </td>
+                        <td style={{ fontSize: ".68rem", color: "#5a6b7d", fontWeight: 600, textAlign: "center" }}>
+                          {acc.clients.length}
+                        </td>
+                        <td style={{ fontSize: ".6rem", color: "#5a6b7d", direction: "ltr" }}>
+                          {acc.clients.map(c => c.phone).filter(Boolean).join(" / ")}
+                        </td>
+                        <td style={{ fontSize: ".6rem" }}>
+                          {acc.clients.map(c => c.commercial_number).filter(Boolean).join(" / ") || <span style={{ color: "#b0bcc9" }}>—</span>}
                         </td>
                         <td>
-                          {c.commercial_number
-                            ? <span style={{ fontSize: ".63rem", color: "#073766", background: "#eaf4ff", padding: "2px 8px", borderRadius: 4 }}>{c.commercial_number}</span>
-                            : <span style={{ color: "#b0bcc9", fontSize: ".6rem" }}>—</span>}
-                        </td>
-                        <td style={{ fontSize: ".6rem", color: "#8b9dad", whiteSpace: "nowrap" }}>
-                          {new Date(c.created_at).toLocaleDateString("ar-SA")}
-                        </td>
-                        <td>
-                          <button onClick={(e) => { e.stopPropagation(); setSelected(c); setEditing(null); }}
+                          <button onClick={(e) => { e.stopPropagation(); setSelected(acc.clients[0]); setEditing(null); }}
                             style={{ background: "none", border: "none", cursor: "pointer", color: "#8b9dad", padding: 4, borderRadius: 6, display: "flex" }}>
                             <Eye size={15} />
                           </button>
@@ -374,7 +401,7 @@ export default function AdminClientsPage() {
                 </div>
               </div>
             </div>
-          ) : selected ? (
+          ) : selected ? <>
             <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
               <div className="ops-summary-head" style={{ borderBottom: "1px solid #f0f4f8" }}>
                 <h2 style={{ fontSize: ".85rem", display: "flex", alignItems: "center", gap: 8 }}>
@@ -401,6 +428,7 @@ export default function AdminClientsPage() {
                   bg={selected.active ? "#fef2f2" : "#f0fdf4"}
                   onClick={() => toggleActive(selected)} />
                 <ActionBtn icon={Trash2} label="حذف" color="#dc2626" bg="#fef2f2" onClick={() => setConfirmDelete(selected.id)} />
+                {selected.user_id && <ActionBtn icon={KeyRound} label="تغيير كلمة المرور" color="#7c3aed" bg="#f5f3ff" onClick={() => { setPassModal(selected.user_id!); setNewPass(""); }} />}
               </div>
 
               {confirmDelete === selected.id && (
@@ -441,12 +469,12 @@ export default function AdminClientsPage() {
                 <InfoRow icon={Clock} label="آخر تحديث" value={new Date(selected.updated_at).toLocaleString("ar-SA")} />
               </div>
 
-              {accountClients.length > 1 && (
+              {selectedAccount && selectedAccount.clients.length > 1 && (
                 <div style={{ padding: "14px 20px", borderTop: "1px solid #f0f4f8" }}>
                   <h3 style={{ fontSize: ".72rem", color: "#b45309", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                    <Users size={14} /> عملاء الحساب ({accountClients.length})
+                    <Users size={14} /> عملاء الحساب ({selectedAccount.clients.length})
                   </h3>
-                  {accountClients.map(ac => (
+                  {selectedAccount.clients.map(ac => (
                     <div key={ac.id} onClick={() => setSelected(ac)}
                       style={{
                         display: "flex", alignItems: "center", gap: 10,
@@ -489,7 +517,8 @@ export default function AdminClientsPage() {
                 )}
               </div>
             </div>
-          ) : (
+            {passModal && <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.3)",display:"grid",placeItems:"center",zIndex:999}} onClick={()=>{if(!passLoading)setPassModal(null)}}><div style={{background:"#fff",borderRadius:14,padding:24,width:320,boxShadow:"0 4px 24px rgba(0,0,0,.12)"}} onClick={e=>e.stopPropagation()}><h3 style={{fontSize:".85rem",marginBottom:16}}>تغيير كلمة مرور العميل</h3><input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} placeholder="كلمة المرور الجديدة" autoFocus style={{width:"100%",padding:"10px 12px",border:"1px solid #dce3eb",borderRadius:8,fontSize:".75rem",outline:"none",boxSizing:"border-box"}} /><div style={{display:"flex",gap:8,marginTop:16}}><button onClick={changeClientPassword} disabled={passLoading||newPass.length<6} style={{flex:1,background:"#073766",color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:".73rem",fontWeight:700,cursor:"pointer",opacity:(passLoading||newPass.length<6)?0.5:1}}>{passLoading?"جاري...":"حفظ"}</button><button onClick={()=>{if(!passLoading)setPassModal(null)}} style={{flex:1,background:"#f0f4f8",color:"#5a6b7d",border:"none",borderRadius:8,padding:"10px 0",fontSize:".73rem",cursor:"pointer"}}>إلغاء</button></div></div></div>}
+          </> : (
             <div style={{ padding: 40, textAlign: "center", color: "#8b9dad" }}>
               <div style={{
                 width: 56, height: 56, borderRadius: 16, background: "#f0f4f8",
