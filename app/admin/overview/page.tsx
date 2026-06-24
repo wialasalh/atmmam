@@ -23,10 +23,12 @@ const TEAM = ["مدير النظام", "مدير النظام", "مدير الن
 
 export default function AdminOverviewPage() {
   const [orders, setOrders] = useState(initialAdminOrders);
+  const [adminName, setAdminName] = useState("مدير النظام");
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_SUPABASE_URL)
       void fetchAdminOrdersFromApi().then((data) => { if (data) setOrders(data); });
+    fetch("/api/admin/team").then(r=>r.json()).then(d=>{const m=(d.members||d.data||[]).find((x:any)=>x.role==="admin");if(m?.full_name)setAdminName(m.full_name);}).catch(()=>{});
     else setOrders(readAdminOrders());
   }, []);
 
@@ -50,7 +52,7 @@ export default function AdminOverviewPage() {
         <div className="ov-topbar">
           <div className="ov-welcome">
             <p className="ov-date">{getTodayArabic()}</p>
-            <h1 className="ov-title">{getGreeting()}، حسن</h1>
+            <h1 className="ov-title">{getGreeting()}، {adminName}</h1>
             <p className="ov-sub">هذه أهم المؤشرات والأعمال التي تحتاجها اليوم.</p>
           </div>
           <div className="ov-top-actions">
