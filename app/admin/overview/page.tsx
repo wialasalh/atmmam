@@ -19,7 +19,7 @@ function getGreeting() {
   return "مساء النور";
 }
 
-const TEAM = ["مدير النظام", "مدير النظام", "مدير النظام"];
+const TEAM = ["مدير النظام"];
 
 export default function AdminOverviewPage() {
   const [orders, setOrders] = useState(initialAdminOrders);
