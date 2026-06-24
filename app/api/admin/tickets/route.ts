@@ -22,7 +22,7 @@ export async function GET(req: Request) {
       .select(`
         id, title, status, priority, category,
         created_at, updated_at, user_id, client_id,
-        assigned_to, attachments,
+        assigned_to, files,
         clients (
           id, name, client_type,
           tax_number, commercial_number,
