@@ -209,13 +209,15 @@ export default function NewTicketPage() {
     setSaving(true);
     setError("");
 
-    const extraValues = Object.entries(extraFields)
+    const extraNote = Object.entries(extraFields)
       .filter(([, v]) => v.trim())
-      .map(([, v]) => v.trim())
-      .join("\n");
+      .map(([k, v]) => {
+        const def = extraDefs.find(f => f.key === k);
+        return def ? `${def.label}: ${v}` : v;
+      }).join("\n");
 
-    const fullDescription = extraValues
-      ? `${description.trim()}\n\n${extraValues}`
+    const fullDescription = extraNote
+      ? `${description.trim()}\n\n---\nمعلومات إضافية:\n${extraNote}`
       : description.trim();
 
     try {
