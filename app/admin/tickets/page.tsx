@@ -6,7 +6,7 @@ import {
   Search, MessageSquare, Check, Send, Loader, Filter,
   Clock, AlertTriangle, CheckCircle, XCircle, RefreshCw,
   Building2, FileText, Download, ExternalLink, ChevronDown, ChevronUp,
-  Hash, MapPin, Briefcase, Phone, Mail, Globe, Users, Lock
+  Hash, MapPin, Briefcase, Phone, Mail, Globe
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -20,8 +20,7 @@ type AdminTicket = {
   updated_at: string;
   user_id: string;
   client_id?: string | null;
-  assigned_to?: string | null;
-  files?: string[] | null;
+  attachments?: string[] | null;
   profiles?: { full_name: string; email: string } | null;
   clients?: {
     id: string;
@@ -52,12 +51,8 @@ type TicketMessage = {
   user_id: string;
   body: string;
   created_at: string;
-  is_internal?: boolean;
-  message_type?: string;
-  sender?: { full_name: string; role: string } | null;
+  profiles?: { full_name: string } | null;
 };
-
-type TeamMember = { id: string; full_name: string; role: string };
 
 type SignedUrl = { path: string; url: string; label: string };
 
@@ -101,7 +96,6 @@ const QUICK_REPLIES = [
   "تم استلام طلبك وجاري العمل عليه.",
   "نحتاج مستندات إضافية لإكمال الطلب.",
   "تم حل المشكلة بنجاح، هل تحتاج مساعدة أخرى؟",
-  "سيتواصل معك أحد أعضاء فريقنا في أقرب وقت ممكن.",
 ];
 
 export default function AdminTicketsPage() {
@@ -119,21 +113,15 @@ export default function AdminTicketsPage() {
   const [showFacilityPanel, setShowFacilityPanel] = useState(true);
   const [signedUrls, setSignedUrls] = useState<SignedUrl[]>([]);
   const [loadingUrls, setLoadingUrls] = useState(false);
-  const [isInternal, setIsInternal] = useState(false);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadTickets(); }, [statusFilter]);
-  useEffect(() => { loadTeam(); }, []);
 
   useEffect(() => {
     if (selected) {
       setMessages([]);
       setSignedUrls([]);
       setShowFacilityPanel(true);
-      setIsInternal(false);
-      setShowHistory(false);
       fetch(`/api/tickets/${selected.id}/messages`).then(async (r) => {
         if (r.ok) { const d = await r.json(); setMessages(d.data || []); }
       });
@@ -156,25 +144,6 @@ export default function AdminTicketsPage() {
     setLoading(false);
   }
 
-  async function loadTeam() {
-    try {
-      const res = await fetch("/api/admin/team");
-      if (res.ok) { const d = await res.json(); setTeamMembers(d.members || []); }
-    } catch {}
-  }
-
-  async function assignTicket(assignedTo: string | null) {
-    if (!selected) return;
-    try {
-      await fetch("/api/admin/tickets", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticketId: selected.id, assignedTo }),
-      });
-      setSelected(prev => prev ? { ...prev, assigned_to: assignedTo } : null);
-    } catch {}
-  }
-
   async function generateSignedUrls(ticket: AdminTicket) {
     const supabase = createSupabaseBrowserClient();
     setLoadingUrls(true);
@@ -194,8 +163,8 @@ export default function AdminTicketsPage() {
     }
 
     // 2. Ticket attachments (uploaded at ticket creation)
-    if (ticket.files?.length) {
-      for (const path of ticket.files) {
+    if (ticket.attachments?.length) {
+      for (const path of ticket.attachments) {
         const fileName = path.split("/").pop() || path;
         const { data } = await supabase.storage
           .from("ticket-attachments")
@@ -230,10 +199,9 @@ export default function AdminTicketsPage() {
       await fetch(`/api/tickets/${selected.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: newNote.trim(), is_internal: isInternal }),
+        body: JSON.stringify({ body: newNote.trim() }),
       });
       setNewNote("");
-      setIsInternal(false);
       setShowQuickReplies(false);
       const res = await fetch(`/api/tickets/${selected.id}/messages`);
       if (res.ok) { const { data } = await res.json(); setMessages(data || []); }
@@ -374,24 +342,8 @@ export default function AdminTicketsPage() {
                 </div>
               </div>
 
-              {/* Assign to team member */}
-              <div className="tkt-new-assign-bar" dir="rtl">
-                <Users size={13} color="#7a8fa6" />
-                <span className="tkt-new-assign-label">تعيين لـ:</span>
-                <select
-                  value={selected.assigned_to || ""}
-                  onChange={e => assignTicket(e.target.value || null)}
-                  className="tkt-new-assign-select"
-                >
-                  <option value="">غير معين</option>
-                  {teamMembers.map(m => (
-                    <option key={m.id} value={m.id}>{m.full_name}</option>
-                  ))}
-                </select>
-              </div>
-
               {/* ── Facility Panel ─────────────────────────────── */}
-              {(selected.clients || (selected.files && selected.files.length > 0)) && (
+              {(selected.clients || (selected.attachments && selected.attachments.length > 0)) && (
                 <div className="tkt-facility-panel">
                   <button
                     className="tkt-facility-toggle"
@@ -457,7 +409,7 @@ export default function AdminTicketsPage() {
                       )}
 
                       {/* Ticket attachments (uploaded by user at ticket creation) */}
-                      {selected.files && selected.files.length > 0 && !selected.clients && (
+                      {selected.attachments && selected.attachments.length > 0 && !selected.clients && (
                         <div className="tkt-docs-section">
                           <p className="tkt-docs-title">
                             <FileText size={13} /> مرفقات التذكرة
@@ -497,70 +449,21 @@ export default function AdminTicketsPage() {
                     <MessageSquare size={24} /><p>لا توجد رسائل بعد</p>
                   </div>
                 ) : messages.map(msg => (
-                  <div key={msg.id} className={`tkt-msg${msg.is_internal ? " tkt-new-msg-internal" : ""}`}>
-                    <div className="tkt-msg-avatar">{(msg.sender?.full_name || "د")[0]}</div>
+                  <div key={msg.id} className="tkt-msg">
+                    <div className="tkt-msg-avatar">{(msg.profiles?.full_name || "د")[0]}</div>
                     <div className="tkt-msg-content">
                       <div className="tkt-msg-header">
-                        <strong>{msg.sender?.full_name || "فريق الدعم"}</strong>
-                        {msg.is_internal && <span className="tkt-new-internal-badge"><Lock size={9} /> داخلية</span>}
+                        <strong>{msg.profiles?.full_name || "فريق الدعم"}</strong>
                         <small>{new Date(msg.created_at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
                       </div>
-                      <p className={`tkt-msg-body${msg.is_internal ? " tkt-new-msg-internal-body" : ""}`}>{msg.body}</p>
+                      <p className="tkt-msg-body">{msg.body}</p>
                     </div>
                   </div>
                 ))}
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* History Timeline */}
-              <div className="tkt-new-history" dir="rtl">
-                <button type="button" className="tkt-new-history-toggle" onClick={() => setShowHistory(v => !v)}>
-                  <Clock size={12} />
-                  <span>سجل التذكرة</span>
-                  {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-                {showHistory && (
-                  <div className="tkt-new-history-body">
-                    <div className="tkt-new-history-item">
-                      <span className="tkt-new-history-dot tkt-new-dot-create" />
-                      <div>
-                        <div className="tkt-new-history-event">تم إنشاء التذكرة</div>
-                        <div className="tkt-new-history-time">{new Date(selected.created_at).toLocaleString("ar-SA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
-                      </div>
-                    </div>
-                    {messages.filter(m => m.message_type === "status_change").map(m => (
-                      <div key={m.id} className="tkt-new-history-item">
-                        <span className="tkt-new-history-dot tkt-new-dot-status" />
-                        <div>
-                          <div className="tkt-new-history-event">{m.body}</div>
-                          <div className="tkt-new-history-time">{new Date(m.created_at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="tkt-new-history-item">
-                      <span className="tkt-new-history-dot tkt-new-dot-update" />
-                      <div>
-                        <div className="tkt-new-history-event">آخر تحديث</div>
-                        <div className="tkt-new-history-time">{new Date(selected.updated_at).toLocaleString("ar-SA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Reply tools */}
-              <div className="tkt-new-reply-tools" dir="rtl">
-                <button type="button" onClick={() => setShowQuickReplies(v => !v)}
-                  className={`tkt-new-canned-btn${showQuickReplies ? " tkt-new-canned-active" : ""}`}>
-                  <Filter size={12} /> ردود جاهزة
-                </button>
-                <button type="button" onClick={() => setIsInternal(v => !v)}
-                  className={`tkt-new-internal-btn${isInternal ? " tkt-new-internal-active" : ""}`}>
-                  <Lock size={12} /> ملاحظة داخلية
-                </button>
-              </div>
-
-              {/* Canned responses dropdown */}
+              {/* Quick replies */}
               {showQuickReplies && (
                 <div className="tkt-quick-replies">
                   {QUICK_REPLIES.map((r, i) => (
@@ -570,10 +473,12 @@ export default function AdminTicketsPage() {
               )}
 
               {/* Reply box */}
-              <form onSubmit={sendNote} className="tkt-reply-form" dir="rtl">
-                <textarea value={newNote} onChange={e => setNewNote(e.target.value)}
-                  placeholder={isInternal ? "اكتب ملاحظتك الداخلية..." : "اكتب ردك هنا..."}
-                  rows={2} className={`tkt-reply-input${isInternal ? " tkt-new-internal-input" : ""}`}
+              <form onSubmit={sendNote} className="tkt-reply-form">
+                <button type="button" onClick={() => setShowQuickReplies(!showQuickReplies)} className="tkt-quick-btn" title="ردود جاهزة">
+                  <Filter size={14} />
+                </button>
+                <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="اكتب ردك هنا..."
+                  rows={2} className="tkt-reply-input"
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendNote(e); } }} />
                 <button type="submit" disabled={!newNote.trim() || sending} className="tkt-send-btn">
                   {sending ? <Loader size={16} className="spin" /> : <Send size={16} />}
@@ -681,33 +586,6 @@ export default function AdminTicketsPage() {
         .tkt-empty-detail { min-height: 300px; }
         .spin { animation: spin .8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* ── tkt-new-* feature classes ── */
-        .tkt-new-assign-bar { display: flex; align-items: center; gap: 8px; padding: 8px 22px; border-bottom: 1px solid #f0f3f8; background: #fafbfc; flex-wrap: wrap; direction: rtl; }
-        .tkt-new-assign-label { font-size: .62rem; color: #7a8fa6; font-weight: 700; flex-shrink: 0; }
-        .tkt-new-assign-select { height: 28px; border: 1px solid #e5eaf0; border-radius: 6px; background: #fff; padding: 0 8px; font: inherit; font-size: .62rem; color: #344d69; flex: 1; max-width: 220px; }
-        .tkt-new-reply-tools { display: flex; gap: 6px; align-items: center; padding: 8px 22px 4px; background: #fff; direction: rtl; border-top: 1px solid #f0f3f8; flex-shrink: 0; }
-        .tkt-new-canned-btn { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #e5eaf0; background: #f5f8fc; color: #526983; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: .62rem; cursor: pointer; transition: all .15s; }
-        .tkt-new-canned-btn:hover { border-color: #0875dc; color: #0875dc; background: #eaf4ff; }
-        .tkt-new-canned-active { border-color: #0875dc !important; color: #0875dc !important; background: #eaf4ff !important; }
-        .tkt-new-internal-btn { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #e5eaf0; background: #f5f8fc; color: #526983; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: .62rem; cursor: pointer; transition: all .15s; }
-        .tkt-new-internal-btn:hover { border-color: #d97706; color: #d97706; }
-        .tkt-new-internal-active { border-color: #d97706 !important; color: #d97706 !important; background: #fef9ee !important; }
-        .tkt-new-internal-input { border-color: #fde68a !important; background: #fef9ee !important; }
-        .tkt-new-msg-internal { background: #fefce8; border-radius: 8px; padding: 4px 8px; margin: -4px -8px; }
-        .tkt-new-msg-internal-body { background: #fef9c3 !important; border-color: #fde047 !important; }
-        .tkt-new-internal-badge { display: inline-flex; align-items: center; gap: 3px; font-size: .55rem; color: #d97706; background: #fef9ee; border: 1px solid #fde68a; border-radius: 10px; padding: 1px 5px; font-weight: 700; margin: 0 4px; vertical-align: middle; }
-        .tkt-new-history { border-top: 1px solid #f0f3f8; background: #fafbfc; flex-shrink: 0; direction: rtl; }
-        .tkt-new-history-toggle { width: 100%; display: flex; align-items: center; gap: 7px; padding: 8px 22px; border: 0; background: transparent; cursor: pointer; font: inherit; font-size: .65rem; font-weight: 700; color: #526983; direction: rtl; text-align: right; }
-        .tkt-new-history-toggle span { flex: 1; text-align: right; }
-        .tkt-new-history-body { padding: 0 22px 12px; display: flex; flex-direction: column; gap: 8px; }
-        .tkt-new-history-item { display: flex; align-items: flex-start; gap: 10px; }
-        .tkt-new-history-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
-        .tkt-new-dot-create { background: #0875dc; }
-        .tkt-new-dot-status { background: #7c3aed; }
-        .tkt-new-dot-update { background: #15803d; }
-        .tkt-new-history-event { font-size: .65rem; color: #344d69; font-weight: 600; }
-        .tkt-new-history-time { font-size: .58rem; color: #aab5c3; margin-top: 2px; }
         @media (max-width: 900px) {
           .tkt-layout { grid-template-columns: 1fr; height: auto; }
           .tkt-detail-col { display: none; }
