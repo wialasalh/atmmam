@@ -42,53 +42,52 @@ const CATEGORY_SPECIALIZATION: Record<string, string> = {
   "الزكاة والضريبة والاستشارات": "tax",
 };
 
-async function getProfile(supabase: ReturnType<typeof createClient>, userId: string) {
+async function getProfile(supabase: any, userId: string) {
   const { data } = await supabase.from("profiles").select("role, specializations").eq("id", userId).single();
   return data;
 }
 
 async function smartAssign(
-  serviceClient: ReturnType<typeof createClient>,
+  client: any,
   category: string
 ): Promise<string | null> {
   const specialization = CATEGORY_SPECIALIZATION[category];
   if (!specialization) return null;
 
-  // Find available staff with matching specialization and least tickets
-  const { data: agents } = await serviceClient
+  const agentList = await client
     .from("profiles")
     .select("id, max_tickets, specializations")
     .eq("role", "operator")
     .eq("is_available", true)
-    .contains("specializations", [specialization]);
+    .contains("specializations", [specialization])
+    .then((r: { data: any }) => r.data as { id: string; max_tickets: number }[] | null);
 
-  if (!agents || agents.length === 0) {
-    // Fallback: least loaded operator
-    const { data: fallback } = await serviceClient
+  if (!agentList || agentList.length === 0) {
+    const fallback = await client
       .from("profiles")
       .select("id")
       .eq("role", "operator")
       .eq("is_available", true)
       .limit(1)
-      .single();
+      .maybeSingle()
+      .then((r: { data: any }) => r.data as { id: string } | null);
     return fallback?.id || null;
   }
 
-  // Get ticket counts per agent
-  const agentIds = agents.map((a: { id: string }) => a.id);
-  const { data: counts } = await serviceClient
+  const agentIds = agentList.map((a: { id: string }) => a.id);
+  const counts = await client
     .from("tickets")
     .select("assigned_to")
     .in("assigned_to", agentIds)
-    .not("status", "in", '("تم الحل","مغلقة")');
+    .not("status", "in", '("تم الحل","مغلقة")')
+    .then((r: { data: any }) => r.data as { assigned_to: string }[] | null);
 
   const countMap: Record<string, number> = {};
   (counts || []).forEach((t: { assigned_to: string }) => {
     if (t.assigned_to) countMap[t.assigned_to] = (countMap[t.assigned_to] || 0) + 1;
   });
 
-  // Pick agent with fewest active tickets
-  const sorted = agents.sort((a: { id: string; max_tickets: number }, b: { id: string; max_tickets: number }) =>
+  const sorted = agentList.sort((a: { id: string; max_tickets: number }, b: { id: string; max_tickets: number }) =>
     (countMap[a.id] || 0) - (countMap[b.id] || 0)
   );
 

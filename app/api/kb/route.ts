@@ -40,7 +40,8 @@ export async function GET(request: Request) {
   // Increment view count for single article
   const articleId = url.searchParams.get("id");
   if (articleId && user) {
-    await supabase.rpc("increment_kb_views", { article_id: articleId }).catch(() => {});
+    const { error: _ve } = await supabase.rpc("increment_kb_views", { article_id: articleId });
+    if (_ve) console.error("KB view increment failed:", _ve.message);
   }
 
   return NextResponse.json({ data: articles });

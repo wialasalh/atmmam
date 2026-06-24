@@ -2,6 +2,7 @@
 import { Settings, Bell, LogOut, User, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type AdminSection = "dashboard" | "orders" | "clients" | "tickets" | "followups" | "services" | "content" | "reports" | "team" | "settings";
 

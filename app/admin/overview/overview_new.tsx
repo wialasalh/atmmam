@@ -35,7 +35,7 @@ export default function AdminOverviewPage() {
     active: orders.filter((o) => o.status === "قيد التنفيذ").length,
     waiting: orders.filter((o) => o.status === "بانتظار المستندات").length,
     done: orders.filter((o) => o.status === "مكتمل").length,
-    review: orders.filter((o) => o.status === "قيد المراجعة").length,
+    review: orders.filter((o) => o.status === "جديد").length,
   }), [orders]);
 
   const priority = orders.filter((o) => o.status !== "مكتمل").slice(0, 5);

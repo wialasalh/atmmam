@@ -74,9 +74,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .neq("user_id", user.id)
       .gte("last_seen_at", cutoff);
 
-    activeViewers = (presence || []).map((p: { user_id: string; last_seen_at: string; profiles: { full_name: string } | null }) => ({
+    activeViewers = (presence || []).map((p: { user_id: string; last_seen_at: string; profiles: { full_name: string }[] | null }) => ({
       user_id: p.user_id,
-      full_name: p.profiles?.full_name || "مستخدم",
+      full_name: p.profiles?.[0]?.full_name || "مستخدم",
       last_seen_at: p.last_seen_at,
     }));
   }
