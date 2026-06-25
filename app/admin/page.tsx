@@ -8,6 +8,7 @@ import { X, Search, Plus, AlertTriangle, Check, Clock, Flag, User, FileText, Bui
 
 const statusTabs: Array<OrderStatus | "الكل"> = ["الكل", "جديد", "بانتظار المستندات", "قيد التنفيذ", "مكتمل", "ملغي", "معلق"];
 type CatalogItem = { id: string; name?: string; full_name?: string; phone?: string; email?: string; agency_id?: string };
+type RelatedTicket = { id: string; title: string; status: string; priority: string; category: string; client_id?: string };
 type Catalog = { clients: CatalogItem[]; services: CatalogItem[]; agencies: CatalogItem[]; profiles: CatalogItem[] };
 type DatabaseOrder = { id:string; reference_no:string; status:string; next_action_text?:string; next_action_at?:string; updated_at:string; clients?:CatalogItem|null; services?:CatalogItem|null; agencies?:CatalogItem|null; profiles?:CatalogItem|null; notes?:string|null };
 const statusFromDatabase: Record<string, OrderStatus> = { new:"جديد", waiting_documents:"بانتظار المستندات", in_progress:"قيد التنفيذ", completed:"مكتمل", cancelled:"ملغي", blocked:"معلق" };
@@ -35,6 +36,7 @@ export default function AdminOrdersPage() {
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [showReasonDialog, setShowReasonDialog] = useState(false);
   const [pendingTargetStatus, setPendingTargetStatus] = useState<OrderStatus | null>(null);
+  const [relatedTickets, setRelatedTickets] = useState<RelatedTicket[]>([]);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
 
   async function loadDatabase() {
@@ -51,6 +53,17 @@ export default function AdminOrdersPage() {
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
   useEffect(()=>{if(!databaseMode||!selected?.databaseId)return;void fetch(`/api/admin/orders/${selected.databaseId}/documents`).then(async(response)=>{if(response.ok){const payload=await response.json() as {data:Array<{name:string;status:string;download_url?:string|null}>};setRemoteDocs((current)=>({...current,[selected.id]:payload.data}))}})},[databaseMode,selected?.databaseId,selected?.id]);
+
+  useEffect(() => {
+    if (!selected?.clientId) { setRelatedTickets([]); return; }
+    fetch("/api/admin/tickets")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const all = (data?.data ?? []) as RelatedTicket[];
+        setRelatedTickets(all.filter(t => t.client_id === selected.clientId).slice(0, 6));
+      })
+      .catch(() => {});
+  }, [selected?.clientId]);
   const counts = useMemo(() => ({
     "الكل": orders.length,
     "جديد": orders.filter((item) => item.status === "جديد").length,
@@ -438,6 +451,38 @@ export default function AdminOrdersPage() {
           </div>
         </section>
 
+        {/* Related Tickets */}
+        {relatedTickets.length > 0 && (
+          <section style={{ padding: "14px 18px", borderBottom: "1px solid #e7edf3" }}>
+            <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".75rem", margin: "0 0 10px" }}>
+              <MessageSquare size={14} style={{ color: "#7c3aed" }} /> التذاكر المرتبطة
+              <span style={{ marginRight: "auto", fontSize: ".56rem", color: "#7c3aed", background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 10, padding: "1px 8px", fontWeight: 800 }}>{relatedTickets.length}</span>
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              {relatedTickets.map(t => {
+                const sColor: Record<string,string> = { "جديدة": "#0875dc", "قيد المراجعة": "#b45309", "بانتظار العميل": "#7c3aed", "تم الحل": "#15803d", "مغلقة": "#6b7280" };
+                const sBg:    Record<string,string> = { "جديدة": "#eaf4ff", "قيد المراجعة": "#fef9ee", "بانتظار العميل": "#f5f3ff", "تم الحل": "#f0fdf4", "مغلقة": "#f3f4f6" };
+                return (
+                  <a key={t.id} href="/admin/tickets"
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#f8fafc", border: "1px solid #e5eaf0", borderRadius: 8, textDecoration: "none", transition: "border-color .15s" }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = "#7c3aed"}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = "#e5eaf0"}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: ".65rem", fontWeight: 700, color: "#1e3a56", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
+                      <div style={{ fontSize: ".54rem", color: "#8b9dad", marginTop: 1 }}>{t.category}</div>
+                    </div>
+                    <span style={{ fontSize: ".54rem", fontWeight: 700, padding: "2px 7px", borderRadius: 12, background: sBg[t.status] ?? "#f3f4f6", color: sColor[t.status] ?? "#6b7280", whiteSpace: "nowrap" }}>{t.status}</span>
+                  </a>
+                );
+              })}
+            </div>
+            <a href="/admin/tickets" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: ".62rem", color: "#7c3aed", fontWeight: 600, textDecoration: "none" }}>
+              عرض كل التذاكر <ChevronLeft size={12} />
+            </a>
+          </section>
+        )}
+
         {/* Timeline */}
         <section className="ops-timeline">
           <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".75rem", marginBottom: 12 }}>
@@ -576,7 +621,19 @@ function CreateOrderForm({ catalog }: { catalog: Catalog }) {
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [clientTickets, setClientTickets] = useState<RelatedTicket[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!selectedClientId) { setClientTickets([]); return; }
+    fetch("/api/admin/tickets")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const all = (data?.data ?? []) as RelatedTicket[];
+        setClientTickets(all.filter(t => t.client_id === selectedClientId && !["تم الحل","مغلقة"].includes(t.status)));
+      })
+      .catch(() => {});
+  }, [selectedClientId]);
 
   const selectedService = catalog.services.find((s) => s.id === selectedServiceId);
   const selectedClient = catalog.clients.find((c) => c.id === selectedClientId);
@@ -747,6 +804,19 @@ function CreateOrderForm({ catalog }: { catalog: Catalog }) {
         <span style={fStyle.labelText}><FileText size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> ملاحظات</span>
         <textarea name="notes" placeholder="ملاحظات إضافية عن الطلب..." style={fStyle.textarea} onFocus={onFieldFocus} onBlur={onFieldBlur} />
       </label>
+
+      {/* Linked Ticket (optional) — shown only when the selected client has open tickets */}
+      {clientTickets.length > 0 && (
+        <label style={fStyle.label}>
+          <span style={fStyle.labelText}><MessageSquare size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> التذكرة المرتبطة <span style={{ color: "#8b9dad", fontWeight: 400 }}>(اختياري)</span></span>
+          <select name="relatedTicketId" style={fStyle.select} onFocus={onFieldFocus} onBlur={onFieldBlur}>
+            <option value="">— لا يوجد ربط بتذكرة —</option>
+            {clientTickets.map(t => (
+              <option key={t.id} value={t.id}>{t.title} ({t.status})</option>
+            ))}
+          </select>
+        </label>
+      )}
     </div>
   );
 }

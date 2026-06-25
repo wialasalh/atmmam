@@ -35,8 +35,9 @@ type TicketMessage = {
   sender?: { full_name: string; role: string } | null;
 };
 
-type TeamMember = { id: string; full_name: string; role: string };
-type SignedUrl   = { path: string; url: string; label: string };
+type TeamMember  = { id: string; full_name: string; role: string };
+type SignedUrl    = { path: string; url: string; label: string };
+type RelatedOrder = { id: string; reference_no?: string; status: string; service?: string };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -133,6 +134,7 @@ export default function AdminTicketsPage() {
   const [isInternal,          setIsInternal]          = useState(false);
   const [teamMembers,         setTeamMembers]         = useState<TeamMember[]>([]);
   const [showHistory,         setShowHistory]         = useState(false);
+  const [relatedOrders,       setRelatedOrders]       = useState<RelatedOrder[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ── Derived ──────────────────────────────────────────────────────────────
@@ -193,6 +195,25 @@ export default function AdminTicketsPage() {
     const iv = setInterval(() => setTickets(ts => [...ts]), 60000);
     return () => clearInterval(iv);
   }, []);
+
+  // Related orders for selected ticket's client
+  useEffect(() => {
+    const clientId = selected?.clients?.id;
+    if (!clientId) { setRelatedOrders([]); return; }
+    fetch("/api/admin/orders")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        type RawOrder = { id: string; reference_no?: string; status: string; clients?: { id: string } | null; services?: { name?: string } | null };
+        const all = (data?.data ?? []) as RawOrder[];
+        setRelatedOrders(
+          all
+            .filter(o => o.clients?.id === clientId)
+            .map(o => ({ id: o.id, reference_no: o.reference_no, status: o.status, service: o.services?.name }))
+            .slice(0, 5)
+        );
+      })
+      .catch(() => {});
+  }, [selected?.clients?.id]);
 
   // ── API ───────────────────────────────────────────────────────────────────
 
@@ -518,6 +539,38 @@ export default function AdminTicketsPage() {
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {/* Related Orders */}
+                {relatedOrders.length > 0 && (
+                  <div style={{ padding: "11px 22px", borderBottom: "1px solid #f0f3f8" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".65rem", fontWeight: 700, color: "#344d69", marginBottom: 9 }}>
+                      <Briefcase size={13} color="#0875dc" /> الطلبات المرتبطة
+                      <span style={{ marginRight: "auto", background: "#eaf4ff", color: "#0875dc", fontSize: ".54rem", padding: "1px 7px", borderRadius: 10, fontWeight: 800, border: "1px solid #bddcff" }}>{relatedOrders.length}</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      {relatedOrders.map(o => {
+                        const statusAr: Record<string,string> = { new: "جديد", waiting_documents: "بانتظار المستندات", in_progress: "قيد التنفيذ", completed: "مكتمل", cancelled: "ملغي", blocked: "معلق" };
+                        const label = statusAr[o.status] ?? o.status;
+                        return (
+                          <a key={o.id} href="/admin"
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "#f8fafc", border: "1px solid #e5eaf0", borderRadius: 8, textDecoration: "none", transition: "border-color .15s" }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = "#0875dc"}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = "#e5eaf0"}
+                          >
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: ".62rem", fontWeight: 800, color: "#073766", fontFamily: "monospace", direction: "ltr" }}>{o.reference_no || o.id.slice(0,8).toUpperCase()}</div>
+                              <div style={{ fontSize: ".54rem", color: "#8b9dad", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.service}</div>
+                            </div>
+                            <span style={{ fontSize: ".53rem", fontWeight: 700, padding: "2px 7px", borderRadius: 12, background: "#eaf4ff", color: "#0875dc", whiteSpace: "nowrap" }}>{label}</span>
+                          </a>
+                        );
+                      })}
+                    </div>
+                    <a href="/admin" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: ".62rem", color: "#0875dc", fontWeight: 600, textDecoration: "none" }}>
+                      عرض الطلبات <ExternalLink size={11} />
+                    </a>
                   </div>
                 )}
 
