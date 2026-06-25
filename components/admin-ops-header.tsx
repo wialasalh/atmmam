@@ -119,7 +119,7 @@ export function AdminOpsHeader({ active }: { active: AdminSection }) {
   return (
     <>
       <header className="ops-header">
-        <a className="ops-brand" href="/"><img src="/assets/logo/atmmam-dashboard-lockup-hd-v2.png?v=2" alt="أتمم" /></a>
+        <a className="ops-brand" href="/admin/overview"><img src="/assets/logo/atmmam-dashboard-lockup-hd-v2.png?v=2" alt="أتمم" /></a>
         <nav>{links.map((link) => <a className={active === link.key ? "active" : ""} href={link.href} key={link.key}>{link.label}</a>)}</nav>
         <div className="ops-account">
           <a href="/admin/followups" aria-label="المتابعات"
