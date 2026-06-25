@@ -675,6 +675,7 @@ function CreateOrderForm({ catalog }: { catalog: Catalog }) {
           <select
             name="agencyId"
             value={selectedService?.agency_id || ""}
+            onChange={() => {}}
             style={{ ...fStyle.select, color: selectedService?.agency_id ? "#2a4a6a" : "#8b9dad" }}
             onFocus={onFieldFocus}
             onBlur={onFieldBlur}
