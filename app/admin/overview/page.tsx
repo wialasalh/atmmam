@@ -19,11 +19,12 @@ function getGreeting() {
   return "مساء النور";
 }
 
-const TEAM = ["مدير النظام", "مدير النظام", "مدير النظام"];
+type TeamMember = { id: string; full_name: string; role: string };
 
 export default function AdminOverviewPage() {
   const [orders, setOrders] = useState(initialAdminOrders);
   const [displayName, setDisplayName] = useState("مدير النظام");
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_SUPABASE_URL)
@@ -35,13 +36,17 @@ export default function AdminOverviewPage() {
     fetch("/api/admin/team")
       .then(r => r.ok ? r.json() : null)
       .then(payload => {
-        const members = payload?.members || payload?.data || [];
+        const members: TeamMember[] = payload?.members || payload?.data || [];
         const uid: string = payload?.currentUserId || "";
-        const me = members.find((m: any) => m.id === uid) ?? members.find((m: any) => m.role === "admin");
+        const me = members.find((m) => m.id === uid) ?? members.find((m) => m.role === "admin");
         if (me) {
           const name: string = me.full_name || "";
           setDisplayName(!name || name === "admin" ? "مدير النظام" : name);
         }
+        // Deduplicate by id
+        const seen = new Set<string>();
+        const unique = members.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+        setTeamMembers(unique.length ? unique : [{ id: "default", full_name: "مدير النظام", role: "admin" }]);
       })
       .catch(() => {});
   }, []);
@@ -172,12 +177,13 @@ export default function AdminOverviewPage() {
                 </div>
               </header>
               <div className="ov-team-list">
-                {TEAM.map((name) => {
+                {teamMembers.map((member) => {
+                  const name = member.full_name || "مدير النظام";
                   const count = orders.filter((o) => o.assignee === name && o.status !== "مكتمل").length;
-                  const max = Math.max(...TEAM.map((n) => orders.filter((o) => o.assignee === n && o.status !== "مكتمل").length), 1);
+                  const max = Math.max(...teamMembers.map((m) => orders.filter((o) => o.assignee === (m.full_name || "مدير النظام") && o.status !== "مكتمل").length), 1);
                   const pct = Math.round((count / max) * 100);
                   return (
-                    <div className="ov-team-row" key={name}>
+                    <div className="ov-team-row" key={member.id}>
                       <span className="ov-avatar">{name.charAt(0)}</span>
                       <div className="ov-team-info">
                         <strong>{name}</strong>
