@@ -323,6 +323,42 @@ export default function AdminOrdersPage() {
           </div>
         </div>
 
+        {/* Progress Timeline */}
+        {(() => {
+          const stages: Array<{ label: string; color: string }> = [
+            { label: "جديد", color: "#9ca3af" },
+            { label: "قيد التنفيذ", color: "#0875dc" },
+            { label: "بانتظار المستندات", color: "#f59e0b" },
+            { label: "مكتمل", color: "#16a34a" },
+          ];
+          const idxMap: Record<string, number> = { "جديد": 0, "قيد التنفيذ": 1, "بانتظار المستندات": 2, "مكتمل": 3 };
+          const cur = idxMap[selected.status] ?? -1;
+          return (
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #e7edf3", direction: "rtl" }}>
+              <span style={{ fontSize: ".6rem", color: "#6b829b", fontWeight: 700, display: "block", marginBottom: 10 }}>مسار الطلب</span>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+                {stages.flatMap((s, i) => {
+                  const isActive = i === cur;
+                  const isPast = i < cur;
+                  const clr = (isActive || isPast) ? s.color : "#e2e8f0";
+                  const items = [
+                    <div key={`d${i}`} style={{ width: isActive ? 13 : 9, height: isActive ? 13 : 9, borderRadius: "50%", flexShrink: 0, background: clr, boxShadow: isActive ? `0 0 0 3px ${s.color}33` : "none", transition: "all .2s" }} />,
+                  ];
+                  if (i < stages.length - 1) items.push(<div key={`l${i}`} style={{ flex: 1, height: 2, background: i < cur ? stages[i + 1].color : "#e2e8f0", margin: "0 3px", transition: "background .3s" }} />);
+                  return items;
+                })}
+              </div>
+              <div style={{ display: "flex" }}>
+                {stages.map((s, i) => {
+                  const isActive = i === cur;
+                  const isPast = i < cur;
+                  return <span key={i} style={{ flex: 1, fontSize: ".47rem", fontWeight: isActive ? 800 : 500, color: isActive ? s.color : isPast ? "#6b829b" : "#c0ccd8", textAlign: "center", lineHeight: 1.3 }}>{s.label}</span>;
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Status Change */}
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #e7edf3", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: ".65rem", fontWeight: 700, color: "#425c76", display: "flex", alignItems: "center", gap: 6 }}>
