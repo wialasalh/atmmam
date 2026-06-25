@@ -123,7 +123,7 @@ export async function changeTeamMemberPassword(input: { profileId: string; newPa
   return data.user;
 }
 
-export async function updateTeamMember(input: { profileId: string; role?: string; active?: boolean; fullName?: string; phone?: string }) {
+export async function updateTeamMember(input: { profileId: string; role?: string; active?: boolean; fullName?: string; phone?: string; avatarUrl?: string }) {
   const supabase = await createSupabaseServerClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -145,6 +145,7 @@ export async function updateTeamMember(input: { profileId: string; role?: string
   if (input.active !== undefined) changes.active = input.active;
   if (input.fullName) changes.full_name = input.fullName;
   if (input.phone !== undefined) changes.phone = input.phone;
+  if (input.avatarUrl) changes.avatar_url = input.avatarUrl;
 
   const { data, error } = await supabase
     .from("profiles")

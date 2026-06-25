@@ -46,6 +46,7 @@ export async function PATCH(request: Request) {
       active: body.active,
       fullName: body.fullName,
       phone: body.phone,
+      avatarUrl: body.avatarUrl,
     });
     return NextResponse.json({ data: result });
   } catch (error) {
