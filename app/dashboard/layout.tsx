@@ -66,7 +66,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (!res.ok) { router.replace("/login"); return; }
       const { data } = await res.json();
       if (data?.role === "admin" || data?.role === "manager" || data?.role === "operator") {
-        router.replace("/admin/overview");
+        router.replace("/admin");
         return;
       }
       setUser(data);

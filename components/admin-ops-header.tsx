@@ -7,8 +7,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 type AdminSection = "dashboard" | "orders" | "clients" | "tickets" | "followups" | "services" | "content" | "reports" | "team" | "settings";
 
 const links: Array<{ key: AdminSection; label: string; href: string }> = [
-  { key: "dashboard", label: "لوحة التحكم", href: "/admin/overview" },
-  { key: "orders", label: "الطلبات", href: "/admin" },
+  { key: "dashboard", label: "لوحة التحكم", href: "/admin" },
+  { key: "orders", label: "الطلبات", href: "/admin/orders" },
   { key: "clients", label: "العملاء", href: "/admin/clients" },
   { key: "tickets", label: "التذاكر", href: "/admin/tickets" },
   { key: "followups", label: "المتابعات", href: "/admin/followups" },
@@ -119,7 +119,7 @@ export function AdminOpsHeader({ active }: { active: AdminSection }) {
   return (
     <>
       <header className="ops-header">
-        <a className="ops-brand" href="/admin/overview"><img src="/assets/logo/atmmam-dashboard-lockup-hd-v2.png?v=2" alt="أتمم" /></a>
+        <a className="ops-brand" href="/admin"><img src="/assets/logo/atmmam-dashboard-lockup-hd-v2.png?v=2" alt="أتمم" /></a>
         <nav>{links.map((link) => <a className={active === link.key ? "active" : ""} href={link.href} key={link.key}>{link.label}</a>)}</nav>
         <div className="ops-account">
           <a href="/admin/followups" aria-label="المتابعات"

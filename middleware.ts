@@ -39,7 +39,7 @@ export async function middleware(request: NextRequest) {
   if (!user && isTicketApi) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   if (!user && isClientApi) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   if (!user && path.startsWith("/admin/") && !isLoginPage) return NextResponse.redirect(new URL("/admin/login", request.url));
-  if (user && isLoginPage && path.startsWith("/admin")) return NextResponse.redirect(new URL("/admin/overview", request.url));
+  if (user && isLoginPage && path.startsWith("/admin")) return NextResponse.redirect(new URL("/admin", request.url));
 
   // Dashboard protection
   if (!user && isDashboard) return NextResponse.redirect(new URL("/login", request.url));

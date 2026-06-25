@@ -554,7 +554,7 @@ export default function AdminTicketsPage() {
                         const statusAr: Record<string,string> = { new: "جديد", waiting_documents: "بانتظار المستندات", in_progress: "قيد التنفيذ", completed: "مكتمل", cancelled: "ملغي", blocked: "معلق" };
                         const label = statusAr[o.status] ?? o.status;
                         return (
-                          <a key={o.id} href="/admin"
+                          <a key={o.id} href="/admin/orders"
                             style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "#f8fafc", border: "1px solid #e5eaf0", borderRadius: 8, textDecoration: "none", transition: "border-color .15s" }}
                             onMouseEnter={e => e.currentTarget.style.borderColor = "#0875dc"}
                             onMouseLeave={e => e.currentTarget.style.borderColor = "#e5eaf0"}
@@ -568,7 +568,7 @@ export default function AdminTicketsPage() {
                         );
                       })}
                     </div>
-                    <a href="/admin" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: ".62rem", color: "#0875dc", fontWeight: 600, textDecoration: "none" }}>
+                    <a href="/admin/orders" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: ".62rem", color: "#0875dc", fontWeight: 600, textDecoration: "none" }}>
                       عرض الطلبات <ExternalLink size={11} />
                     </a>
                   </div>
