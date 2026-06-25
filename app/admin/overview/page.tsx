@@ -23,11 +23,27 @@ const TEAM = ["مدير النظام", "مدير النظام", "مدير الن
 
 export default function AdminOverviewPage() {
   const [orders, setOrders] = useState(initialAdminOrders);
+  const [displayName, setDisplayName] = useState("مدير النظام");
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_SUPABASE_URL)
       void fetchAdminOrdersFromApi().then((data) => { if (data) setOrders(data); });
     else setOrders(readAdminOrders());
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/admin/team")
+      .then(r => r.ok ? r.json() : null)
+      .then(payload => {
+        const members = payload?.members || payload?.data || [];
+        const uid: string = payload?.currentUserId || "";
+        const me = members.find((m: any) => m.id === uid) ?? members.find((m: any) => m.role === "admin");
+        if (me) {
+          const name: string = me.full_name || "";
+          setDisplayName(!name || name === "admin" ? "مدير النظام" : name);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const stats = useMemo(() => ({
@@ -50,7 +66,7 @@ export default function AdminOverviewPage() {
         <div className="ov-topbar">
           <div className="ov-welcome">
             <p className="ov-date">{getTodayArabic()}</p>
-            <h1 className="ov-title">{getGreeting()}، حسن</h1>
+            <h1 className="ov-title">{getGreeting()}، {displayName}</h1>
             <p className="ov-sub">هذه أهم المؤشرات والأعمال التي تحتاجها اليوم.</p>
           </div>
           <div className="ov-top-actions">
