@@ -22,19 +22,21 @@ function AdminUserMenu() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("admin");
   const [email, setEmail] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   useEffect(() => {
-    // نجلب بيانات الأدمن الحقيقي من قاعدة البيانات
     fetch("/api/admin/team")
       .then(r => r.ok ? r.json() : null)
       .then(payload => {
-        const members = payload?.members || payload?.data || [];
-        const adminUser = members.find((m: any) => m.role === "admin");
-        if (adminUser) {
-          setName(adminUser.full_name || "admin");
-          setEmail("admin@atmmam.com.sa");
+        const members: any[] = payload?.members || payload?.data || [];
+        const uid: string = payload?.currentUserId || "";
+        const me = members.find((m: any) => m.id === uid) ?? members.find((m: any) => m.role === "admin");
+        if (me) {
+          setName(me.full_name || "admin");
+          setEmail(me.email || "");
+          setAvatarUrl(me.avatar_url || "");
         }
       })
       .catch(() => {});
@@ -60,19 +62,19 @@ function AdminUserMenu() {
     <div ref={ref} style={{ position: "relative" }}>
       <button onClick={() => setOpen(!open)}
         style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(255,255,255,0.1)", border:"none", borderRadius:24, padding:"5px 10px 5px 6px", cursor:"pointer", color:"#fff" }}>
-        <div style={{ width:30, height:30, borderRadius:"50%", background:"#e8d9c4", display:"grid", placeItems:"center", fontSize:".8rem", fontWeight:800, color:"#5a3e2b", flexShrink:0 }}>
-          {initial}
+        <div style={{ width:30, height:30, borderRadius:"50%", background:"#e8d9c4", display:"grid", placeItems:"center", fontSize:".8rem", fontWeight:800, color:"#5a3e2b", flexShrink:0, overflow:"hidden" }}>
+          {avatarUrl ? <img src={avatarUrl} alt={name} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : initial}
         </div>
         <span style={{ fontSize:".72rem", fontWeight:600, maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
         <ChevronDown size={13} style={{ opacity:0.7, transform: open ? "rotate(180deg)" : "none", transition:"transform .2s" }} />
       </button>
 
       {open && (
-        <div style={{ position:"absolute", top:"calc(100% + 8px)", left:0, background:"#fff", border:"1px solid #e5ecf3", borderRadius:14, boxShadow:"0 8px 24px rgba(0,0,0,.12)", minWidth:220, zIndex:9999, overflow:"hidden" }}>
+        <div style={{ position:"absolute", top:"calc(100% + 8px)", right:0, background:"#fff", border:"1px solid #e5ecf3", borderRadius:14, boxShadow:"0 8px 24px rgba(0,0,0,.12)", minWidth:220, zIndex:9999, overflow:"hidden" }}>
           {/* معلومات المستخدم */}
           <div style={{ padding:"14px 16px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:"50%", background:"#073766", display:"grid", placeItems:"center", flexShrink:0 }}>
-              <span style={{ fontSize:".85rem", fontWeight:800, color:"#fff" }}>{initial}</span>
+            <div style={{ width:36, height:36, borderRadius:"50%", background:"#073766", display:"grid", placeItems:"center", flexShrink:0, overflow:"hidden" }}>
+              {avatarUrl ? <img src={avatarUrl} alt={name} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <span style={{ fontSize:".85rem", fontWeight:800, color:"#fff" }}>{initial}</span>}
             </div>
             <div>
               <div style={{ fontSize:".75rem", fontWeight:700, color:"#073766" }}>{name}</div>
@@ -115,9 +117,9 @@ function AdminUserMenu() {
 export function AdminOpsHeader({ active }: { active: AdminSection }) {
   return (
     <>
-      <header className="ops-header">
+      <header className="ops-header" style={{ direction: "ltr" }}>
         <a className="ops-brand" href="/"><img src="/assets/logo/atmmam-dashboard-lockup-hd-v2.png?v=2" alt="أتمم" /></a>
-        <nav>{links.map((link) => <a className={active === link.key ? "active" : ""} href={link.href} key={link.key}>{link.label}</a>)}</nav>
+        <nav style={{ justifyContent: "flex-end" }}>{links.map((link) => <a className={active === link.key ? "active" : ""} href={link.href} key={link.key}>{link.label}</a>)}</nav>
         <div className="ops-account">
           <a href="/admin/followups" aria-label="المتابعات"
             style={{ display:"flex", alignItems:"center", justifyContent:"center", width:32, height:32, borderRadius:8, color:"rgba(255,255,255,0.7)", textDecoration:"none" }}>
