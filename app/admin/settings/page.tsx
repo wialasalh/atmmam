@@ -71,7 +71,8 @@ export default function SettingsPage() {
     const { error: uploadError } = await supabase.storage.from("avatars").upload(`${currentUser.id}.jpg`, file, { upsert: true, contentType: file.type });
     if (uploadError) { setNotice("تعذر رفع الصورة"); setUploadingAvatar(false); return; }
     const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(`${currentUser.id}.jpg`);
-    const response = await fetch("/api/admin/team", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ profileId: currentUser.id, avatarUrl: publicUrl }) });
+    const urlWithBust = `${publicUrl}?t=${Date.now()}`;
+    const response = await fetch("/api/admin/team", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ profileId: currentUser.id, avatarUrl: urlWithBust }) });
     setUploadingAvatar(false);
     if (!response.ok) { setNotice("تعذر حفظ الصورة"); return; }
     await loadTeam();
