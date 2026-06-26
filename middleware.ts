@@ -34,12 +34,34 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Admin protection
-  if (!user && isAdminApi) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const isAdminPage = path.startsWith("/admin") && !isLoginPage;
+
+  // Admin protection — fetch role once for both page and API checks
+  if (isAdminPage || isAdminApi) {
+    if (!user) {
+      if (isAdminApi) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    const userRole = profile?.role ?? null;
+    const allowed = ["admin", "manager", "operator", "viewer"];
+
+    if (!userRole || !allowed.includes(userRole)) {
+      if (isAdminApi) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  }
+
+  if (user && isLoginPage && path.startsWith("/admin")) return NextResponse.redirect(new URL("/admin", request.url));
+
+  // Client/ticket API protection
   if (!user && isTicketApi) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   if (!user && isClientApi) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
-  if (!user && path.startsWith("/admin/") && !isLoginPage) return NextResponse.redirect(new URL("/admin/login", request.url));
-  if (user && isLoginPage && path.startsWith("/admin")) return NextResponse.redirect(new URL("/admin", request.url));
 
   // Dashboard protection
   if (!user && isDashboard) return NextResponse.redirect(new URL("/login", request.url));

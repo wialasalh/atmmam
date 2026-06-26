@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
-import { AdminOpsHeader } from "@/components/admin-ops-header";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   Search, MessageSquare, Check, Send, Loader, Filter,
   Clock, AlertTriangle, CheckCircle, XCircle, RefreshCw,
   Building2, FileText, Download, ExternalLink, ChevronDown, ChevronUp,
-  Hash, MapPin, Briefcase, Globe, Users, Lock, X, Zap, Phone, Mail,
+  Hash, Briefcase, Users, Lock, X, Zap, Phone, Mail,
+  Paperclip, FileCheck,
 } from "lucide-react";
+import { useRoleGuard } from "@/lib/auth/use-role-guard";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { parseTicketDetails, getTicketRef } from "@/lib/ticket-details";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type AdminTicket = {
-  id: string; title: string; category: string; priority: string; status: string;
+  id: string; title: string; body?: string; description?: string; category: string; priority: string; status: string;
   created_at: string; updated_at: string; user_id: string;
   client_id?: string | null; assigned_to?: string | null; files?: string[] | null;
   profiles?: { full_name: string; email: string } | null;
@@ -69,13 +71,7 @@ const DOC_FIELDS: { field: string; label: string }[] = [
   { field: "national_address_doc",    label: "العنوان الوطني" },
 ];
 
-const QUICK_REPLIES = [
-  "شكراً لتواصلك معنا، سنراجع طلبك قريباً.",
-  "تم استلام طلبك وجاري العمل عليه.",
-  "نحتاج مستندات إضافية لإكمال الطلب.",
-  "تم حل المشكلة بنجاح، هل تحتاج مساعدة أخرى؟",
-  "سيتواصل معك أحد أعضاء فريقنا في أقرب وقت ممكن.",
-];
+const QUICK_REPLIES: { id: string; title: string; body: string }[] = [];
 
 const ORDER_STATUS_AR: Record<string, string> = {
   new: "جديد", waiting_documents: "بانتظار المستندات",
@@ -117,17 +113,41 @@ function fmtTime(d: string) {
   return new Date(d).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function isAdminRole(role?: string) {
+function formatDateLabel(d: string) {
+  const date = new Date(d);
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "اليوم";
+  if (date.toDateString() === yesterday.toDateString()) return "أمس";
+  return date.toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+}
+
+function isStaffRoleCheck(role?: string) {
   return ["admin", "manager", "operator"].includes(role || "");
 }
 
-function avatar(name: string) {
-  return (name || "د")[0].toUpperCase();
+const AV_COLORS = [
+  ["#dbeafe","#1d4ed8"], ["#dcfce7","#15803d"], ["#fef9c3","#92400e"],
+  ["#fce7f3","#9d174d"], ["#ede9fe","#5b21b6"], ["#ffedd5","#c2410c"],
+  ["#ccfbf1","#0f766e"], ["#e0f2fe","#0369a1"],
+];
+function avatarStyle(name?: string): React.CSSProperties {
+  if (!name) return {};
+  let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  const [bg, color] = AV_COLORS[h % AV_COLORS.length];
+  return { background: bg, color };
+}
+
+function avatar(sender: { full_name?: string; avatar_url?: string } | null | undefined, fallbackImg = "") {
+  if (sender?.avatar_url) return <img src={sender.avatar_url} alt={sender.full_name || ""} className="tkt3-av-img" />;
+  if (fallbackImg) return <img src={fallbackImg} alt="" className="tkt3-av-img" />;
+  return (sender?.full_name || "د")[0].toUpperCase();
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AdminTicketsPage() {
+  const { loading: authLoading } = useRoleGuard("operator");
   const [tickets,          setTickets]          = useState<AdminTicket[]>([]);
   const [loading,          setLoading]          = useState(true);
   const [search,           setSearch]           = useState("");
@@ -141,6 +161,7 @@ export default function AdminTicketsPage() {
   const [dateTo,           setDateTo]           = useState("");
   const [showAdvanced,     setShowAdvanced]     = useState(false);
   const [hoveredRow,       setHoveredRow]       = useState<string | null>(null);
+  const [focusedRow,       setFocusedRow]       = useState<string | null>(null);
   const [newNote,          setNewNote]          = useState("");
   const [updating,         setUpdating]         = useState(false);
   const [sending,          setSending]          = useState(false);
@@ -152,7 +173,21 @@ export default function AdminTicketsPage() {
   const [showHistory,      setShowHistory]      = useState(false);
   const [relatedOrders,    setRelatedOrders]    = useState<RelatedOrder[]>([]);
   const [openSection,      setOpenSection]      = useState<"info" | "docs" | "orders" | null>("info");
+  const [currentUserId,    setCurrentUserId]    = useState("");
+  const [currentUserAvatar, setCurrentUserAvatar] = useState("");
+  const [liveIndicator,    setLiveIndicator]    = useState<"live" | "polling">("polling");
+  const [adminPendingFiles, setAdminPendingFiles] = useState<File[]>([]);
+  const [adminUploading,   setAdminUploading]   = useState(false);
+  const [cannedResponses,  setCannedResponses]  = useState<{ id: string; title: string; body: string }[]>([]);
+  const [newCannedBody,    setNewCannedBody]    = useState("");
+  const [addingCanned,     setAddingCanned]     = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const adminFileRef = useRef<HTMLInputElement>(null);
+  const lastViewRef = useRef<Record<string, number>>({});
+  const [unreadTickets, setUnreadTickets] = useState<Set<string>>(new Set());
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState("");
+  const [statusNote, setStatusNote] = useState("");
 
   // ── Derived ──────────────────────────────────────────────────────────────
 
@@ -185,39 +220,82 @@ export default function AdminTicketsPage() {
   const clientDocs = useMemo(() => signedUrls.filter(u => !u.label.startsWith("مرفق:")), [signedUrls]);
   const ticketAttachments = useMemo(() => signedUrls.filter(u => u.label.startsWith("مرفق:")), [signedUrls]);
 
+  // Auto-select ticket from URL ?selected= param
+  useEffect(() => {
+    if (tickets.length === 0) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ticketId = params.get("selected");
+      if (ticketId) {
+        const match = tickets.find(t => t.id === ticketId);
+        if (match) {
+          setSelected(match);
+          // Clean URL without reload
+          window.history.replaceState(null, "", "/admin/tickets");
+        }
+      }
+    } catch {}
+  }, [tickets]);
+
   // ── Effects ───────────────────────────────────────────────────────────────
 
   useEffect(() => { void loadTickets(); }, [statusFilter]);
   useEffect(() => { void loadTeam(); }, []);
+  useEffect(() => {
+    void fetch("/api/auth/me").then(async r => {
+      if (r.ok) { const { data } = await r.json(); setCurrentUserId(data?.id || ""); setCurrentUserAvatar(data?.avatar_url || ""); }
+    });
+  }, []);
 
+  // Load canned responses
+  useEffect(() => {
+    fetch("/api/admin/canned-responses").then(async r => {
+      if (r.ok) { const d = await r.json(); setCannedResponses(d.data || []); }
+    });
+  }, []);
+
+  // Poll tickets every 15s
+  useEffect(() => {
+    if (statusFilter) return; // don't poll when filtered (intentional browsing)
+    const iv = setInterval(() => {
+      fetch(`/api/admin/tickets`).then(async r => {
+        if (r.ok) { const d = await r.json(); setTickets(d.data || []); }
+      });
+    }, 15000);
+    return () => clearInterval(iv);
+  }, [statusFilter]);
+
+  // Load messages when ticket selected + poll every 5s
   useEffect(() => {
     if (!selected) return;
     setMessages([]); setSignedUrls([]); setIsInternal(false); setShowHistory(false);
-    void fetch(`/api/tickets/${selected.id}/messages`).then(async r => {
-      if (r.ok) { const d = await r.json(); setMessages(d.data || []); }
-    });
-    void generateSignedUrls(selected);
+    const loadMsgs = () =>
+      fetch(`/api/tickets/${selected.id}/messages`).then(async r => {
+        if (r.ok) { setMessages((await r.json()).data || []); }
+      });
+    loadMsgs();
+    generateSignedUrls(selected);
+    const iv = setInterval(loadMsgs, 5000);
+    setLiveIndicator("live");
+    return () => { clearInterval(iv); setLiveIndicator("polling"); };
   }, [selected]);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-
-  useEffect(() => {
-    const iv = setInterval(() => setTickets(ts => [...ts]), 60000);
-    return () => clearInterval(iv);
-  }, []);
-
+  // Poll related orders every 10s
   useEffect(() => {
     const clientId = selected?.clients?.id;
     if (!clientId) { setRelatedOrders([]); return; }
-    fetch("/api/admin/orders")
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        type RawOrder = { id: string; reference_no?: string; status: string; clients?: { id: string } | null; services?: { name?: string } | null };
-        const all = (data?.data ?? []) as RawOrder[];
-        setRelatedOrders(all.filter(o => o.clients?.id === clientId).map(o => ({ id: o.id, reference_no: o.reference_no, status: o.status, service: o.services?.name })).slice(0, 5));
-      })
-      .catch(() => {});
+    const loadOrders = () =>
+      fetch("/api/admin/orders").then(async r => {
+        if (!r.ok) return;
+        const all = (await r.json()).data ?? [];
+        setRelatedOrders(all.filter((o: { clients?: { id: string } | null }) => o.clients?.id === clientId).slice(0, 5).map((o: { id: string; reference_no?: string; status: string; services?: { name?: string } | null }) => ({ id: o.id, reference_no: o.reference_no, status: o.status, service: o.services?.name })) );
+      });
+    loadOrders();
+    const iv = setInterval(loadOrders, 10000);
+    return () => clearInterval(iv);
   }, [selected?.clients?.id]);
+
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   // ── API ───────────────────────────────────────────────────────────────────
 
@@ -226,9 +304,28 @@ export default function AdminTicketsPage() {
     try {
       const url = statusFilter ? `/api/admin/tickets?status=${statusFilter}` : "/api/admin/tickets";
       const res = await fetch(url);
-      if (res.ok) { const { data } = await res.json(); setTickets(data || []); }
+      if (res.ok) { const { data } = await res.json();
+        const ticketsData = (data || []) as AdminTicket[];
+        setTickets(ticketsData);
+        setUnreadTickets(prev => {
+          const next = new Set(prev);
+          for (const t of ticketsData) {
+            if (t.id === selected?.id) continue;
+            const lastView = lastViewRef.current[t.id];
+            const updatedAt = new Date(t.updated_at).getTime();
+            if (lastView && updatedAt > lastView) next.add(t.id);
+          }
+          return next;
+        });
+      }
     } catch { /**/ }
     setLoading(false);
+  }
+
+  function selectTicket(t: AdminTicket) {
+    lastViewRef.current[t.id] = Date.now();
+    setUnreadTickets(prev => { const next = new Set(prev); next.delete(t.id); return next; });
+    setSelected(t);
   }
 
   async function loadTeam() {
@@ -270,10 +367,10 @@ export default function AdminTicketsPage() {
     setLoadingUrls(false);
   }
 
-  async function updateStatus(ticketId: string, status: string) {
+  async function updateStatus(ticketId: string, status: string, note = "") {
     setUpdating(true);
     try {
-      await fetch(`/api/tickets/${ticketId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+      await fetch(`/api/admin/tickets`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticketId, status, note }) });
       await loadTickets();
       if (selected?.id === ticketId) setSelected(prev => prev ? { ...prev, status } : null);
     } catch { /**/ }
@@ -282,19 +379,64 @@ export default function AdminTicketsPage() {
 
   async function sendNote(e: React.FormEvent) {
     e.preventDefault();
-    if (!newNote.trim() || !selected) return;
+    if (!newNote.trim() && adminPendingFiles.length === 0 || !selected) return;
     setSending(true);
+    const supabase = createSupabaseBrowserClient();
+    const uploadedPaths: string[] = [];
     try {
-      await fetch(`/api/tickets/${selected.id}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: newNote.trim(), is_internal: isInternal }) });
-      setNewNote(""); setIsInternal(false); setShowQuickReplies(false);
+      if (adminPendingFiles.length) {
+        setAdminUploading(true);
+        for (const file of adminPendingFiles) {
+          const ext = file.name.split(".").pop();
+          const path = `tickets/${selected.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error: ue } = await supabase.storage.from("ticket-attachments").upload(path, file);
+          if (!ue) uploadedPaths.push(path);
+        }
+        setAdminUploading(false);
+      }
+      await fetch(`/api/tickets/${selected.id}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: newNote.trim(), is_internal: isInternal, message_type: "admin_reply" }) });
+      if (uploadedPaths.length) {
+        await fetch("/api/admin/tickets", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticketId: selected.id, files: uploadedPaths }) });
+      }
+      setNewNote(""); setIsInternal(false); setShowQuickReplies(false); setAdminPendingFiles([]);
       const res = await fetch(`/api/tickets/${selected.id}/messages`);
       if (res.ok) { const { data } = await res.json(); setMessages(data || []); }
+      if (uploadedPaths.length) await loadTickets();
     } catch { /**/ }
     setSending(false);
+    setAdminUploading(false);
   }
 
   function clearFilters() {
     setSearch(""); setPriorityFilter(""); setCategoryFilter(""); setAssignedFilter(""); setDateFrom(""); setDateTo(""); setStatusFilter("");
+  }
+
+  async function addCannedResponse() {
+    if (!newCannedBody.trim()) return;
+    setAddingCanned(true);
+    try {
+      const title = newCannedBody.trim().slice(0, 40) + (newCannedBody.trim().length > 40 ? "..." : "");
+      const res = await fetch("/api/admin/canned-responses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, body: newCannedBody.trim() }),
+      });
+      if (res.ok) {
+        setNewCannedBody("");
+        const d = await fetch("/api/admin/canned-responses").then(r => r.ok ? r.json() : { data: [] });
+        setCannedResponses(d.data || []);
+      }
+    } catch { /**/ }
+    setAddingCanned(false);
+  }
+
+  async function deleteCannedResponse(id: string) {
+    if (id.startsWith("def-")) {
+      setCannedResponses(p => p.filter(r => r.id !== id));
+      return;
+    }
+    await fetch(`/api/admin/canned-responses?id=${id}`, { method: "DELETE" });
+    setCannedResponses(p => p.filter(r => r.id !== id));
   }
 
   function toggleSection(s: "info" | "docs" | "orders") {
@@ -302,11 +444,9 @@ export default function AdminTicketsPage() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+  if (authLoading) return <div style={{display:"grid",placeItems:"center",height:"calc(100vh - 76px)"}}><div style={{width:24,height:24,border:"2px solid #e5ecf3",borderTopColor:"#073766",borderRadius:"50%",animation:"spin .6s linear infinite"}} /></div>;
 
   return (
-    <main className="ops-shell" dir="rtl">
-      <AdminOpsHeader active="tickets" />
-
       <div className="tkt3-shell">
 
         {/* ══════════════════ LEFT: TICKET LIST ══════════════════ */}
@@ -397,7 +537,7 @@ export default function AdminTicketsPage() {
               <div className="tkt3-empty-list"><Loader size={22} className="spin" /><p>جاري التحميل...</p></div>
             ) : filtered.length === 0 ? (
               <div className="tkt3-empty-list"><MessageSquare size={26} /><p>لا توجد تذاكر</p></div>
-            ) : filtered.map(t => {
+            ) : filtered.map((t, idx) => {
               const sc   = STATUS_CFG[t.status]    || STATUS_CFG["جديدة"];
               const pc   = PRI_CFG[t.priority]     || PRI_CFG["عادية"];
               const sla  = getSLADot(t.updated_at);
@@ -407,14 +547,22 @@ export default function AdminTicketsPage() {
               return (
                 <div
                   key={t.id}
-                  onClick={() => setSelected(t)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => selectTicket(t)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectTicket(t); } }}
                   onMouseEnter={() => setHoveredRow(t.id)}
                   onMouseLeave={() => setHoveredRow(null)}
+                  onFocus={() => setFocusedRow(t.id)}
+                  onBlur={() => setFocusedRow(null)}
                   className={`tkt3-card${isSel ? " sel" : ""}${t.priority === "عاجلة" ? " urgent" : ""}`}
+                  style={{ animationDelay: `${Math.min(idx * 35, 280)}ms` }}
                 >
                   {/* Card top */}
                   <div className="tkt3-card-top">
-                    <span className="tkt3-card-id">#{t.id.slice(0,8).toUpperCase()}</span>
+                    <span className="tkt3-card-id">#{t.id.slice(0,8).toUpperCase()}
+                      {unreadTickets.has(t.id) && <span className="tkt3-unread-dot" />}
+                    </span>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                       <span className="tkt3-pri-pill" style={{ color: pc.color, background: pc.bg }}>{t.priority}</span>
                       <span className="tkt3-sla-dot" style={{ background: sla.color, boxShadow: sla.level !== "green" ? `0 0 5px ${sla.color}88` : "none" }} title={`SLA: ${sla.label}`} />
@@ -441,8 +589,8 @@ export default function AdminTicketsPage() {
                     <span className="tkt3-age">{formatAge(t.created_at)}</span>
                   </div>
 
-                  {/* Hover quick actions */}
-                  {isHov && !isSel && (
+                  {/* Hover/focus quick actions */}
+                  {(isHov || focusedRow === t.id) && !isSel && (
                     <div className="tkt3-quick" onClick={e => e.stopPropagation()}>
                       <span className="tkt3-quick-lbl">نقل إلى:</span>
                       {quickSt.map(s => {
@@ -483,7 +631,13 @@ export default function AdminTicketsPage() {
                       <span>أُنشئت {formatAge(selected.created_at)}</span>
                     </div>
                   </div>
-                  <button onClick={() => setSelected(null)} className="tkt3-close-btn"><X size={15} /></button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="tkt3-live" data-state={liveIndicator}>
+                      <span className="tkt3-live-dot" />
+                      {liveIndicator === "live" ? "مباشر" : "مباشر"}
+                    </span>
+                    <button onClick={() => setSelected(null)} className="tkt3-close-btn"><X size={15} /></button>
+                  </div>
                 </div>
 
                 {/* Status pills */}
@@ -495,7 +649,12 @@ export default function AdminTicketsPage() {
                       const isCur = s === selected.status;
                       return (
                         <button key={s}
-                          onClick={() => !isCur && updateStatus(selected.id, s)}
+                          onClick={() => {
+                            if (isCur) return;
+                            setPendingStatus(s);
+                            setStatusNote("");
+                            setShowStatusModal(true);
+                          }}
                           disabled={updating}
                           className={`tkt3-st-pill${isCur ? " cur" : ""}`}
                           style={isCur ? { color: sc.color, background: sc.bg, borderColor: sc.border } : {}}>
@@ -505,6 +664,37 @@ export default function AdminTicketsPage() {
                     })}
                   </div>
                 </div>
+
+                {/* Status change modal */}
+                {showStatusModal && (
+                  <div className="tkt3-overlay" onClick={() => setShowStatusModal(false)}>
+                    <div className="tkt3-modal tkt3-modal-sm" onClick={e => e.stopPropagation()}>
+                      <div className="tkt3-modal-header">
+                        <h3>تغيير الحالة إلى: {pendingStatus}</h3>
+                        <button className="tkt3-modal-close" onClick={() => setShowStatusModal(false)}><X size={16} /></button>
+                      </div>
+                      <div className="tkt3-modal-body">
+                        <label className="tkt3-label" style={{ marginBottom: 6, display: "block" }}>الملاحظة (اختياري):</label>
+                        <textarea
+                          value={statusNote}
+                          onChange={e => setStatusNote(e.target.value)}
+                          placeholder="اذكر سبب تغيير الحالة..."
+                          rows={3}
+                          className="tkt3-input"
+                          style={{ width: "100%", resize: "vertical" }}
+                          autoFocus
+                        />
+                      </div>
+                      <div className="tkt3-modal-footer">
+                        <button className="tkt3-btn tkt3-btn-ghost" onClick={() => setShowStatusModal(false)}>إلغاء</button>
+                        <button className="tkt3-btn tkt3-btn-primary" onClick={async () => {
+                          await updateStatus(selected.id, pendingStatus, statusNote);
+                          setShowStatusModal(false);
+                        }}>تأكيد التغيير</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Assign */}
                 <div className="tkt3-assign-row">
@@ -532,33 +722,71 @@ export default function AdminTicketsPage() {
                 )}
               </div>
 
-              {/* ── MESSAGES ── */}
-              <div className="tkt3-msgs">
-                {messages.length === 0 ? (
-                  <div className="tkt3-msgs-empty"><MessageSquare size={28} color="#c0cbd8" /><p>لا توجد رسائل بعد</p></div>
-                ) : messages.map(msg => {
-                  const isAdmin    = isAdminRole(msg.sender?.role);
-                  const isIntNote  = !!msg.is_internal;
-                  const name       = msg.sender?.full_name || (isAdmin ? "فريق الدعم" : "العميل");
+                {/* ── EXTRA FIELDS (description + details) ── */}
+                {(() => {
+                  const parsed = parseTicketDetails(selected.body || selected.description);
+                  const hasContent = parsed.mainDescription || parsed.extraFields.length > 0;
+                  if (!hasContent) return null;
                   return (
-                    <div key={msg.id} className={`tkt3-msg${isAdmin ? " admin" : " client"}${isIntNote ? " internal" : ""}`}>
-                      {!isAdmin && (
-                        <div className="tkt3-av client-av">{avatar(name)}</div>
+                    <div style={{ padding: "10px 20px", borderTop: "1px solid #f0f3f8", background: "#fafbfc" }}>
+                      {parsed.mainDescription && (
+                        <p style={{ margin: "0 0 8px", fontSize: ".68rem", color: "#425c76", lineHeight: 1.7, whiteSpace: "pre-wrap", background: "#fff", borderRadius: 8, padding: "8px 12px", border: "1px solid #e5eaf0" }}>
+                          {parsed.mainDescription}
+                        </p>
                       )}
-                      <div className="tkt3-msg-body">
-                        <div className="tkt3-msg-meta">
-                          {isIntNote && <span className="tkt3-int-tag"><Lock size={9} /> داخلية</span>}
-                          <strong>{name}</strong>
-                          <small>{fmtTime(msg.created_at)}</small>
+                      {parsed.extraFields.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: ".6rem", fontWeight: 700, color: "#073766", display: "flex", alignItems: "center", gap: 4, marginBottom: 6 }}>
+                            <FileCheck size={12} /> تفاصيل الطلب
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {parsed.extraFields.map((f, i) => (
+                              <div key={i} style={{ background: "#fff", borderRadius: 6, padding: "6px 10px", border: "1px solid #e5eaf0", minWidth: 120 }}>
+                                <div style={{ fontSize: ".52rem", color: "#8b9dad", fontWeight: 600, marginBottom: 1 }}>{f.label}</div>
+                                <div style={{ fontSize: ".65rem", color: "#1e3a56", fontWeight: 700 }}>{f.value}</div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className={`tkt3-bubble${isAdmin ? " admin-bubble" : " client-bubble"}${isIntNote ? " int-bubble" : ""}`}>
-                          {msg.body}
-                        </div>
-                      </div>
-                      {isAdmin && (
-                        <div className="tkt3-av admin-av">{avatar(name)}</div>
                       )}
                     </div>
+                  );
+                })()}
+
+              {/* ── MESSAGES ── */}
+              <div className="tkt3-msgs">
+                {messages.filter(m => !m.message_type || (m.message_type !== "rating" && m.message_type !== "revision" && m.message_type !== "status_change")).length === 0 ? (
+                  <div className="tkt3-msgs-empty"><MessageSquare size={28} color="#c0cbd8" /><p>لا توجد رسائل بعد</p></div>
+                ) : messages.filter(m => !m.message_type || (m.message_type !== "rating" && m.message_type !== "revision" && m.message_type !== "status_change")).map((msg, idx) => {
+                  const isAdmin    = isStaffRoleCheck(msg.sender?.role);
+                  const isIntNote  = !!msg.is_internal;
+                  const roleLabel: Record<string, string> = { admin: "مدير النظام", manager: "مدير عمليات", operator: "موظف عمليات", viewer: "مشاهد" };
+                  const senderRole = msg.sender?.role && roleLabel[msg.sender.role] ? roleLabel[msg.sender.role] : "";
+                  const name       = isAdmin ? `${msg.sender?.full_name || "فريق الدعم"} · ${senderRole}` : (msg.sender?.full_name || "العميل");
+                  const msgDate    = new Date(msg.created_at).toLocaleDateString("ar-SA");
+                  const prevDate   = idx > 0 ? new Date(messages[idx-1].created_at).toLocaleDateString("ar-SA") : null;
+                  const showDateSep = idx === 0 || msgDate !== prevDate;
+                  return (
+                    <React.Fragment key={msg.id}>
+                      {showDateSep && (
+                        <div className="tkt3-date-sep">
+                          <span>{formatDateLabel(msg.created_at)}</span>
+                        </div>
+                      )}
+                      <div className={`tkt3-msg${isAdmin ? " admin" : " client"}${isIntNote ? " internal" : ""}`}>
+                          <div className={`tkt3-av ${isAdmin ? "admin-av" : "client-av"}`} style={msg.sender?.avatar_url ? {} : avatarStyle(msg.sender?.full_name)}>{avatar(msg.sender)}</div>
+                        <div className="tkt3-msg-body">
+                          <div className="tkt3-msg-meta">
+                            {isIntNote && <span className="tkt3-int-tag"><Lock size={9} /> داخلية</span>}
+                            <strong>{name}</strong>
+                            <small>{fmtTime(msg.created_at)}</small>
+                          </div>
+                          <div className={`tkt3-bubble${isAdmin ? " admin-bubble" : " client-bubble"}${isIntNote ? " int-bubble" : ""}`}>
+                            {msg.body}
+                          </div>
+                        </div>
+                      </div>
+                    </React.Fragment>
                   );
                 })}
 
@@ -570,9 +798,21 @@ export default function AdminTicketsPage() {
                   {showHistory && (
                     <div className="tkt3-history-body">
                       <div className="tkt3-hist-item"><span className="tkt3-hist-dot" style={{ background: "#0875dc" }} /><div><div className="tkt3-hist-ev">تم إنشاء التذكرة</div><div className="tkt3-hist-t">{new Date(selected.created_at).toLocaleString("ar-SA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div></div></div>
-                      {messages.filter(m => m.message_type === "status_change").map(m => (
-                        <div key={m.id} className="tkt3-hist-item"><span className="tkt3-hist-dot" style={{ background: "#7c3aed" }} /><div><div className="tkt3-hist-ev">{m.body}</div><div className="tkt3-hist-t">{fmtTime(m.created_at)}</div></div></div>
-                      ))}
+                      {messages.filter(m => m.message_type === "status_change" || m.message_type === "revision" || m.message_type === "rating").map(m => {
+                        let dotBg = "#7c3aed";
+                        let body = m.body;
+                        if (m.message_type === "revision") dotBg = "#b45309";
+                        if (m.message_type === "rating") {
+                          dotBg = "#f59e0b";
+                          try {
+                            const p = JSON.parse(m.body);
+                            body = `⭐ تقييم ${p.rating}/5 للمشرف ${p.staff_name}${p.comment ? `: ${p.comment}` : ""}`;
+                          } catch {}
+                        }
+                        return (
+                        <div key={m.id} className="tkt3-hist-item"><span className="tkt3-hist-dot" style={{ background: dotBg }} /><div><div className="tkt3-hist-ev">{body}</div><div className="tkt3-hist-t">{fmtTime(m.created_at)}</div></div></div>
+                        );
+                      })}
                       <div className="tkt3-hist-item"><span className="tkt3-hist-dot" style={{ background: "#15803d" }} /><div><div className="tkt3-hist-ev">آخر تحديث</div><div className="tkt3-hist-t">{new Date(selected.updated_at).toLocaleString("ar-SA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div></div></div>
                     </div>
                   )}
@@ -589,13 +829,27 @@ export default function AdminTicketsPage() {
                     <button onClick={() => setShowQuickReplies(v => !v)} className={`tkt3-tool-btn${showQuickReplies ? " active" : ""}`}>
                       <Filter size={12} /> ردود جاهزة <ChevronDown size={11} />
                     </button>
-                    {showQuickReplies && (
-                      <div className="tkt3-quick-menu">
-                        {QUICK_REPLIES.map((r, i) => (
-                          <button key={i} className="tkt3-quick-item" onClick={() => { setNewNote(r); setShowQuickReplies(false); }}>{r}</button>
-                        ))}
-                      </div>
-                    )}
+                        {showQuickReplies && (
+                          <div className="tkt3-quick-menu">
+                            {cannedResponses.length === 0 ? (
+                              <div className="tkt3-quick-item" style={{ color: "#aab5c3", fontSize: ".6rem" }}>لا توجد ردود جاهزة</div>
+                            ) : cannedResponses.map(r => (
+                              <div key={r.id} style={{ display: "flex", alignItems: "stretch" }}>
+                                <button className="tkt3-quick-item" style={{ flex: 1, textAlign: "right" }} onClick={() => { setNewNote(r.body); setShowQuickReplies(false); }}>
+                                  <strong style={{ display: "block", fontSize: ".62rem", marginBottom: 2 }}>{r.title}</strong>
+                                  <span style={{ fontSize: ".58rem", color: "#8b9dad", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{r.body}</span>
+                                </button>
+                                <button onClick={() => deleteCannedResponse(r.id)} className="tkt3-quick-del" title="حذف"><X size={10} /></button>
+                              </div>
+                            ))}
+                            <div style={{ borderTop: "1px solid #e5eaf0", padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                              <textarea className="tkt3-canned-ta" placeholder="نص الرد الجاهز" value={newCannedBody} onChange={e => setNewCannedBody(e.target.value)} rows={2} />
+                              <button onClick={addCannedResponse} disabled={addingCanned || !newCannedBody.trim()} className="tkt3-canned-add-btn">
+                                {addingCanned ? <Loader size={11} className="spin" /> : "+"} إضافة رد
+                              </button>
+                            </div>
+                          </div>
+                        )}
                   </div>
                   <div className="tkt3-reply-toggle">
                     <button onClick={() => setIsInternal(false)} className={`tkt3-tog${!isInternal ? " tog-active-blue" : ""}`}>
@@ -609,17 +863,38 @@ export default function AdminTicketsPage() {
 
                 {/* Textarea + send */}
                 <form onSubmit={sendNote} className="tkt3-reply-form">
-                  <textarea
-                    value={newNote}
-                    onChange={e => setNewNote(e.target.value)}
-                    placeholder={isInternal ? "اكتب ملاحظة داخلية للفريق..." : "اكتب ردك للعميل هنا..."}
-                    rows={3}
-                    className={`tkt3-textarea${isInternal ? " int-textarea" : ""}`}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendNote(e); } }}
-                  />
-                  <button type="submit" disabled={!newNote.trim() || sending} className="tkt3-send-btn">
-                    {sending ? <Loader size={16} className="spin" /> : <><Send size={15} /><span>إرسال</span></>}
-                  </button>
+                  <div>
+                    {adminPendingFiles.length > 0 && (
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+                        {adminPendingFiles.map((f, i) => (
+                          <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".58rem", background: "#eaf4ff", color: "#0875dc", borderRadius: 6, padding: "2px 7px", border: "1px solid #bddcff" }}>
+                            <FileText size={10} /> {f.name}
+                            <button type="button" onClick={() => setAdminPendingFiles(prev => prev.filter((_, j) => j !== i))} style={{ border: 0, background: "transparent", color: "#0875dc", cursor: "pointer", padding: 0 }}><X size={10} /></button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                      <input ref={adminFileRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.xlsx,.zip" style={{ display: "none" }}
+                        onChange={e => { if (e.target.files?.length) setAdminPendingFiles(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value = ""; }}
+                      />
+                      <button type="button" onClick={() => adminFileRef.current?.click()} disabled={adminUploading}
+                        className="tkt3-tool-btn" style={{ height: 40, flexShrink: 0 }}>
+                        <Paperclip size={12} />
+                      </button>
+                      <textarea
+                        value={newNote}
+                        onChange={e => setNewNote(e.target.value)}
+                        placeholder={isInternal ? "اكتب ملاحظة داخلية للفريق..." : "اكتب ردك للعميل هنا..."}
+                        rows={2}
+                        className={`tkt3-textarea${isInternal ? " int-textarea" : ""}`}
+                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendNote(e); } }}
+                      />
+                      <button type="submit" disabled={(!newNote.trim() && adminPendingFiles.length === 0) || sending || adminUploading} className="tkt3-send-btn">
+                        {adminUploading ? <Loader size={16} className="spin" /> : sending ? <Loader size={16} className="spin" /> : <><Send size={15} /><span>إرسال</span></>}
+                      </button>
+                    </div>
+                  </div>
                 </form>
               </div>
             </>
@@ -632,13 +907,19 @@ export default function AdminTicketsPage() {
 
             {/* Client identity */}
             <div className="tkt3-client-hero">
-              <div className="tkt3-client-av">{avatar(selected.clients?.name || selected.profiles?.full_name || "ع")}</div>
+              <div className="tkt3-client-av">
+                {(selected.clients?.name || selected.profiles?.full_name || "ع")[0]}
+              </div>
               <div>
-                <div className="tkt3-client-name-lrg">{selected.clients?.name || selected.profiles?.full_name || "—"}</div>
+                <div className="tkt3-client-name-lrg">{selected.profiles?.full_name || selected.clients?.name || "—"}</div>
                 {selected.clients?.name && selected.profiles?.full_name && (
-                  <div className="tkt3-client-sub">{selected.profiles.full_name}</div>
+                  <div className="tkt3-client-sub">{selected.clients.name}</div>
                 )}
-                {selected.clients?.client_type && <span className="tkt3-client-type">{selected.clients.client_type}</span>}
+                {selected.clients?.client_type && (
+                  <span className="tkt3-client-type">
+                    {selected.clients.client_type === "company" ? "مالك شركة/ مؤسسة" : "فرد"}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -781,253 +1062,6 @@ export default function AdminTicketsPage() {
         )}
       </div>
 
-      <style>{`
-        /* ════ SHELL ════ */
-        .tkt3-shell {
-          display: grid;
-          grid-template-columns: 400px 1fr;
-          height: calc(100vh - 76px);
-          overflow: hidden;
-        }
-        .tkt3-shell:has(.tkt3-client-col) {
-          grid-template-columns: 400px 1fr 300px;
-        }
 
-        /* ════ LEFT: LIST ════ */
-        .tkt3-list-col {
-          display: flex; flex-direction: column; overflow: hidden;
-          background: #f8fafc; border-left: 1px solid #e5eaf0;
-        }
-
-        /* Stats */
-        .tkt3-stats { display: flex; background: #fff; border-bottom: 1px solid #e5eaf0; flex-shrink: 0; }
-        .tkt3-stat { flex: 1; text-align: center; padding: 12px 6px 10px; border-left: 1px solid #f0f3f8; }
-        .tkt3-stat:last-child { border-left: none; }
-        .tkt3-stat-num { display: block; font-size: 1.35rem; font-weight: 900; line-height: 1; margin-bottom: 4px; }
-        .tkt3-stat-lbl { display: block; font-size: .52rem; color: #8b9dad; }
-
-        /* Search */
-        .tkt3-search-wrap { display: flex; align-items: center; gap: 8px; margin: 10px 10px 0; background: #fff; border: 1.5px solid #e5eaf0; border-radius: 10px; padding: 0 12px; height: 38px; flex-shrink: 0; transition: border-color .15s; }
-        .tkt3-search-wrap:focus-within { border-color: #0875dc; }
-        .tkt3-search-inp { flex: 1; border: 0; outline: 0; background: transparent; font: inherit; font-size: .7rem; color: #344d69; }
-        .tkt3-inp-clear { border: 0; background: transparent; color: #aab5c3; cursor: pointer; display: grid; place-items: center; padding: 2px; }
-
-        /* Filter row */
-        .tkt3-filter-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px; flex-shrink: 0; }
-        .tkt3-sel { height: 32px; border: 1px solid #e5eaf0; border-radius: 8px; background: #fff; padding: 0 8px; font: inherit; font-size: .64rem; color: #344d69; outline: none; flex: 1; }
-        .tkt3-filter-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 32px; width: 36px; border: 1px solid #e5eaf0; border-radius: 8px; background: #fff; color: #526983; cursor: pointer; font: inherit; position: relative; flex-shrink: 0; transition: all .15s; }
-        .tkt3-filter-btn.active, .tkt3-filter-btn:hover { border-color: #0875dc; color: #0875dc; background: #eaf4ff; }
-        .tkt3-badge { position: absolute; top: -5px; left: -5px; background: #dc2626; color: #fff; border-radius: 10px; font-size: .5rem; font-weight: 800; padding: 1px 4px; min-width: 14px; text-align: center; line-height: 1.4; }
-        .tkt3-clear-btn { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 1px solid #fca5a5; border-radius: 8px; background: #fef2f2; color: #dc2626; cursor: pointer; flex-shrink: 0; transition: all .15s; }
-        .tkt3-clear-btn:hover { background: #fee2e2; }
-
-        /* Advanced */
-        .tkt3-adv-row { display: flex; gap: 6px; padding: 0 10px 8px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
-        .tkt3-date-range { display: flex; align-items: center; gap: 5px; background: #fff; border: 1px solid #e5eaf0; border-radius: 8px; padding: 0 10px; height: 32px; flex: 1; min-width: 160px; }
-        .tkt3-date-inp { border: 0; outline: 0; background: transparent; font: inherit; font-size: .6rem; color: #344d69; flex: 1; min-width: 0; }
-
-        /* Status tabs */
-        .tkt3-tabs { display: flex; background: #fff; border-bottom: 1px solid #e5eaf0; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
-        .tkt3-tab { flex-shrink: 0; border: 0; background: transparent; color: #7a8fa6; font: inherit; font-size: .62rem; font-weight: 700; padding: 9px 11px; cursor: pointer; position: relative; white-space: nowrap; transition: color .15s; }
-        .tkt3-tab.active { color: #0875dc; }
-        .tkt3-tab.active::after { content: ""; position: absolute; bottom: 0; right: 0; left: 0; height: 2px; background: #0875dc; border-radius: 2px 2px 0 0; }
-
-        /* Results bar */
-        .tkt3-results-bar { padding: 4px 10px; background: #eaf4ff; border-bottom: 1px solid #bddcff; font-size: .6rem; color: #0875dc; flex-shrink: 0; }
-        .tkt3-results-bar strong { font-weight: 800; }
-
-        /* Cards */
-        .tkt3-cards { flex: 1; overflow-y: auto; padding: 8px; }
-        .tkt3-empty-list { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #8b9dad; font-size: .7rem; padding: 40px 20px; }
-
-        .tkt3-card { background: #fff; border: 1.5px solid #e5eaf0; border-radius: 12px; padding: 12px 14px; margin-bottom: 7px; cursor: pointer; transition: all .15s; position: relative; }
-        .tkt3-card:hover { border-color: #bddcff; box-shadow: 0 2px 10px rgba(8,117,220,.07); transform: translateY(-1px); }
-        .tkt3-card.sel { border-color: #0875dc; background: #f0f8ff; box-shadow: 0 2px 14px rgba(8,117,220,.12); }
-        .tkt3-card.urgent { border-right: 3px solid #dc2626; }
-
-        .tkt3-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-        .tkt3-card-id { font-size: .56rem; color: #aab5c3; font-family: monospace; font-weight: 700; background: #f5f8fc; border-radius: 5px; padding: 1px 6px; }
-        .tkt3-pri-pill { font-size: .54rem; padding: 2px 7px; border-radius: 12px; font-weight: 800; }
-        .tkt3-sla-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-
-        .tkt3-card-title { font-size: .75rem; color: #1e3a56; font-weight: 700; line-height: 1.4; margin-bottom: 7px; }
-
-        .tkt3-card-meta { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-        .tkt3-co-chip { display: inline-flex; align-items: center; gap: 3px; font-size: .58rem; color: #0875dc; background: #eaf4ff; padding: 2px 8px; border-radius: 8px; font-weight: 600; }
-        .tkt3-client-name { font-size: .6rem; color: #526983; font-weight: 600; }
-        .tkt3-cat-chip { font-size: .56rem; color: #7a8fa6; background: #f5f8fc; padding: 2px 7px; border-radius: 8px; border: 1px solid #e5eaf0; }
-
-        .tkt3-card-foot { display: flex; align-items: center; justify-content: space-between; }
-        .tkt3-status-pill { display: inline-flex; align-items: center; gap: 4px; font-size: .56rem; padding: 3px 8px; border-radius: 12px; border: 1px solid; font-weight: 700; }
-        .tkt3-age { font-size: .56rem; color: #aab5c3; }
-
-        .tkt3-quick { margin-top: 9px; padding-top: 9px; border-top: 1px dashed #e5eaf0; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-        .tkt3-quick-lbl { font-size: .56rem; color: #7a8fa6; font-weight: 700; }
-        .tkt3-quick-btn { border: 1px solid; border-radius: 12px; padding: 2px 9px; font: inherit; font-size: .54rem; font-weight: 700; cursor: pointer; transition: filter .1s; }
-        .tkt3-quick-btn:hover { filter: brightness(.92); }
-
-        /* ════ CENTER: DETAIL ════ */
-        .tkt3-center-col { display: flex; flex-direction: column; overflow: hidden; background: #fff; }
-        .tkt3-center-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #aab5c3; font-size: .78rem; }
-        .tkt3-center-empty-icon { width: 72px; height: 72px; border-radius: 50%; background: #f5f8fc; display: grid; place-items: center; }
-
-        /* Detail header */
-        .tkt3-dh { border-bottom: 1px solid #e5eaf0; background: #fff; flex-shrink: 0; padding-bottom: 10px; }
-        .tkt3-dh-top { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px 10px; }
-        .tkt3-dh-id { display: inline-flex; align-items: center; gap: 4px; font-size: .58rem; color: #8b9dad; background: #f5f8fc; border: 1px solid #e5eaf0; border-radius: 6px; padding: 2px 8px; font-family: monospace; margin-bottom: 5px; }
-        .tkt3-dh-title { font-size: 1rem; color: #073766; font-weight: 800; margin: 0 0 6px; line-height: 1.35; }
-        .tkt3-dh-sub { display: flex; gap: 10px; font-size: .62rem; color: #8b9dad; flex-wrap: wrap; }
-        .tkt3-close-btn { border: 0; background: #f5f8fc; color: #526983; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; display: grid; place-items: center; flex-shrink: 0; transition: all .15s; }
-        .tkt3-close-btn:hover { background: #fee2e2; color: #dc2626; }
-
-        .tkt3-label { font-size: .62rem; color: #7a8fa6; font-weight: 700; flex-shrink: 0; }
-        .tkt3-status-row { display: flex; align-items: center; gap: 8px; padding: 8px 20px; border-top: 1px solid #f0f3f8; flex-wrap: wrap; }
-        .tkt3-status-pills { display: flex; gap: 5px; flex-wrap: wrap; }
-        .tkt3-st-pill { border: 1.5px solid #e5eaf0; background: #fff; color: #526983; border-radius: 20px; padding: 4px 11px; font: inherit; font-size: .6rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all .15s; }
-        .tkt3-st-pill:hover:not(:disabled):not(.cur) { border-color: #0875dc; color: #0875dc; background: #f0f8ff; }
-        .tkt3-st-pill.cur { font-weight: 800; }
-        .tkt3-st-pill:disabled { opacity: .55; cursor: not-allowed; }
-
-        .tkt3-assign-row { display: flex; align-items: center; gap: 8px; padding: 8px 20px; border-top: 1px solid #f0f3f8; }
-        .tkt3-assign-sel { height: 28px; border: 1px solid #e5eaf0; border-radius: 8px; background: #f8fafc; padding: 0 8px; font: inherit; font-size: .62rem; color: #344d69; flex: 1; max-width: 240px; outline: none; }
-
-        .tkt3-sla-row { display: flex; align-items: center; gap: 8px; padding: 8px 20px 10px; border-top: 1px solid #f0f3f8; }
-        .tkt3-sla-lbl { font-size: .62rem; font-weight: 700; flex-shrink: 0; }
-        .tkt3-sla-track { flex: 1; height: 5px; border-radius: 5px; background: #e5eaf0; overflow: hidden; }
-        .tkt3-sla-fill { height: 100%; border-radius: 5px; transition: width .4s; }
-        .tkt3-sla-time { font-size: .6rem; color: #526983; flex-shrink: 0; }
-        .tkt3-sla-pct { font-size: .6rem; font-weight: 800; flex-shrink: 0; min-width: 32px; text-align: center; }
-
-        /* Messages */
-        .tkt3-msgs { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; background: #f8fafc; }
-        .tkt3-msgs-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #aab5c3; font-size: .7rem; padding: 40px; flex: 1; }
-
-        .tkt3-msg { display: flex; gap: 10px; align-items: flex-end; }
-        .tkt3-msg.admin { flex-direction: row-reverse; }
-        .tkt3-msg.internal .tkt3-bubble { background: #fef9c3 !important; border-color: #fde047 !important; }
-
-        .tkt3-av { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: .7rem; font-weight: 800; flex-shrink: 0; }
-        .client-av { background: #e8f1fb; color: #1758a6; }
-        .admin-av  { background: #e8f8f0; color: #166534; }
-
-        .tkt3-msg-body { max-width: 75%; display: flex; flex-direction: column; gap: 4px; }
-        .tkt3-msg.admin .tkt3-msg-body { align-items: flex-end; }
-        .tkt3-msg.client .tkt3-msg-body { align-items: flex-start; }
-
-        .tkt3-msg-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-        .tkt3-msg.admin .tkt3-msg-meta { flex-direction: row-reverse; }
-        .tkt3-msg-meta strong { font-size: .65rem; color: #344d69; }
-        .tkt3-msg-meta small { font-size: .56rem; color: #aab5c3; }
-        .tkt3-int-tag { display: inline-flex; align-items: center; gap: 3px; font-size: .54rem; color: #d97706; background: #fef9ee; border: 1px solid #fde68a; border-radius: 10px; padding: 1px 5px; font-weight: 700; }
-
-        .tkt3-bubble { padding: 10px 14px; border-radius: 12px; font-size: .72rem; line-height: 1.65; white-space: pre-wrap; border: 1px solid transparent; }
-        .admin-bubble  { background: #0875dc; color: #fff; border-radius: 12px 12px 4px 12px; }
-        .client-bubble { background: #fff; color: #344d69; border-color: #e5eaf0; border-radius: 12px 12px 12px 4px; }
-        .int-bubble    { background: #fef9c3; color: #78350f; border-color: #fde047; border-radius: 12px; }
-
-        /* History */
-        .tkt3-history { margin-top: 8px; border-top: 1px dashed #e0e7ef; }
-        .tkt3-history-toggle { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: transparent; color: #8b9dad; font: inherit; font-size: .62rem; font-weight: 700; cursor: pointer; padding: 10px 0; }
-        .tkt3-history-body { padding: 0 0 8px; display: flex; flex-direction: column; gap: 8px; }
-        .tkt3-hist-item { display: flex; align-items: flex-start; gap: 10px; }
-        .tkt3-hist-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
-        .tkt3-hist-ev { font-size: .63rem; color: #344d69; font-weight: 600; }
-        .tkt3-hist-t  { font-size: .57rem; color: #aab5c3; margin-top: 2px; }
-
-        /* Reply */
-        .tkt3-reply-wrap { flex-shrink: 0; border-top: 1.5px solid #e5eaf0; background: #fff; }
-        .tkt3-reply-tools { display: flex; align-items: center; gap: 8px; padding: 10px 16px 6px; flex-wrap: wrap; }
-        .tkt3-tool-btn { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #e5eaf0; background: #f5f8fc; color: #526983; border-radius: 8px; padding: 5px 11px; font: inherit; font-size: .62rem; font-weight: 600; cursor: pointer; transition: all .15s; }
-        .tkt3-tool-btn.active, .tkt3-tool-btn:hover { border-color: #0875dc; color: #0875dc; background: #eaf4ff; }
-        .tkt3-quick-menu { position: absolute; bottom: calc(100% + 6px); right: 0; background: #fff; border: 1px solid #e5eaf0; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.10); min-width: 280px; z-index: 99; overflow: hidden; }
-        .tkt3-quick-item { display: block; width: 100%; border: 0; background: transparent; color: #344d69; font: inherit; font-size: .65rem; text-align: right; padding: 10px 14px; cursor: pointer; transition: background .1s; }
-        .tkt3-quick-item:hover { background: #f0f8ff; }
-
-        .tkt3-reply-toggle { display: flex; border: 1.5px solid #e5eaf0; border-radius: 8px; overflow: hidden; margin-right: auto; }
-        .tkt3-tog { border: 0; background: #f5f8fc; color: #7a8fa6; font: inherit; font-size: .62rem; font-weight: 700; padding: 5px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all .15s; }
-        .tog-active-blue  { background: #eaf4ff; color: #0875dc; }
-        .tog-active-amber { background: #fef9ee; color: #d97706; }
-
-        .tkt3-reply-form { display: flex; gap: 10px; padding: 8px 16px 14px; align-items: flex-end; }
-        .tkt3-textarea { flex: 1; border: 1.5px solid #e5eaf0; border-radius: 10px; padding: 10px 14px; font: inherit; font-size: .72rem; color: #344d69; resize: none; background: #f8fafc; line-height: 1.55; outline: none; transition: border-color .15s; }
-        .tkt3-textarea:focus { border-color: #0875dc; background: #fff; }
-        .int-textarea { border-color: #fde68a !important; background: #fef9ee !important; }
-        .tkt3-send-btn { display: inline-flex; align-items: center; gap: 6px; border: 0; background: #0875dc; color: #fff; border-radius: 10px; padding: 0 16px; height: 40px; font: inherit; font-size: .68rem; font-weight: 700; cursor: pointer; flex-shrink: 0; transition: background .15s; }
-        .tkt3-send-btn:hover:not(:disabled) { background: #065fb8; }
-        .tkt3-send-btn:disabled { opacity: .5; cursor: not-allowed; }
-
-        /* ════ RIGHT: CLIENT ════ */
-        .tkt3-client-col { display: flex; flex-direction: column; overflow-y: auto; border-right: 1px solid #e5eaf0; background: #fff; }
-
-        /* Hero */
-        .tkt3-client-hero { display: flex; gap: 12px; align-items: flex-start; padding: 18px 16px 14px; border-bottom: 1px solid #f0f3f8; }
-        .tkt3-client-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #0875dc, #073766); color: #fff; display: grid; place-items: center; font-size: .95rem; font-weight: 800; flex-shrink: 0; }
-        .tkt3-client-name-lrg { font-size: .82rem; font-weight: 800; color: #073766; line-height: 1.3; }
-        .tkt3-client-sub { font-size: .62rem; color: #8b9dad; margin-top: 2px; }
-        .tkt3-client-type { display: inline-block; margin-top: 5px; font-size: .56rem; color: #7c3aed; background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 2px 8px; font-weight: 700; }
-
-        /* Contact */
-        .tkt3-contact-row { display: flex; flex-direction: column; gap: 6px; padding: 10px 16px; border-bottom: 1px solid #f0f3f8; }
-        .tkt3-contact-btn { display: inline-flex; align-items: center; gap: 7px; font-size: .65rem; color: #344d69; text-decoration: none; background: #f5f8fc; border: 1px solid #e5eaf0; border-radius: 8px; padding: 7px 11px; transition: all .15s; direction: ltr; justify-content: flex-start; }
-        .tkt3-contact-btn:hover { border-color: #0875dc; color: #0875dc; background: #eaf4ff; }
-        .tkt3-contact-btn.email:hover { border-color: #7c3aed; color: #7c3aed; background: #f5f3ff; }
-
-        /* Mini stats */
-        .tkt3-mini-stats { display: flex; padding: 10px 16px; border-bottom: 1px solid #f0f3f8; gap: 6px; }
-        .tkt3-mini-stat { flex: 1; text-align: center; background: #f8fafc; border: 1px solid #e5eaf0; border-radius: 8px; padding: 8px 4px; }
-        .tkt3-mini-num { display: block; font-size: 1rem; font-weight: 900; color: #073766; line-height: 1; margin-bottom: 3px; }
-        .tkt3-mini-lbl { font-size: .5rem; color: #8b9dad; }
-
-        /* Collapsible sections */
-        .tkt3-section { border-bottom: 1px solid #f0f3f8; }
-        .tkt3-sec-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 11px 16px; border: 0; background: transparent; cursor: pointer; font: inherit; font-size: .68rem; font-weight: 700; color: #344d69; text-align: right; transition: background .15s; }
-        .tkt3-sec-toggle:hover { background: #f8fafc; }
-        .tkt3-sec-toggle span { flex: 1; text-align: right; }
-        .tkt3-sec-count { margin-right: auto; font-size: .54rem; font-weight: 800; padding: 1px 7px; border-radius: 10px; background: #f0f3f8; color: #526983; }
-        .tkt3-sec-body { padding: 0 16px 12px; }
-        .tkt3-sec-empty { font-size: .62rem; color: #aab5c3; text-align: center; padding: 10px; }
-
-        /* Info rows */
-        .tkt3-info-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f5f8fc; }
-        .tkt3-info-row:last-child { border-bottom: none; }
-        .tkt3-info-lbl { font-size: .59rem; color: #8b9dad; flex-shrink: 0; }
-        .tkt3-info-val { font-size: .62rem; color: #1e3a56; font-weight: 600; text-align: left; }
-
-        /* Docs */
-        .tkt3-doc-group-lbl { font-size: .58rem; color: #7a8fa6; font-weight: 700; margin-bottom: 5px; }
-        .tkt3-doc-row { display: flex; align-items: center; gap: 7px; padding: 6px 0; border-bottom: 1px solid #f5f8fc; }
-        .tkt3-doc-row:last-child { border-bottom: none; }
-        .tkt3-doc-name { font-size: .62rem; color: #344d69; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .tkt3-doc-btn { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; text-decoration: none; transition: all .15s; flex-shrink: 0; }
-        .tkt3-doc-btn.view { color: #0875dc; background: #eaf4ff; border: 1px solid #bddcff; }
-        .tkt3-doc-btn.view:hover { background: #dbeeff; }
-        .tkt3-doc-btn.dl { color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; }
-        .tkt3-doc-btn.dl:hover { background: #dcfce7; }
-
-        /* Orders */
-        .tkt3-order-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid #f5f8fc; text-decoration: none; transition: all .15s; }
-        .tkt3-order-row:last-of-type { border-bottom: none; }
-        .tkt3-order-row:hover .tkt3-order-ref { color: #0875dc; }
-        .tkt3-order-ref { font-size: .62rem; font-weight: 800; color: #073766; font-family: monospace; direction: ltr; display: block; }
-        .tkt3-order-svc { font-size: .56rem; color: #8b9dad; margin-top: 1px; }
-        .tkt3-order-st { font-size: .54rem; font-weight: 700; color: #0875dc; background: #eaf4ff; padding: 2px 7px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
-        .tkt3-orders-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; font-size: .6rem; color: #0875dc; font-weight: 600; text-decoration: none; }
-        .tkt3-orders-link:hover { text-decoration: underline; }
-
-        /* ════ UTILS ════ */
-        .spin { animation: spin .8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        @media (max-width: 1100px) {
-          .tkt3-shell, .tkt3-shell:has(.tkt3-client-col) { grid-template-columns: 380px 1fr; }
-          .tkt3-client-col { display: none; }
-        }
-        @media (max-width: 720px) {
-          .tkt3-shell, .tkt3-shell:has(.tkt3-client-col) { grid-template-columns: 1fr; height: auto; }
-          .tkt3-center-col { display: none; }
-          .tkt3-list-col { height: calc(100vh - 76px); }
-        }
-      `}</style>
-    </main>
   );
 }
