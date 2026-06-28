@@ -87,6 +87,7 @@ export default function AdminServicesPage() {
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState("");
   const { role, loading } = useRoleGuard("manager");
+  const [adminView, setAdminView] = useState<"services" | "packages">("services");
   async function loadDatabase() {
     const [servicesResponse, catalogResponse] = await Promise.all([
       fetch("/api/admin/services"),
@@ -225,8 +226,6 @@ export default function AdminServicesPage() {
         />
       </div>
     );
-  const [adminView, setAdminView] = useState<"services" | "packages">("services");
-
   return (
     <><section className="catalog-page">
         <div className="catalog-heading">
