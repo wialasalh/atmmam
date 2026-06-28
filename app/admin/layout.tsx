@@ -10,6 +10,10 @@ import "./admin-settings.css";
 import "./admin-audit.css";
 import "./admin-team.css";
 import "./admin-hide-shell.css";
+import "./admin-tickets.css";
+import AdminAuthGuard from "./admin-auth-guard";
+import AdminShellClient from "@/components/admin-shell-client";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export const metadata: Metadata = {
   title: { default: "لوحة أتمم", template: "%s | أتمم" },
@@ -17,5 +21,5 @@ export const metadata: Metadata = {
 };
 
 export default function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return children;
+  return <ErrorBoundary><AdminAuthGuard><AdminShellClient>{children}</AdminShellClient></AdminAuthGuard></ErrorBoundary>;
 }

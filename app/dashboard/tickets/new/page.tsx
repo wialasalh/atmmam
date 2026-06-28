@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Send, ChevronRight, AlertCircle, Building2, Globe, FileCheck,
   Award, Scale, Users, Calculator, MessageSquare, Lightbulb,
-  ThumbsUp, Upload, X, File, CheckCircle2, Paperclip
+  ThumbsUp, Upload, X, File, CheckCircle2, Paperclip, CheckCircle, CalendarDays
 } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -91,8 +91,18 @@ function validateFile(file: File): string | null {
 }
 
 export default function NewTicketPage() {
+  return (
+    <Suspense fallback={<div className="client-dash-page" style={{textAlign:"center",padding:60,color:"#8b9dad"}}>جاري التحميل...</div>}>
+      <NewTicketForm />
+    </Suspense>
+  );
+}
+
+function NewTicketForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isConsultation = searchParams.get("type") === "consultation";
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [title, setTitle] = useState("");
@@ -108,6 +118,7 @@ export default function NewTicketPage() {
   const [showKb, setShowKb] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [consPhone, setConsPhone] = useState("");
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(({ data }) => {
@@ -216,9 +227,11 @@ export default function NewTicketPage() {
         return def ? `${def.label}: ${v}` : v;
       }).join("\n");
 
-    const fullDescription = extraNote
-      ? `${description.trim()}\n\n---\nمعلومات إضافية:\n${extraNote}`
-      : description.trim();
+    const fullDescription = isConsultation
+      ? `${description.trim()}\n\n---\nنوع: استشارة\nرقم الجوال: ${consPhone || "غير مذكور"}`
+      : extraNote
+        ? `${description.trim()}\n\n---\nمعلومات إضافية:\n${extraNote}`
+        : description.trim();
 
     try {
       // 1. Create ticket
@@ -228,9 +241,10 @@ export default function NewTicketPage() {
         body: JSON.stringify({
           title: title.trim(),
           description: fullDescription,
-          category,
+          category: isConsultation ? "الزكاة والضريبة والاستشارات" : category,
           priority,
           client_id: selectedClientId || undefined,
+          type: isConsultation ? "consultation" : "ticket",
         }),
       });
       const json = await res.json();
@@ -268,17 +282,88 @@ export default function NewTicketPage() {
         <Link href="/dashboard/tickets" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".7rem", color: "#526983", textDecoration: "none", marginBottom: 10 }}>
           <ChevronRight size={14} /> العودة للتذاكر
         </Link>
-        <h2 className="client-dash-page-title" style={{ marginBottom: 4 }}>تذكرة دعم جديدة</h2>
-        <p className="client-dash-page-desc">اختر الخدمة وأرسل طلبك لفريق أتمم.</p>
+        {isConsultation ? (
+          <>
+            <h2 className="client-dash-page-title" style={{ marginBottom: 4 }}>جدولة استشارة</h2>
+            <p className="client-dash-page-desc">احجز موعد استشارة مع فريق أتمم — سنتواصل معك في أقرب وقت.</p>
+          </>
+        ) : (
+          <>
+            <h2 className="client-dash-page-title" style={{ marginBottom: 4 }}>تذكرة دعم جديدة</h2>
+            <p className="client-dash-page-desc">اختر الخدمة وأرسل طلبك لفريق أتمم.</p>
+          </>
+        )}
       </div>
 
+      {isConsultation ? (
+        /* Consultation form — simplified, no steps */
+        <form onSubmit={handleSubmit}>
+          {/* Company selector */}
+          {clients.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 8 }}>
+                <Building2 size={13} style={{ display: "inline", verticalAlign: "middle", marginLeft: 5 }} />
+                المنشأة المعنية
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {clients.map(c => (
+                  <button key={c.id} type="button" onClick={() => setSelectedClientId(c.id)}
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", border: `1.5px solid ${selectedClientId === c.id ? "#0875dc" : "#e5eaf0"}`, borderRadius: 10, background: selectedClientId === c.id ? "#eaf4ff" : "#fff", cursor: "pointer", font: "inherit", fontSize: ".7rem", color: selectedClientId === c.id ? "#0875dc" : "#526983", fontWeight: 700 }}>
+                    <Building2 size={14} />
+                    {c.name}
+                    {selectedClientId === c.id && <CheckCircle2 size={14} color="#0875dc" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 6 }}>موضوع الاستشارة *</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="مثال: استشارة زكوية, تأسيس شركة"
+              style={{ width: "100%", height: 42, border: "1px solid #e5eaf0", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", color: "#344d69", boxSizing: "border-box", outline: "none" }} />
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 6 }}>رقم الجوال (اختياري)</label>
+            <input value={consPhone} onChange={e => setConsPhone(e.target.value)} placeholder="05XXXXXXXX"
+              style={{ width: "100%", height: 42, border: "1px solid #e5eaf0", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", color: "#344d69", boxSizing: "border-box", outline: "none" }} />
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 6 }}>تفاصيل الاستشارة *</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="اشرح ما تحتاج استشارة بخصوصه..." rows={5}
+              style={{ width: "100%", border: "1px solid #e5eaf0", borderRadius: 10, padding: "10px 14px", font: "inherit", fontSize: ".75rem", color: "#344d69", resize: "vertical", background: "#fff", boxSizing: "border-box", outline: "none" }} />
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".62rem", color: "#8b9dad", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 14px" }}>
+              <CalendarDays size={16} color="#15803d" />
+              سيتم التواصل معك لحجز موعد الاستشارة خلال ٢٤ ساعة عمل.
+            </label>
+          </div>
+
+          {error && (
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 14px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+              <AlertCircle size={14} color="#dc2626" />
+              <span style={{ fontSize: ".68rem", color: "#dc2626" }}>{error}</span>
+            </div>
+          )}
+
+          <button type="submit" disabled={saving || !title.trim() || !description.trim()}
+            style={{ width: "100%", height: 44, border: 0, borderRadius: 10, background: saving || !title.trim() || !description.trim() ? "#e5eaf0" : "#15803d", color: saving || !title.trim() || !description.trim() ? "#aab5c3" : "#fff", font: "inherit", fontSize: ".75rem", fontWeight: 700, cursor: saving || !title.trim() || !description.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <CalendarDays size={15} /> {saving ? "جاري الإرسال..." : "طلب استشارة"}
+          </button>
+        </form>
+      ) : (
+        <>
       {/* Progress */}
       <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
         {["اختر الخدمة", "تفاصيل الطلب", "الإرسال"].map((s, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <div style={{ width: 26, height: 26, borderRadius: "50%", display: "grid", placeItems: "center", background: step > i + 1 ? "#15803d" : step === i + 1 ? "#0875dc" : "#e5eaf0", color: step >= i + 1 ? "#fff" : "#8b9dad", fontSize: ".62rem", fontWeight: 800, flexShrink: 0 }}>
-                {step > i + 1 ? "✓" : i + 1}
+                {step > i + 1 ? <CheckCircle size={12} /> : i + 1}
               </div>
               <span style={{ fontSize: ".62rem", color: step === i + 1 ? "#0875dc" : "#8b9dad", fontWeight: step === i + 1 ? 700 : 400, whiteSpace: "nowrap" }}>{s}</span>
             </div>
@@ -309,7 +394,7 @@ export default function NewTicketPage() {
               </div>
               {selectedClientId && (
                 <p style={{ fontSize: ".6rem", color: "#8b9dad", marginTop: 6, margin: "6px 0 0" }}>
-                  ✓ سيتم ربط التذكرة بـ <strong style={{ color: "#0875dc" }}>{clients.find(c => c.id === selectedClientId)?.name}</strong>
+                  سيتم ربط التذكرة بـ <strong style={{ color: "#0875dc" }}>{clients.find(c => c.id === selectedClientId)?.name}</strong>
                 </p>
               )}
             </div>
@@ -485,7 +570,7 @@ export default function NewTicketPage() {
                         <div style={{ fontSize: ".58rem", color: "#8b9dad", marginTop: 2 }}>
                           {(uf.file.size / 1024).toFixed(0)} KB
                           {uf.status === "uploading" && " — جاري الرفع..."}
-                          {uf.status === "done" && " — ✓ تم الرفع"}
+                          {uf.status === "done" && <> — <CheckCircle size={11} /> تم الرفع</>}
                         </div>
                       )}
                     </div>
@@ -528,7 +613,9 @@ export default function NewTicketPage() {
               <Send size={15} /> {saving ? "جاري الإرسال..." : "إرسال الطلب"}
             </button>
           </div>
-        </form>
+          </form>
+        )}
+        </>
       )}
     </div>
   );

@@ -1,12 +1,16 @@
 "use client";
 
 import type { MouseEvent } from "react";
+import { usePathname } from "next/navigation";
 import { ArrowUp, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { siteConfig } from "@/data/site";
 import { siteConfigEn, footerEn } from "@/data/site-en";
 import { useLocale } from "@/lib/language-context";
 
 export function Footer() {
+  const pathname = usePathname();
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/admin")) return null;
+
   const { locale } = useLocale();
   const isAr = locale === "ar";
   const data = isAr ? siteConfig : siteConfigEn;

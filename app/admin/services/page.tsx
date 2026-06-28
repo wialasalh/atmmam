@@ -1,20 +1,427 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AdminOpsHeader } from "@/components/admin-ops-header";
+import { useRoleGuard } from "@/lib/auth/use-role-guard";
+import { Search, CheckCircle } from "lucide-react";
 
-type ServiceItem={id?:string;agencyId?:string;name:string;category:string;agency:string;duration:string;durationDays?:number;active:boolean;documents:number};
-type DatabaseService={id:string;name:string;category:string;agency_id:string;default_duration_days:number;active:boolean;required_documents?:string[];agencies?:{name?:string}|null};
-type Agency={id:string;name:string};
-const initialServices:ServiceItem[]=[{name:"تأسيس شركة ذات مسؤولية محدودة",category:"التأسيس",agency:"وزارة التجارة",duration:"3–7 أيام",active:true,documents:5},{name:"إصدار سجل تجاري",category:"التأسيس",agency:"وزارة التجارة",duration:"1–2 يوم",active:true,documents:3},{name:"تعديل عقد شركة",category:"الشركات",agency:"وزارة التجارة",duration:"2–5 أيام",active:true,documents:4},{name:"تسجيل علامة تجارية",category:"الملكية الفكرية",agency:"الهيئة السعودية للملكية الفكرية",duration:"60–90 يومًا",active:true,documents:6},{name:"التسجيل في ضريبة القيمة المضافة",category:"الزكاة والضريبة",agency:"هيئة الزكاة والضريبة والجمارك",duration:"2–4 أيام",active:true,documents:4},{name:"إصدار رخصة بلدية",category:"التراخيص",agency:"وزارة البلديات والإسكان",duration:"3–10 أيام",active:true,documents:8}];
-const KEY="atmmam:admin-services:v1";
+type ServiceItem = {
+  id?: string;
+  agencyId?: string;
+  name: string;
+  category: string;
+  agency: string;
+  duration: string;
+  durationDays?: number;
+  active: boolean;
+  documents: number;
+};
+type DatabaseService = {
+  id: string;
+  name: string;
+  category: string;
+  agency_id: string;
+  default_duration_days: number;
+  active: boolean;
+  required_documents?: string[];
+  agencies?: { name?: string } | null;
+};
+type Agency = { id: string; name: string };
+const initialServices: ServiceItem[] = [
+  {
+    name: "تأسيس شركة ذات مسؤولية محدودة",
+    category: "التأسيس",
+    agency: "وزارة التجارة",
+    duration: "3–7 أيام",
+    active: true,
+    documents: 5,
+  },
+  {
+    name: "إصدار سجل تجاري",
+    category: "التأسيس",
+    agency: "وزارة التجارة",
+    duration: "1–2 يوم",
+    active: true,
+    documents: 3,
+  },
+  {
+    name: "تعديل عقد شركة",
+    category: "الشركات",
+    agency: "وزارة التجارة",
+    duration: "2–5 أيام",
+    active: true,
+    documents: 4,
+  },
+  {
+    name: "تسجيل علامة تجارية",
+    category: "الملكية الفكرية",
+    agency: "الهيئة السعودية للملكية الفكرية",
+    duration: "60–90 يومًا",
+    active: true,
+    documents: 6,
+  },
+  {
+    name: "التسجيل في ضريبة القيمة المضافة",
+    category: "الزكاة والضريبة",
+    agency: "هيئة الزكاة والضريبة والجمارك",
+    duration: "2–4 أيام",
+    active: true,
+    documents: 4,
+  },
+  {
+    name: "إصدار رخصة بلدية",
+    category: "التراخيص",
+    agency: "وزارة البلديات والإسكان",
+    duration: "3–10 أيام",
+    active: true,
+    documents: 8,
+  },
+];
+const KEY = "atmmam:admin-services:v1";
 
-export default function AdminServicesPage(){
-  const [services,setServices]=useState(initialServices);const [agencies,setAgencies]=useState<Agency[]>([]);const [databaseMode,setDatabaseMode]=useState(false);const [query,setQuery]=useState("");const [editing,setEditing]=useState<number|null>(null);const [showForm,setShowForm]=useState(false);const [notice,setNotice]=useState("");
-  async function loadDatabase(){const [servicesResponse,catalogResponse]=await Promise.all([fetch("/api/admin/services"),fetch("/api/admin/catalog")]);if(!servicesResponse.ok||!catalogResponse.ok)return false;const servicePayload=await servicesResponse.json() as {data:DatabaseService[]};const catalogPayload=await catalogResponse.json() as {data:{agencies:Agency[]}};setAgencies(catalogPayload.data.agencies);setServices(servicePayload.data.map((item)=>({id:item.id,agencyId:item.agency_id,name:item.name,category:item.category,agency:item.agencies?.name??"غير محددة",duration:`${item.default_duration_days} يوم`,durationDays:item.default_duration_days,active:item.active,documents:item.required_documents?.length??0})));setDatabaseMode(true);return true}
-  useEffect(()=>{if(process.env.NEXT_PUBLIC_SUPABASE_URL)void loadDatabase();else try{const stored=localStorage.getItem(KEY);if(stored)setServices(JSON.parse(stored))}catch{}},[]);
-  const visible=services.filter((item)=>`${item.name} ${item.agency} ${item.category}`.includes(query));const current=editing===null?null:services[editing];
-  async function saveService(event:FormEvent<HTMLFormElement>){event.preventDefault();const data=new FormData(event.currentTarget);if(databaseMode){const documents=Array.from({length:Number(data.get("documents"))},(_,index)=>`مستند ${index+1}`);const payload={serviceId:current?.id,name:String(data.get("name")),category:String(data.get("category")),agencyId:String(data.get("agencyId")),defaultDurationDays:Number(data.get("durationDays")),requiredDocuments:documents,active:current?.active??true};const response=await fetch("/api/admin/services",{method:current?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});if(!response.ok){setNotice("تعذر حفظ الخدمة؛ تحقق من صلاحية المدير");return}await loadDatabase();setShowForm(false);setEditing(null);setNotice(current?"تم تحديث الخدمة":"تمت إضافة الخدمة");return}const item:ServiceItem={name:String(data.get("name")),category:String(data.get("category")),agency:String(data.get("agency")),duration:String(data.get("duration")),documents:Number(data.get("documents")),active:true};const next=editing===null?[item,...services]:services.map((service,index)=>index===editing?item:service);setServices(next);localStorage.setItem(KEY,JSON.stringify(next));setShowForm(false);setEditing(null);setNotice(editing===null?"تمت إضافة الخدمة":"تم تحديث الخدمة");window.setTimeout(()=>setNotice(""),2200)}
-  async function toggleService(service:ServiceItem){if(databaseMode&&service.id){const response=await fetch("/api/admin/services",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({serviceId:service.id,active:!service.active})});if(!response.ok){setNotice("تعذر تغيير حالة الخدمة");return}await loadDatabase();return}const next=services.map((item)=>item===service?{...item,active:!item.active}:item);setServices(next);localStorage.setItem(KEY,JSON.stringify(next))}
-  return <main className="ops-shell" dir="rtl"><AdminOpsHeader active="services"/><section className="catalog-page"><div className="catalog-heading"><div><p>إعدادات التشغيل</p><h1>الخدمات والباقات</h1><span>مصدر موحد للمدة والجهة والمتطلبات الافتراضية لكل خدمة.</span></div><button onClick={()=>{setEditing(null);setShowForm(true)}}>＋ خدمة جديدة</button></div><div className="catalog-tools"><label>⌕<input value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="ابحث عن خدمة أو جهة..."/></label></div><div className="catalog-grid">{visible.map((service,index)=><article key={service.id??service.name}><header><span>{String(index+1).padStart(2,"0")}</span><em>{service.active?"نشطة":"متوقفة"}</em></header><h2>{service.name}</h2><p>{service.category}</p><dl><div><dt>الجهة</dt><dd>{service.agency}</dd></div><div><dt>المدة التقديرية</dt><dd>{service.duration}</dd></div><div><dt>المتطلبات</dt><dd>{service.documents} مستندات</dd></div></dl><footer><button onClick={()=>{setEditing(services.indexOf(service));setShowForm(true)}}>تعديل الخدمة</button><button onClick={()=>void toggleService(service)}>{service.active?"إيقاف":"تفعيل"}</button></footer></article>)}</div></section>{showForm?<div className="ops-modal-backdrop" onMouseDown={()=>setShowForm(false)}><section className="ops-modal" role="dialog" aria-modal="true" onMouseDown={(event)=>event.stopPropagation()}><header><div><h2>{current?"تعديل الخدمة":"خدمة جديدة"}</h2><p>تُستخدم هذه البيانات افتراضيًا عند إنشاء الطلب.</p></div><button onClick={()=>setShowForm(false)}>×</button></header><form onSubmit={saveService}><div className="ops-form-grid"><label className="wide"><span>اسم الخدمة</span><input name="name" defaultValue={current?.name} required/></label><label><span>التصنيف</span><input name="category" defaultValue={current?.category} required/></label>{databaseMode?<><label><span>الجهة</span><select name="agencyId" defaultValue={current?.agencyId}>{agencies.map((agency)=><option value={agency.id} key={agency.id}>{agency.name}</option>)}</select></label><label><span>المدة بالأيام</span><input name="durationDays" type="number" min="1" max="365" defaultValue={current?.durationDays??7} required/></label></>:<><label><span>الجهة</span><input name="agency" defaultValue={current?.agency} required/></label><label><span>المدة التقديرية</span><input name="duration" defaultValue={current?.duration} required/></label></>}<label><span>عدد المستندات</span><input name="documents" type="number" min="0" max="30" defaultValue={current?.documents??0} required/></label></div><footer><button type="button" onClick={()=>setShowForm(false)}>إلغاء</button><button className="primary" type="submit">حفظ الخدمة</button></footer></form></section></div>:null}{notice?<div className="ops-toast">✓ {notice}</div>:null}</main>
+export default function AdminServicesPage() {
+  const [services, setServices] = useState(initialServices);
+  const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [databaseMode, setDatabaseMode] = useState(false);
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [notice, setNotice] = useState("");
+  const { role, loading } = useRoleGuard("manager");
+  async function loadDatabase() {
+    const [servicesResponse, catalogResponse] = await Promise.all([
+      fetch("/api/admin/services"),
+      fetch("/api/admin/catalog"),
+    ]);
+    if (!servicesResponse.ok || !catalogResponse.ok) return false;
+    const servicePayload = (await servicesResponse.json()) as {
+      data: DatabaseService[];
+    };
+    const catalogPayload = (await catalogResponse.json()) as {
+      data: { agencies: Agency[] };
+    };
+    setAgencies(catalogPayload.data.agencies);
+    setServices(
+      servicePayload.data.map((item) => ({
+        id: item.id,
+        agencyId: item.agency_id,
+        name: item.name,
+        category: item.category,
+        agency: item.agencies?.name ?? "غير محددة",
+        duration: `${item.default_duration_days} يوم`,
+        durationDays: item.default_duration_days,
+        active: item.active,
+        documents: item.required_documents?.length ?? 0,
+      })),
+    );
+    setDatabaseMode(true);
+    return true;
+  }
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) void loadDatabase();
+    else
+      try {
+        const stored = localStorage.getItem(KEY);
+        if (stored) setServices(JSON.parse(stored));
+      } catch {}
+  }, []);
+  const visible = services.filter((item) =>
+    `${item.name} ${item.agency} ${item.category}`.includes(query),
+  );
+  const current = editing === null ? null : services[editing];
+  async function saveService(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    if (databaseMode) {
+      const documents = Array.from(
+        { length: Number(data.get("documents")) },
+        (_, index) => `مستند ${index + 1}`,
+      );
+      const payload = {
+        serviceId: current?.id,
+        name: String(data.get("name")),
+        category: String(data.get("category")),
+        agencyId: String(data.get("agencyId")),
+        defaultDurationDays: Number(data.get("durationDays")),
+        requiredDocuments: documents,
+        active: current?.active ?? true,
+      };
+      const response = await fetch("/api/admin/services", {
+        method: current ? "PATCH" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        setNotice("تعذر حفظ الخدمة؛ تحقق من صلاحية المدير");
+        return;
+      }
+      await loadDatabase();
+      setShowForm(false);
+      setEditing(null);
+      setNotice(current ? "تم تحديث الخدمة" : "تمت إضافة الخدمة");
+      return;
+    }
+    const item: ServiceItem = {
+      name: String(data.get("name")),
+      category: String(data.get("category")),
+      agency: String(data.get("agency")),
+      duration: String(data.get("duration")),
+      documents: Number(data.get("documents")),
+      active: true,
+    };
+    const next =
+      editing === null
+        ? [item, ...services]
+        : services.map((service, index) =>
+            index === editing ? item : service,
+          );
+    setServices(next);
+    localStorage.setItem(KEY, JSON.stringify(next));
+    setShowForm(false);
+    setEditing(null);
+    setNotice(editing === null ? "تمت إضافة الخدمة" : "تم تحديث الخدمة");
+    window.setTimeout(() => setNotice(""), 2200);
+  }
+  async function toggleService(service: ServiceItem) {
+    if (databaseMode && service.id) {
+      const response = await fetch("/api/admin/services", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          serviceId: service.id,
+          active: !service.active,
+        }),
+      });
+      if (!response.ok) {
+        setNotice("تعذر تغيير حالة الخدمة");
+        return;
+      }
+      await loadDatabase();
+      return;
+    }
+    const next = services.map((item) =>
+      item === service ? { ...item, active: !item.active } : item,
+    );
+    setServices(next);
+    localStorage.setItem(KEY, JSON.stringify(next));
+  }
+  if (loading)
+    return (
+      <div
+        style={{
+          display: "grid",
+          placeItems: "center",
+          height: "calc(100vh - 76px)",
+        }}
+      >
+        <div
+          style={{
+            width: 24,
+            height: 24,
+            border: "2px solid #e5ecf3",
+            borderTopColor: "#073766",
+            borderRadius: "50%",
+            animation: "spin .6s linear infinite",
+          }}
+        />
+      </div>
+    );
+  const [adminView, setAdminView] = useState<"services" | "packages">("services");
+
+  return (
+    <><section className="catalog-page">
+        <div className="catalog-heading">
+          <div>
+            <p>إعدادات التشغيل</p>
+            <h1>الخدمات والباقات</h1>
+            <span>مصدر موحد للمدة والجهة والمتطلبات الافتراضية لكل خدمة.</span>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => setAdminView("services")}
+              style={{ opacity: adminView === "services" ? 1 : 0.6 }}
+            >
+              ＋ خدمة جديدة
+            </button>
+            <a
+              href="/admin/packages"
+              className="catalog-link-btn"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 16px",
+                background: adminView === "packages" ? "#073766" : "#e5ecf3",
+                color: adminView === "packages" ? "#fff" : "#073766",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              إدارة الباقات
+            </a>
+          </div>
+        </div>
+        <div className="catalog-tools">
+          <label>
+            <Search size={14} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="ابحث عن خدمة أو جهة..."
+            />
+          </label>
+        </div>
+        <div className="catalog-grid">
+          {visible.map((service, index) => (
+            <article key={service.id ?? service.name}>
+              <header>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <em>{service.active ? "نشطة" : "متوقفة"}</em>
+              </header>
+              <h2>{service.name}</h2>
+              <p>{service.category}</p>
+              <dl>
+                <div>
+                  <dt>الجهة</dt>
+                  <dd>{service.agency}</dd>
+                </div>
+                <div>
+                  <dt>المدة التقديرية</dt>
+                  <dd>{service.duration}</dd>
+                </div>
+                <div>
+                  <dt>المتطلبات</dt>
+                  <dd>{service.documents} مستندات</dd>
+                </div>
+              </dl>
+              <footer>
+                <button
+                  onClick={() => {
+                    setEditing(services.indexOf(service));
+                    setShowForm(true);
+                  }}
+                >
+                  تعديل الخدمة
+                </button>
+                <button onClick={() => void toggleService(service)}>
+                  {service.active ? "إيقاف" : "تفعيل"}
+                </button>
+              </footer>
+            </article>
+          ))}
+        </div>
+      </section>
+      {showForm ? (
+        <div
+          className="ops-modal-backdrop"
+          onMouseDown={() => setShowForm(false)}
+        >
+          <section
+            className="ops-modal"
+            role="dialog"
+            aria-modal="true"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <h2>{current ? "تعديل الخدمة" : "خدمة جديدة"}</h2>
+                <p>تُستخدم هذه البيانات افتراضيًا عند إنشاء الطلب.</p>
+              </div>
+              <button onClick={() => setShowForm(false)}>×</button>
+            </header>
+            <form onSubmit={saveService}>
+              <div className="ops-form-grid">
+                <label className="wide">
+                  <span>اسم الخدمة</span>
+                  <input name="name" defaultValue={current?.name} required />
+                </label>
+                <label>
+                  <span>التصنيف</span>
+                  <input
+                    name="category"
+                    defaultValue={current?.category}
+                    required
+                  />
+                </label>
+                {databaseMode ? (
+                  <>
+                    <label>
+                      <span>الجهة</span>
+                      <select name="agencyId" defaultValue={current?.agencyId}>
+                        {agencies.map((agency) => (
+                          <option value={agency.id} key={agency.id}>
+                            {agency.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>المدة بالأيام</span>
+                      <input
+                        name="durationDays"
+                        type="number"
+                        min="1"
+                        max="365"
+                        defaultValue={current?.durationDays ?? 7}
+                        required
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      <span>الجهة</span>
+                      <input
+                        name="agency"
+                        defaultValue={current?.agency}
+                        required
+                      />
+                    </label>
+                    <label>
+                      <span>المدة التقديرية</span>
+                      <input
+                        name="duration"
+                        defaultValue={current?.duration}
+                        required
+                      />
+                    </label>
+                  </>
+                )}
+                <label>
+                  <span>عدد المستندات</span>
+                  <input
+                    name="documents"
+                    type="number"
+                    min="0"
+                    max="30"
+                    defaultValue={current?.documents ?? 0}
+                    required
+                  />
+                </label>
+                <label>
+                  <span>السعر (ر.س)</span>
+                  <input
+                    name="price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={current?.durationDays ? 0 : 0}
+                  />
+                </label>
+              </div>
+              <footer>
+                <button type="button" onClick={() => setShowForm(false)}>
+                  إلغاء
+                </button>
+                <button className="primary" type="submit">
+                  حفظ الخدمة
+                </button>
+              </footer>
+            </form>
+          </section>
+        </div>
+      ) : null}
+      {notice ? <div className="ops-toast"><CheckCircle size={14} /> {notice}</div> : null}
+  </>);
 }

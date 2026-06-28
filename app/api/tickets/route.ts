@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
+import { isStaffRole } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceClient = serviceRole && supabaseUrl
-  ? createClient(supabaseUrl, serviceRole, { auth: { autoRefreshToken: false, persistSession: false } })
+  ? createClient(supabaseUrl!, serviceRole!, { auth: { autoRefreshToken: false, persistSession: false } })
   : null;
 
 // Allowed MIME types for security
@@ -100,7 +101,7 @@ export async function GET(request: Request) {
   if (error || !user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
   const profile = await getProfile(supabase, user.id);
-  const isStaff = profile && ["admin", "manager", "operator"].includes(profile.role);
+  const isStaff = profile && isStaffRole(profile.role);
 
   const url = new URL(request.url);
   const statusFilter = url.searchParams.get("status");
@@ -148,13 +149,13 @@ export async function POST(request: Request) {
   if (error || !user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
   const body = await request.json();
-  const { title, description, category, priority, client_id } = body;
+  const { title, description, category, priority, client_id, type } = body;
 
   if (!title?.trim() || !description?.trim()) {
     return NextResponse.json({ error: "العنوان والوصف مطلوبان" }, { status: 400 });
   }
 
-  // Validate client_id belongs to this user
+  // Validate client_id belongs to this user, or auto-create
   let resolvedClientId: string | null = null;
   if (client_id) {
     const { data: clientCheck } = await supabase
@@ -164,7 +165,8 @@ export async function POST(request: Request) {
       .eq("user_id", user.id)
       .single();
     if (clientCheck) resolvedClientId = clientCheck.id;
-  } else {
+  }
+  if (!resolvedClientId) {
     // Default: first client of user
     const { data: clients } = await supabase
       .from("clients")
@@ -173,6 +175,27 @@ export async function POST(request: Request) {
       .order("created_at")
       .limit(1);
     resolvedClientId = clients?.[0]?.id || null;
+  }
+  // If still no client, auto-create one from profile
+  if (!resolvedClientId) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, phone, email")
+      .eq("id", user.id)
+      .single();
+    const { data: newClient } = await supabase
+      .from("clients")
+      .insert({
+        client_type: "person",
+        name: profile?.full_name || profile?.email?.split("@")[0] || "عميل",
+        phone: profile?.phone || "",
+        email: profile?.email || "",
+        user_id: user.id,
+        notes: "تم إنشاؤه تلقائياً عند إنشاء تذكرة",
+      })
+      .select("id")
+      .single();
+    resolvedClientId = newClient?.id || null;
   }
 
   // Calculate SLA
@@ -191,6 +214,7 @@ export async function POST(request: Request) {
       user_id: user.id,
       client_id: resolvedClientId,
       title: title.trim(),
+      body: description.trim(),
       description: description.trim(),
       category: category || "استفسار",
       priority: priority || "عادية",
@@ -199,6 +223,7 @@ export async function POST(request: Request) {
       assigned_at: assignedTo ? new Date().toISOString() : null,
       sla_due_at: slaDueAt,
       source: "web",
+      type: type || "ticket",
     })
     .select()
     .single();

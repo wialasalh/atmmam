@@ -88,7 +88,8 @@ export default function OrdersPage() {
           {filtered.map(order=>{
             const cfg=STATUS_CONFIG[order.status]||{label:order.status,color:"#6b7280",bg:"#f3f4f6"};
             return (
-              <div key={order.id} style={{background:"#fff",border:"1px solid #e5ecf3",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:14,boxShadow:"0 1px 3px rgba(0,0,0,.04)"}}>
+              <Link key={order.id} href={`/dashboard/orders/${order.id}`} style={{textDecoration:"none",display:"block"}}>
+              <div style={{background:"#fff",border:"1px solid #e5ecf3",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:14,boxShadow:"0 1px 3px rgba(0,0,0,.04)",cursor:"pointer",transition:"box-shadow .15s"}}>
                 <div style={{width:40,height:40,borderRadius:10,background:"#eaf4ff",display:"grid",placeItems:"center",flexShrink:0}}>
                   <ClipboardList size={18} color="#0875dc"/>
                 </div>
@@ -101,6 +102,7 @@ export default function OrdersPage() {
                 </div>
                 <div style={{fontSize:".65rem",color:"#b0bcc9",flexShrink:0}}>{fmt(order.created_at)}</div>
               </div>
+              </Link>
             );
           })}
         </div>

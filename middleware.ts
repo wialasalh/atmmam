@@ -34,28 +34,22 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const isAdminPage = path.startsWith("/admin") && !isLoginPage;
+  // Admin page protection (fast: auth check only — role enforced by useRoleGuard + API routes)
+  if (path.startsWith("/admin") && !isLoginPage && !user)
+    return NextResponse.redirect(new URL("/admin/login", request.url));
 
-  // Admin protection — fetch role once for both page and API checks
-  if (isAdminPage || isAdminApi) {
-    if (!user) {
-      if (isAdminApi) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-      return NextResponse.redirect(new URL("/admin/login", request.url));
-    }
-
+  // Admin API protection (role check required — data is at stake)
+  if (user && isAdminApi) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single();
     const userRole = profile?.role ?? null;
-    const allowed = ["admin", "manager", "operator", "viewer"];
-
-    if (!userRole || !allowed.includes(userRole)) {
-      if (isAdminApi) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
+    if (!userRole || !["admin", "manager", "operator", "viewer"].includes(userRole))
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+  if (!user && isAdminApi) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   if (user && isLoginPage && path.startsWith("/admin")) return NextResponse.redirect(new URL("/admin", request.url));
 

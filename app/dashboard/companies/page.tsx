@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   Building2, Plus, Save, Upload, MapPin, Hash, Briefcase,
   FileText, Users, Globe, Clock, Calendar, X, Check,
-  AlertCircle, ChevronDown, ExternalLink, Trash2, CheckCircle2, Phone
+  AlertCircle, ChevronDown, ExternalLink, Trash2, CheckCircle2, Phone,
+  User, CheckCircle
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -216,7 +217,7 @@ export default function CompaniesPage() {
       notes: form.notes || null,
       phone: form.phone || null,
     }).eq("id", selected.id);
-    setMessage(error ? { text: "فشل الحفظ، حاول مرة أخرى", type: "error" } : { text: "✓ تم حفظ البيانات بنجاح", type: "success" });
+    setMessage(error ? { text: "فشل الحفظ، حاول مرة أخرى", type: "error" } : { text: "تم حفظ البيانات بنجاح", type: "success" });
     setSaving(false);
     if (!error) { await loadCompanies(); setTimeout(() => setMessage(null), 3000); }
   }
@@ -254,7 +255,7 @@ export default function CompaniesPage() {
     const { error: uploadErr } = await supabase.storage.from("client-documents").upload(path, file);
     if (uploadErr) { setMessage({ text: "فشل رفع الملف", type: "error" }); setUploading(null); return; }
     await supabase.from("clients").update({ [field]: path }).eq("id", selected.id);
-    setMessage({ text: "✓ تم رفع الملف بنجاح", type: "success" });
+    setMessage({ text: "تم رفع الملف بنجاح", type: "success" });
     setUploading(null);
     await loadCompanies();
     setTimeout(() => setMessage(null), 3000);
@@ -313,7 +314,7 @@ export default function CompaniesPage() {
 
             {/* نوع المنشأة */}
             <div style={{ display:"flex", gap:8, marginBottom:16 }}>
-              {[{ v:"company", l:"مؤسسة / شركة", icon:"🏢" }, { v:"person", l:"فرد", icon:"👤" }].map(t => (
+              {[{ v:"company", l:"مؤسسة / شركة", icon:<Building2 size={14} /> }, { v:"person", l:"فرد", icon:<User size={14} /> }].map(t => (
                 <button key={t.v} type="button" onClick={() => setNewCompany({...newCompany, client_type: t.v as "company"|"person"})}
                   style={{ flex:1, padding:"10px 8px", border:`1.5px solid ${newCompany.client_type===t.v?"#0875dc":"#e5eaf0"}`, borderRadius:10, background:newCompany.client_type===t.v?"#eaf4ff":"#fff", cursor:"pointer", font:"inherit", fontSize:".72rem", fontWeight:700, color:newCompany.client_type===t.v?"#0875dc":"#526983" }}>
                   {t.icon} {t.l}
@@ -599,7 +600,7 @@ export default function CompaniesPage() {
                       <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                         <span style={{ fontSize:".72rem", fontWeight:700, color:current?"#15803d":"#344d69" }}>{label}</span>
                         {required && !current && <span style={{ fontSize:".55rem", color:"#dc2626", background:"#fef2f2", padding:"1px 6px", borderRadius:8, fontWeight:700 }}>مطلوب</span>}
-                        {current && <span style={{ fontSize:".55rem", color:"#15803d", background:"#dcfce7", padding:"1px 6px", borderRadius:8, fontWeight:700 }}>✓ مرفوع</span>}
+                        {current && <span style={{ fontSize:".55rem", color:"#15803d", background:"#dcfce7", padding:"1px 6px", borderRadius:8, fontWeight:700, display:"inline-flex", alignItems:"center", gap:3 }}><CheckCircle size={11} /> مرفوع</span>}
                       </div>
                       <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad", marginTop:2 }}>{desc}</p>
                     </div>
@@ -622,6 +623,24 @@ export default function CompaniesPage() {
             </div>}
           </div>
 
+          {/* ── Card 5: الموظفون والممثلون ── */}
+          <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:12, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+            <button onClick={() => setOpenSection(openSection === "employees" ? "" : "employees")}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"16px 20px", border:0, background: openSection === "employees" ? "#f8fafc" : "#fff", cursor:"pointer", borderBottom: openSection === "employees" ? "1px solid #f0f4f8" : "none", borderRadius: openSection === "employees" ? "16px 16px 0 0" : 16 }}>
+              <div style={{ width:34, height:34, borderRadius:9, background:"#eff6ff", display:"grid", placeItems:"center", flexShrink:0 }}>
+                <Users size={16} color="#2563eb" />
+              </div>
+              <div style={{ flex:1, textAlign:"right" }}>
+                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>الموظفون والممثلون</h3>
+                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>إدارة ممثلي المنشأة وموظفيها المعتمدين</p>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "employees" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {openSection === "employees" && <EmployeesSection clientId={selected.id} maxEmployees={selected.employee_count || 0} />}
+          </div>
+
           {/* ── Save Button ── */}
           <button onClick={handleSave} disabled={saving} className="client-dash-primary-btn"
             style={{ width:"100%", height:48, fontSize:".8rem", gap:8 }}>
@@ -632,6 +651,223 @@ export default function CompaniesPage() {
     </div>
   );
 }
+
+// ── Employees Section ───────────────────────────────────────────────────
+
+type Employee = {
+  id: string;
+  client_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  position: string | null;
+  national_id: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+function EmployeesSection({ clientId, maxEmployees }: { clientId: string; maxEmployees: number }) {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Employee | null>(null);
+  const [form, setForm] = useState({ full_name: "", phone: "", email: "", position: "", national_id: "" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => { loadEmployees(); }, [clientId]);
+
+  async function loadEmployees() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/client/employees?client_id=${clientId}`);
+      if (res.ok) { const d = await res.json(); setEmployees(d.data || []); }
+    } catch {} finally { setLoading(false); }
+  }
+
+  function openNewForm() {
+    setEditing(null);
+    setForm({ full_name: "", phone: "", email: "", position: "", national_id: "" });
+    setShowForm(true);
+  }
+
+  function openEditForm(emp: Employee) {
+    setEditing(emp);
+    setForm({
+      full_name: emp.full_name,
+      phone: emp.phone || "",
+      email: emp.email || "",
+      position: emp.position || "",
+      national_id: emp.national_id || "",
+    });
+    setShowForm(true);
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.full_name.trim()) { setMsg("الاسم مطلوب"); return; }
+    setSaving(true);
+    setMsg("");
+    try {
+      if (editing) {
+        const res = await fetch("/api/client/employees", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ employeeId: editing.id, full_name: form.full_name, phone: form.phone, email: form.email, position: form.position, national_id: form.national_id }),
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || "فشل التحديث"); }
+        setMsg("✅ تم التحديث");
+      } else {
+        const res = await fetch("/api/client/employees", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ client_id: clientId, full_name: form.full_name, phone: form.phone, email: form.email, position: form.position, national_id: form.national_id }),
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || "فشلت الإضافة"); }
+        setMsg("✅ تمت الإضافة");
+      }
+      setShowForm(false);
+      await loadEmployees();
+    } catch (err) { setMsg("❌ " + (err instanceof Error ? err.message : "فشل العملية")); }
+    setSaving(false);
+    setTimeout(() => setMsg(""), 3000);
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("حذف هذا الموظف؟")) return;
+    try {
+      const res = await fetch("/api/client/employees", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ employeeId: id }),
+      });
+      if (!res.ok) return;
+      await loadEmployees();
+    } catch {}
+  }
+
+  const canAdd = maxEmployees <= 0 || employees.length < maxEmployees;
+
+  return (
+    <div style={{ padding: "18px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <span style={{ fontSize: ".68rem", color: "#8b9dad" }}>
+          {employees.length} {maxEmployees > 0 ? `/ ${maxEmployees}` : ""} موظف
+        </span>
+        {canAdd && (
+          <button onClick={openNewForm} className="client-dash-primary-btn" style={{ height: 34, padding: "0 14px", fontSize: ".65rem", fontWeight: 700, gap: 5, borderRadius: 8 }}>
+            <Plus size={13} /> إضافة موظف
+          </button>
+        )}
+      </div>
+
+      {msg && (
+        <div style={{ padding: "8px 12px", borderRadius: 8, background: msg.startsWith("✅") ? "#f0fdf4" : "#fef2f2", color: msg.startsWith("✅") ? "#15803d" : "#dc2626", fontSize: ".65rem", fontWeight: 600, marginBottom: 10 }}>
+          {msg}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 20, color: "#8b9dad", fontSize: ".7rem" }}>جاري التحميل...</div>
+      ) : employees.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 20, color: "#8b9dad", fontSize: ".68rem" }}>
+          <Users size={28} style={{ opacity: .3, marginBottom: 8 }} />
+          <p style={{ margin: 0 }}>لا يوجد موظفون مسجلون</p>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {employees.map((emp) => (
+            <div key={emp.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10, border: "1px solid #e5eaf0", background: emp.is_active ? "#fff" : "#f9fafb" }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#eaf4ff", display: "grid", placeItems: "center", flexShrink: 0, fontWeight: 800, color: "#0875dc", fontSize: ".75rem" }}>
+                {emp.full_name.charAt(0)}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: ".72rem", fontWeight: 700, color: "#1e3a56" }}>
+                  {emp.full_name}
+                  {!emp.is_active && <span style={{ fontSize: ".55rem", color: "#8b9dad", marginRight: 6 }}>(غير نشط)</span>}
+                </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 3, flexWrap: "wrap" }}>
+                  {emp.position && <span style={{ fontSize: ".6rem", color: "#0875dc", background: "#eaf4ff", padding: "1px 8px", borderRadius: 10, fontWeight: 600 }}>{emp.position}</span>}
+                  {emp.phone && <span style={{ fontSize: ".6rem", color: "#64748b" }}>{emp.phone}</span>}
+                  {emp.email && <span style={{ fontSize: ".6rem", color: "#64748b" }}>{emp.email}</span>}
+                </div>
+              </div>
+              <button onClick={() => openEditForm(emp)} style={{ width: 28, height: 28, border: "1px solid #e5eaf0", borderRadius: 6, background: "#fff", cursor: "pointer", display: "grid", placeItems: "center", color: "#526983", transition: "all .15s", flexShrink: 0 }}
+                onMouseOver={e => { (e.currentTarget as HTMLElement).style.borderColor = "#0875dc"; (e.currentTarget as HTMLElement).style.color = "#0875dc"; }}
+                onMouseOut={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5eaf0"; (e.currentTarget as HTMLElement).style.color = "#526983"; }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button onClick={() => handleDelete(emp.id)} style={{ width: 28, height: 28, border: "1px solid #e5eaf0", borderRadius: 6, background: "#fff", cursor: "pointer", display: "grid", placeItems: "center", color: "#aab5c3", transition: "all .15s", flexShrink: 0 }}
+                onMouseOver={e => { (e.currentTarget as HTMLElement).style.borderColor = "#fecaca"; (e.currentTarget as HTMLElement).style.background = "#fef2f2"; (e.currentTarget as HTMLElement).style.color = "#dc2626"; }}
+                onMouseOut={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5eaf0"; (e.currentTarget as HTMLElement).style.background = "#fff"; (e.currentTarget as HTMLElement).style.color = "#aab5c3"; }}>
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+          onClick={() => setShowForm(false)}>
+          <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "min(420px,100%)", boxShadow: "0 12px 40px rgba(0,0,0,.15)" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: ".9rem", color: "#073766", fontWeight: 800 }}>
+                {editing ? "تعديل بيانات الموظف" : "إضافة موظف جديد"}
+              </h3>
+              <button onClick={() => setShowForm(false)} style={{ border: 0, background: "#f5f8fc", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", color: "#526983" }}>
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={{ display: "block", fontSize: ".63rem", fontWeight: 700, color: "#425c76", marginBottom: 5 }}>الاسم الكامل *</label>
+                <input value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required
+                  style={{ width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", boxSizing: "border-box", outline: "none" }}
+                  onFocus={e => e.target.style.borderColor = "#0875dc"} onBlur={e => e.target.style.borderColor = "#dfe7ef"} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: ".63rem", fontWeight: 700, color: "#425c76", marginBottom: 5 }}>المسمى الوظيفي</label>
+                <input value={form.position} onChange={e => setForm({...form, position: e.target.value})} placeholder="مثال: مدير مالي"
+                  style={{ width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", boxSizing: "border-box", outline: "none" }}
+                  onFocus={e => e.target.style.borderColor = "#0875dc"} onBlur={e => e.target.style.borderColor = "#dfe7ef"} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: ".63rem", fontWeight: 700, color: "#425c76", marginBottom: 5 }}>رقم الجوال</label>
+                  <input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="05XXXXXXXX"
+                    style={{ width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", boxSizing: "border-box", outline: "none" }}
+                    onFocus={e => e.target.style.borderColor = "#0875dc"} onBlur={e => e.target.style.borderColor = "#dfe7ef"} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: ".63rem", fontWeight: 700, color: "#425c76", marginBottom: 5 }}>البريد الإلكتروني</label>
+                  <input value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder="email@example.com"
+                    style={{ width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", boxSizing: "border-box", outline: "none" }}
+                    onFocus={e => e.target.style.borderColor = "#0875dc"} onBlur={e => e.target.style.borderColor = "#dfe7ef"} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: ".63rem", fontWeight: 700, color: "#425c76", marginBottom: 5 }}>رقم الهوية</label>
+                <input value={form.national_id} onChange={e => setForm({...form, national_id: e.target.value})} placeholder="10 أرقام"
+                  style={{ width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", boxSizing: "border-box", outline: "none" }}
+                  onFocus={e => e.target.style.borderColor = "#0875dc"} onBlur={e => e.target.style.borderColor = "#dfe7ef"} />
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button type="submit" disabled={saving} className="client-dash-primary-btn" style={{ flex: 1, height: 42 }}>
+                  {saving ? "جاري الحفظ..." : editing ? "حفظ التغييرات" : "إضافة الموظف"}
+                </button>
+                <button type="button" onClick={() => setShowForm(false)} className="client-dash-secondary-btn" style={{ height: 42, padding: "0 16px" }}>إلغاء</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
 
 function DatePickerField({ value, onChange, placeholder }: {
   value: string; onChange: (v: string) => void; placeholder?: string;

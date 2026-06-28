@@ -1,4 +1,4 @@
-export type OrderStatus = "جديد" | "بانتظار المستندات" | "قيد التنفيذ" | "مكتمل";
+export type OrderStatus = "جديد" | "بانتظار المستندات" | "قيد التنفيذ" | "مكتمل" | "ملغي" | "معلق";
 
 export type AdminOrder = {
   databaseId?: string;
@@ -18,6 +18,7 @@ export type AdminOrder = {
   email: string;
   nextAction: string;
   nextActionAt: string;
+  statusReason?: string;
 };
 
 export const statusTone: Record<OrderStatus, string> = {
@@ -25,6 +26,8 @@ export const statusTone: Record<OrderStatus, string> = {
   "بانتظار المستندات": "waiting",
   "قيد التنفيذ": "active",
   "مكتمل": "done",
+  "ملغي": "done",
+  "معلق": "waiting",
 };
 
 export const initialAdminOrders: AdminOrder[] = [

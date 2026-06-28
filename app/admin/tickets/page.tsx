@@ -6,7 +6,7 @@ import {
   Clock, AlertTriangle, CheckCircle, XCircle, RefreshCw,
   Building2, FileText, Download, ExternalLink, ChevronDown, ChevronUp,
   Hash, Briefcase, Users, Lock, X, Zap, Phone, Mail,
-  Paperclip, FileCheck,
+  Paperclip, FileCheck, CreditCard,
 } from "lucide-react";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -18,7 +18,7 @@ type AdminTicket = {
   id: string; title: string; body?: string; description?: string; category: string; priority: string; status: string;
   created_at: string; updated_at: string; user_id: string;
   client_id?: string | null; assigned_to?: string | null; files?: string[] | null;
-  profiles?: { full_name: string; email: string } | null;
+  profiles?: { full_name: string; email: string; avatar_url?: string } | null;
   clients?: {
     id: string; name: string; client_type: string;
     tax_number?: string | null; commercial_number?: string | null;
@@ -34,12 +34,34 @@ type AdminTicket = {
 type TicketMessage = {
   id: string; ticket_id: string; user_id: string; body: string;
   created_at: string; is_internal?: boolean; message_type?: string;
-  sender?: { full_name: string; role: string } | null;
+  sender?: { full_name: string; role: string; avatar_url?: string } | null;
 };
 
 type TeamMember  = { id: string; full_name: string; role: string };
 type SignedUrl    = { path: string; url: string; label: string };
 type RelatedOrder = { id: string; reference_no?: string; status: string; service?: string };
+
+type ActiveSubscription = {
+  id: string;
+  client_id: string;
+  package_id: string;
+  status: string;
+  employee_count: number;
+  base_price: number;
+  total_price: number;
+  billing_cycle: string;
+  start_date: string;
+  end_date: string | null;
+  packages: {
+    id: string;
+    title_ar: string;
+    tier_ar: string;
+    category: string;
+    billing_cycle: string;
+    price: number;
+    features: string[];
+  } | null;
+};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -172,7 +194,9 @@ export default function AdminTicketsPage() {
   const [teamMembers,      setTeamMembers]      = useState<TeamMember[]>([]);
   const [showHistory,      setShowHistory]      = useState(false);
   const [relatedOrders,    setRelatedOrders]    = useState<RelatedOrder[]>([]);
-  const [openSection,      setOpenSection]      = useState<"info" | "docs" | "orders" | null>("info");
+  const [subscription,    setSubscription]      = useState<ActiveSubscription | null>(null);
+  const [loadingSub,      setLoadingSub]        = useState(false);
+  const [openSection,      setOpenSection]      = useState<"info" | "docs" | "orders" | "subscription" | null>("info");
   const [currentUserId,    setCurrentUserId]    = useState("");
   const [currentUserAvatar, setCurrentUserAvatar] = useState("");
   const [liveIndicator,    setLiveIndicator]    = useState<"live" | "polling">("polling");
@@ -265,6 +289,17 @@ export default function AdminTicketsPage() {
     return () => clearInterval(iv);
   }, [statusFilter]);
 
+  // Load subscription when ticket selected
+  useEffect(() => {
+    if (!selected?.clients?.id) { setSubscription(null); return; }
+    setLoadingSub(true);
+    fetch(`/api/client/active-subscription?client_id=${selected.clients.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(res => { setSubscription(res?.data || null); })
+      .catch(() => setSubscription(null))
+      .finally(() => setLoadingSub(false));
+  }, [selected?.clients?.id]);
+
   // Load messages when ticket selected + poll every 5s
   useEffect(() => {
     if (!selected) return;
@@ -356,6 +391,13 @@ export default function AdminTicketsPage() {
         }
       }
     }
+    const { data: clientDocs } = await supabase.from("client_documents").select("*").eq("client_id", ticket.client_id);
+    if (clientDocs) {
+      for (const doc of clientDocs) {
+        const { data } = await supabase.storage.from("client-documents").createSignedUrl(doc.storage_path, 3600);
+        if (data?.signedUrl) results.push({ path: doc.storage_path, url: data.signedUrl, label: doc.filename });
+      }
+    }
     if (ticket.files?.length) {
       for (const path of ticket.files) {
         const fileName = path.split("/").pop() || path;
@@ -439,7 +481,7 @@ export default function AdminTicketsPage() {
     setCannedResponses(p => p.filter(r => r.id !== id));
   }
 
-  function toggleSection(s: "info" | "docs" | "orders") {
+  function toggleSection(s: "info" | "docs" | "orders" | "subscription") {
     setOpenSection(p => p === s ? null : s);
   }
 
@@ -614,11 +656,266 @@ export default function AdminTicketsPage() {
         <div className="tkt3-center-col">
           {!selected ? (
             <div className="tkt3-center-empty">
-              <div className="tkt3-center-empty-icon"><MessageSquare size={40} color="#c0cbd8" /></div>
-              <p>اختر تذكرة من القائمة لعرض المحادثة</p>
+              <div className="tkt3-center-empty-icon"><MessageSquare size={36} color="#c0cbd8" /></div>
+              <h3>مركز الدعم</h3>
+              <p>اختر تذكرة من القائمة لعرض المحادثة والرد عليها</p>
+              <div className="tkt3-center-empty-stats">
+                <div className="tkt3-center-empty-stat">
+                  <strong>{stats.total}</strong>
+                  <span>إجمالي التذاكر</span>
+                </div>
+                <div className="tkt3-center-empty-stat">
+                  <strong>{stats.urgent}</strong>
+                  <span>عاجلة</span>
+                </div>
+                <div className="tkt3-center-empty-stat">
+                  <strong>{stats.newCount}</strong>
+                  <span>جديدة</span>
+                </div>
+                <div className="tkt3-center-empty-stat">
+                  <strong>{stats.resolvedToday}</strong>
+                  <span>تم الحل اليوم</span>
+                </div>
+              </div>
             </div>
           ) : (
             <>
+              {/* ── PROFESSIONAL CLIENT INFO CARD ── */}
+              {selected.clients && (
+                <div style={{ background: "#fff", borderBottom: "2px solid #e5eaf0", flexShrink: 0 }}>
+                  {/* ── Top: avatar + name + contacts + stats ── */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px" }}>
+                    <div style={{ width: 44, height: 44, borderRadius: "50%", background: "linear-gradient(135deg,#0875dc,#073766)", color: "#fff", display: "grid", placeItems: "center", fontSize: ".95rem", fontWeight: 800, flexShrink: 0, boxShadow: "0 3px 10px rgba(8,117,220,.28)" }}>
+                      {(selected.clients?.name || selected.profiles?.full_name || "ع")[0]}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <strong style={{ fontSize: ".82rem", color: "#073766", lineHeight: 1.3 }}>{selected.profiles?.full_name || selected.clients?.name || "—"}</strong>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".62rem", fontWeight: 800, padding: "3px 10px", borderRadius: 20, border: "2px solid", background: selected.clients?.company_status === "active" ? "#f0fdf4" : "#fef2f2", color: selected.clients?.company_status === "active" ? "#15803d" : "#dc2626", borderColor: selected.clients?.company_status === "active" ? "#bbf7d0" : "#fecaca" }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block", flexShrink: 0 }} />
+                          {CO_STATUS_LABELS[selected.clients?.company_status || ""] || selected.clients?.company_status || "—"}
+                        </span>
+                      </div>
+                      {selected.clients?.name && selected.profiles?.full_name && (
+                        <span style={{ fontSize: ".62rem", color: "#8b9dad" }}>{selected.clients.name}</span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {selected.clients?.phone && (
+                        <a href={`tel:${selected.clients.phone}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: ".65rem", color: "#344d69", textDecoration: "none", background: "#f5f8fc", border: "1px solid #e5eaf0", borderRadius: 8, padding: "7px 11px", transition: "all .15s" }}
+                          onMouseOver={e => { (e.currentTarget as HTMLElement).style.borderColor = "#0875dc"; (e.currentTarget as HTMLElement).style.color = "#0875dc"; (e.currentTarget as HTMLElement).style.background = "#eaf4ff"; }}
+                          onMouseOut={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5eaf0"; (e.currentTarget as HTMLElement).style.color = "#344d69"; (e.currentTarget as HTMLElement).style.background = "#f5f8fc"; }}>
+                          <Phone size={13} /> {selected.clients.phone}
+                        </a>
+                      )}
+                      {(selected.clients?.email || selected.profiles?.email) && (
+                        <a href={`mailto:${selected.clients?.email || selected.profiles?.email}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: ".65rem", color: "#344d69", textDecoration: "none", background: "#f5f8fc", border: "1px solid #e5eaf0", borderRadius: 8, padding: "7px 11px", transition: "all .15s" }}
+                          onMouseOver={e => { (e.currentTarget as HTMLElement).style.borderColor = "#7c3aed"; (e.currentTarget as HTMLElement).style.color = "#7c3aed"; (e.currentTarget as HTMLElement).style.background = "#f5f3ff"; }}
+                          onMouseOut={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5eaf0"; (e.currentTarget as HTMLElement).style.color = "#344d69"; (e.currentTarget as HTMLElement).style.background = "#f5f8fc"; }}>
+                          <Mail size={13} /> {selected.clients?.email || selected.profiles?.email}
+                        </a>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ textAlign: "center", background: "#f8fafc", border: "1px solid #e5eaf0", borderRadius: 8, padding: "8px 14px" }}>
+                        <strong style={{ display: "block", fontSize: "1rem", color: "#073766", lineHeight: 1 }}>{clientTicketCount}</strong>
+                        <span style={{ fontSize: ".5rem", color: "#8b9dad" }}>تذاكر</span>
+                      </div>
+                      <div style={{ textAlign: "center", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "8px 14px" }}>
+                        <strong style={{ display: "block", fontSize: "1rem", color: "#15803d", lineHeight: 1 }}>{clientResolvedCount}</strong>
+                        <span style={{ fontSize: ".5rem", color: "#15803d" }}>محلولة</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Collapsible sections ── */}
+                  <div style={{ borderTop: "1px solid #f0f3f8" }}>
+
+                    {/* Company info */}
+                    {selected.clients && (
+                      <div style={{ borderBottom: "1px solid #f0f3f8" }}>
+                        <button onClick={() => toggleSection("info")} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "11px 20px", border: 0, background: "transparent", cursor: "pointer", font: "inherit", fontSize: ".68rem", fontWeight: 700, color: "#344d69", textAlign: "right", transition: "background .15s" }}
+                          onMouseOver={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"} onMouseOut={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+                          <Building2 size={13} color="#0875dc" /> <span style={{ flex: 1, textAlign: "right" }}>بيانات المنشأة</span>
+                          {openSection === "info" ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
+                        {openSection === "info" && (
+                          <div style={{ padding: "0 20px 12px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {[
+                              { label: "الرقم الضريبي",  value: selected.clients.tax_number },
+                              { label: "السجل التجاري",  value: selected.clients.commercial_number },
+                              { label: "المدينة",         value: selected.clients.city },
+                              { label: "النشاط",          value: selected.clients.company_activity },
+                              { label: "العنوان",         value: selected.clients.company_address },
+                              { label: "حجم الكيان",      value: selected.clients.entity_size ? ENTITY_SIZE_LABELS[selected.clients.entity_size] : null },
+                              { label: "النطاق",          value: selected.clients.company_scope ? SCOPE_LABELS[selected.clients.company_scope] : null },
+
+                              { label: "الموظفون",        value: selected.clients.employee_count != null ? String(selected.clients.employee_count) : null },
+                            ].filter(r => r.value).map(r => (
+                              <div key={r.label} style={{ background: "#f8fafc", border: "1px solid #e5eaf0", borderRadius: 8, padding: "8px 12px", minWidth: 130, flex: 1 }}>
+                                <div style={{ fontSize: ".55rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>{r.label}</div>
+                                <div style={{ fontSize: ".65rem", color: "#1e3a56", fontWeight: 700 }}>{r.value}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Active Subscription */}
+                    <div style={{ borderBottom: "1px solid #f0f3f8" }}>
+                      <button onClick={() => toggleSection("subscription")} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "11px 20px", border: 0, background: "transparent", cursor: "pointer", font: "inherit", fontSize: ".68rem", fontWeight: 700, color: "#344d69", textAlign: "right", transition: "background .15s" }}
+                        onMouseOver={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"} onMouseOut={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+                        <CreditCard size={13} color="#15803d" /> <span style={{ flex: 1, textAlign: "right" }}>الباقة النشطة</span>
+                        {loadingSub ? <Loader size={11} className="spin" /> : subscription ? <span style={{ fontSize: ".54rem", fontWeight: 800, padding: "1px 7px", borderRadius: 10, background: "#f0fdf4", color: "#15803d", marginRight: "auto" }}>نشطة</span> : null}
+                        {openSection === "subscription" ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      </button>
+                      {openSection === "subscription" && (
+                        <div style={{ padding: "0 20px 12px" }}>
+                          {loadingSub ? (
+                            <div style={{ textAlign: "center", padding: 12, color: "#8b9dad" }}>جاري التحميل...</div>
+                          ) : subscription ? (
+                            <div style={{ background: "linear-gradient(135deg,#063461,#0875dc)", borderRadius: 12, padding: 14, color: "#fff" }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                <div>
+                                  <div style={{ fontSize: ".55rem", opacity: .7, fontWeight: 600 }}>{subscription.packages?.tier_ar || "—"}</div>
+                                  <div style={{ fontSize: ".82rem", fontWeight: 800 }}>{subscription.packages?.title_ar || "—"}</div>
+                                </div>
+                                <div style={{ textAlign: "center" }}>
+                                  <div style={{ fontSize: "1.2rem", fontWeight: 900, lineHeight: 1 }}>{subscription.total_price.toLocaleString("ar-SA")}</div>
+                                  <div style={{ fontSize: ".5rem", opacity: .7 }}>ر.س</div>
+                                </div>
+                              </div>
+                              <div style={{ background: "rgba(255,255,255,.15)", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".6rem", marginBottom: 4 }}>
+                                  <span style={{ opacity: .8 }}>تاريخ البداية: {subscription.start_date}</span>
+                                  <span style={{ opacity: .8 }}>{subscription.end_date ? `النهاية: ${subscription.end_date}` : "مستمر"}</span>
+                                </div>
+                                {subscription.employee_count > 0 && (
+                                  <div style={{ fontSize: ".58rem", opacity: .8, display: "flex", alignItems: "center", gap: 4 }}>
+                                    <Users size={10} /> {subscription.employee_count} موظف
+                                  </div>
+                                )}
+                              </div>
+                              {subscription.packages?.features && subscription.packages.features.length > 0 && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                  {subscription.packages.features.slice(0, 3).map((f, i) => (
+                                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: ".58rem", opacity: .85 }}>
+                                      <CheckCircle size={9} /> {f}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: ".62rem", color: "#aab5c3", textAlign: "center", padding: 10 }}>
+                              لا توجد باقة نشطة لهذه المنشأة
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Documents */}
+                    <div style={{ borderBottom: "1px solid #f0f3f8" }}>
+                      <button onClick={() => toggleSection("docs")} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "11px 20px", border: 0, background: "transparent", cursor: "pointer", font: "inherit", fontSize: ".68rem", fontWeight: 700, color: "#344d69", textAlign: "right", transition: "background .15s" }}
+                        onMouseOver={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"} onMouseOut={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+                        <FileText size={13} color="#7c3aed" /> <span style={{ flex: 1, textAlign: "right" }}>المستندات</span>
+                        {loadingUrls ? <Loader size={11} className="spin" /> : <span style={{ fontSize: ".54rem", fontWeight: 800, padding: "1px 7px", borderRadius: 10, background: "#f0f3f8", color: "#526983", marginRight: "auto" }}>{signedUrls.length}</span>}
+                        {openSection === "docs" ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      </button>
+                      {openSection === "docs" && (
+                        <div style={{ padding: "0 20px 12px" }}>
+                          {signedUrls.length === 0 ? (
+                            <div style={{ fontSize: ".62rem", color: "#aab5c3", textAlign: "center", padding: 10 }}>لا توجد مستندات مرفوعة</div>
+                          ) : (
+                            <>
+                              {clientDocs.length > 0 && (
+                                <>
+                                  <div style={{ fontSize: ".58rem", color: "#7a8fa6", fontWeight: 700, marginBottom: 5 }}>مستندات المنشأة</div>
+                                  {clientDocs.map((doc, i) => (
+                                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 0", borderBottom: "1px solid #f5f8fc" }}>
+                                      <FileText size={12} color="#7c3aed" />
+                                      <span style={{ fontSize: ".62rem", color: "#344d69", fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.label}</span>
+                                      <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ display: "grid", placeItems: "center", width: 24, height: 24, borderRadius: 6, color: "#0875dc", background: "#eaf4ff", border: "1px solid #bddcff", textDecoration: "none", transition: "all .15s" }}
+                                        onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = "#dbeeff"; (e.currentTarget as HTMLElement).style.transform = "scale(1.1)"; }}
+                                        onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = "#eaf4ff"; (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}>
+                                        <ExternalLink size={10} />
+                                      </a>
+                                      <a href={doc.url} download style={{ display: "grid", placeItems: "center", width: 24, height: 24, borderRadius: 6, color: "#15803d", background: "#f0fdf4", border: "1px solid #bbf7d0", textDecoration: "none", transition: "all .15s" }}
+                                        onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = "#dcfce7"; (e.currentTarget as HTMLElement).style.transform = "scale(1.1)"; }}
+                                        onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = "#f0fdf4"; (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}>
+                                        <Download size={10} />
+                                      </a>
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                              {ticketAttachments.length > 0 && (
+                                <>
+                                  <div style={{ fontSize: ".58rem", color: "#7a8fa6", fontWeight: 700, marginBottom: 5, marginTop: 8 }}>مرفقات التذكرة</div>
+                                  {ticketAttachments.map((doc, i) => (
+                                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 0", borderBottom: "1px solid #f5f8fc" }}>
+                                      <FileText size={12} color="#526983" />
+                                      <span style={{ fontSize: ".62rem", color: "#344d69", fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.label.replace("مرفق: ", "")}</span>
+                                      <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ display: "grid", placeItems: "center", width: 24, height: 24, borderRadius: 6, color: "#0875dc", background: "#eaf4ff", border: "1px solid #bddcff", textDecoration: "none", transition: "all .15s" }}
+                                        onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = "#dbeeff"; (e.currentTarget as HTMLElement).style.transform = "scale(1.1)"; }}
+                                        onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = "#eaf4ff"; (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}>
+                                        <ExternalLink size={10} />
+                                      </a>
+                                      <a href={doc.url} download style={{ display: "grid", placeItems: "center", width: 24, height: 24, borderRadius: 6, color: "#15803d", background: "#f0fdf4", border: "1px solid #bbf7d0", textDecoration: "none", transition: "all .15s" }}
+                                        onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = "#dcfce7"; (e.currentTarget as HTMLElement).style.transform = "scale(1.1)"; }}
+                                        onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = "#f0fdf4"; (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}>
+                                        <Download size={10} />
+                                      </a>
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Related orders */}
+                    <div>
+                      <button onClick={() => toggleSection("orders")} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "11px 20px", border: 0, background: "transparent", cursor: "pointer", font: "inherit", fontSize: ".68rem", fontWeight: 700, color: "#344d69", textAlign: "right", transition: "background .15s" }}
+                        onMouseOver={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"} onMouseOut={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
+                        <Briefcase size={13} color="#0875dc" /> <span style={{ flex: 1, textAlign: "right" }}>الطلبات المرتبطة</span>
+                        {relatedOrders.length > 0 && <span style={{ fontSize: ".54rem", fontWeight: 800, padding: "1px 7px", borderRadius: 10, background: "#eaf4ff", color: "#0875dc", marginRight: "auto" }}>{relatedOrders.length}</span>}
+                        {openSection === "orders" ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      </button>
+                      {openSection === "orders" && (
+                        <div style={{ padding: "0 20px 12px" }}>
+                          {relatedOrders.length === 0 ? (
+                            <div style={{ fontSize: ".62rem", color: "#aab5c3", textAlign: "center", padding: 10 }}>لا توجد طلبات مرتبطة</div>
+                          ) : relatedOrders.map(o => (
+                            <a key={o.id} href="/admin/orders" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "7px 0", borderBottom: "1px solid #f5f8fc", textDecoration: "none", transition: "all .15s" }}
+                              onMouseOver={e => { (e.currentTarget as HTMLElement).style.transform = "translateX(-2px)"; }}
+                              onMouseOut={e => { (e.currentTarget as HTMLElement).style.transform = "translateX(0)"; }}>
+                              <div>
+                                <div style={{ fontSize: ".62rem", fontWeight: 800, color: "#073766", fontFamily: "monospace", direction: "ltr" }}>{o.reference_no || o.id.slice(0,8).toUpperCase()}</div>
+                                <div style={{ fontSize: ".56rem", color: "#8b9dad", marginTop: 1 }}>{o.service}</div>
+                              </div>
+                              <span style={{ fontSize: ".54rem", fontWeight: 700, color: "#0875dc", background: "#eaf4ff", padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap", flexShrink: 0 }}>{ORDER_STATUS_AR[o.status] ?? o.status}</span>
+                            </a>
+                          ))}
+                          {relatedOrders.length > 0 && (
+                            <a href="/admin/orders" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: ".6rem", color: "#0875dc", fontWeight: 600, textDecoration: "none" }}
+                              onMouseOver={e => (e.currentTarget as HTMLElement).style.textDecoration = "underline"}
+                              onMouseOut={e => (e.currentTarget as HTMLElement).style.textDecoration = "none"}>
+                              عرض كل الطلبات <ExternalLink size={10} />
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
               {/* ── TOP HEADER ── */}
               <div className="tkt3-dh">
                 <div className="tkt3-dh-top">
@@ -626,8 +923,6 @@ export default function AdminTicketsPage() {
                     <div className="tkt3-dh-id"><Hash size={11} />#{selected.id.slice(0,8).toUpperCase()} · {selected.category}</div>
                     <h2 className="tkt3-dh-title">{selected.title}</h2>
                     <div className="tkt3-dh-sub">
-                      <span>{selected.profiles?.full_name || "—"}</span>
-                      {selected.profiles?.email && <span style={{ color: "#aab5c3" }}>{selected.profiles.email}</span>}
                       <span>أُنشئت {formatAge(selected.created_at)}</span>
                     </div>
                   </div>
@@ -746,6 +1041,14 @@ export default function AdminTicketsPage() {
                                 <div style={{ fontSize: ".65rem", color: "#1e3a56", fontWeight: 700 }}>{f.value}</div>
                               </div>
                             ))}
+                          </div>
+                        </div>
+                      )}
+                      {new Date(selected.updated_at).getTime() > new Date(selected.created_at).getTime() + 60000 && (
+                        <div style={{ paddingTop: 6 }}>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "5px 10px", fontSize: ".6rem", color: "#92400e", fontWeight: 600 }}>
+                            <FileText size={12} style={{ color: "#d97706" }} />
+                            آخر تعديل: {new Date(selected.updated_at).toLocaleString("ar-SA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                           </div>
                         </div>
                       )}
@@ -901,166 +1204,7 @@ export default function AdminTicketsPage() {
           )}
         </div>
 
-        {/* ══════════════════ RIGHT: CLIENT INFO ══════════════════ */}
-        {selected && (
-          <aside className="tkt3-client-col">
-
-            {/* Client identity */}
-            <div className="tkt3-client-hero">
-              <div className="tkt3-client-av">
-                {(selected.clients?.name || selected.profiles?.full_name || "ع")[0]}
-              </div>
-              <div>
-                <div className="tkt3-client-name-lrg">{selected.profiles?.full_name || selected.clients?.name || "—"}</div>
-                {selected.clients?.name && selected.profiles?.full_name && (
-                  <div className="tkt3-client-sub">{selected.clients.name}</div>
-                )}
-                {selected.clients?.client_type && (
-                  <span className="tkt3-client-type">
-                    {selected.clients.client_type === "company" ? "مالك شركة/ مؤسسة" : "فرد"}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Quick contact */}
-            <div className="tkt3-contact-row">
-              {selected.clients?.phone && (
-                <a href={`tel:${selected.clients.phone}`} className="tkt3-contact-btn">
-                  <Phone size={13} /> {selected.clients.phone}
-                </a>
-              )}
-              {(selected.clients?.email || selected.profiles?.email) && (
-                <a href={`mailto:${selected.clients?.email || selected.profiles?.email}`} className="tkt3-contact-btn email">
-                  <Mail size={13} /> {selected.clients?.email || selected.profiles?.email}
-                </a>
-              )}
-            </div>
-
-            {/* Activity mini-stats */}
-            <div className="tkt3-mini-stats">
-              <div className="tkt3-mini-stat">
-                <span className="tkt3-mini-num">{clientTicketCount}</span>
-                <span className="tkt3-mini-lbl">تذاكر</span>
-              </div>
-              <div className="tkt3-mini-stat">
-                <span className="tkt3-mini-num" style={{ color: "#15803d" }}>{clientResolvedCount}</span>
-                <span className="tkt3-mini-lbl">محلولة</span>
-              </div>
-              <div className="tkt3-mini-stat">
-                <span className="tkt3-mini-num" style={{ fontSize: ".6rem" }}>{formatAge(selected.updated_at)}</span>
-                <span className="tkt3-mini-lbl">آخر نشاط</span>
-              </div>
-            </div>
-
-            {/* ── Collapsible: Company Info ── */}
-            {selected.clients && (
-              <div className="tkt3-section">
-                <button className="tkt3-sec-toggle" onClick={() => toggleSection("info")}>
-                  <Building2 size={13} color="#0875dc" /> <span>بيانات المنشأة</span>
-                  {openSection === "info" ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                </button>
-                {openSection === "info" && (
-                  <div className="tkt3-sec-body">
-                    {[
-                      { label: "الرقم الضريبي",  value: selected.clients.tax_number },
-                      { label: "السجل التجاري",  value: selected.clients.commercial_number },
-                      { label: "المدينة",         value: selected.clients.city },
-                      { label: "النشاط",          value: selected.clients.company_activity },
-                      { label: "العنوان",         value: selected.clients.company_address },
-                      { label: "حجم الكيان",      value: selected.clients.entity_size ? ENTITY_SIZE_LABELS[selected.clients.entity_size] : null },
-                      { label: "النطاق",          value: selected.clients.company_scope ? SCOPE_LABELS[selected.clients.company_scope] : null },
-                      { label: "الحالة",          value: selected.clients.company_status ? CO_STATUS_LABELS[selected.clients.company_status] : null },
-                      { label: "الموظفون",        value: selected.clients.employee_count != null ? String(selected.clients.employee_count) : null },
-                    ].filter(r => r.value).map(r => (
-                      <div key={r.label} className="tkt3-info-row">
-                        <span className="tkt3-info-lbl">{r.label}</span>
-                        <span className="tkt3-info-val">{r.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Collapsible: Documents ── */}
-            <div className="tkt3-section">
-              <button className="tkt3-sec-toggle" onClick={() => toggleSection("docs")}>
-                <FileText size={13} color="#7c3aed" /> <span>المستندات</span>
-                {loadingUrls
-                  ? <Loader size={11} className="spin" style={{ marginRight: "auto" }} />
-                  : <span className="tkt3-sec-count">{signedUrls.length}</span>
-                }
-                {openSection === "docs" ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              </button>
-              {openSection === "docs" && (
-                <div className="tkt3-sec-body">
-                  {signedUrls.length === 0 ? (
-                    <div className="tkt3-sec-empty">لا توجد مستندات مرفوعة</div>
-                  ) : (
-                    <>
-                      {clientDocs.length > 0 && (
-                        <>
-                          <div className="tkt3-doc-group-lbl">مستندات المنشأة</div>
-                          {clientDocs.map((doc, i) => (
-                            <div key={i} className="tkt3-doc-row">
-                              <FileText size={12} color="#7c3aed" />
-                              <span className="tkt3-doc-name">{doc.label}</span>
-                              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="tkt3-doc-btn view"><ExternalLink size={10} /></a>
-                              <a href={doc.url} download className="tkt3-doc-btn dl"><Download size={10} /></a>
-                            </div>
-                          ))}
-                        </>
-                      )}
-                      {ticketAttachments.length > 0 && (
-                        <>
-                          <div className="tkt3-doc-group-lbl" style={{ marginTop: 8 }}>مرفقات التذكرة</div>
-                          {ticketAttachments.map((doc, i) => (
-                            <div key={i} className="tkt3-doc-row">
-                              <FileText size={12} color="#526983" />
-                              <span className="tkt3-doc-name">{doc.label.replace("مرفق: ", "")}</span>
-                              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="tkt3-doc-btn view"><ExternalLink size={10} /></a>
-                              <a href={doc.url} download className="tkt3-doc-btn dl"><Download size={10} /></a>
-                            </div>
-                          ))}
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* ── Collapsible: Related Orders ── */}
-            <div className="tkt3-section">
-              <button className="tkt3-sec-toggle" onClick={() => toggleSection("orders")}>
-                <Briefcase size={13} color="#0875dc" /> <span>الطلبات المرتبطة</span>
-                {relatedOrders.length > 0 && <span className="tkt3-sec-count" style={{ background: "#eaf4ff", color: "#0875dc" }}>{relatedOrders.length}</span>}
-                {openSection === "orders" ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              </button>
-              {openSection === "orders" && (
-                <div className="tkt3-sec-body">
-                  {relatedOrders.length === 0 ? (
-                    <div className="tkt3-sec-empty">لا توجد طلبات مرتبطة</div>
-                  ) : relatedOrders.map(o => (
-                    <a key={o.id} href="/admin/orders" className="tkt3-order-row">
-                      <div>
-                        <div className="tkt3-order-ref">{o.reference_no || o.id.slice(0,8).toUpperCase()}</div>
-                        <div className="tkt3-order-svc">{o.service}</div>
-                      </div>
-                      <span className="tkt3-order-st">{ORDER_STATUS_AR[o.status] ?? o.status}</span>
-                    </a>
-                  ))}
-                  {relatedOrders.length > 0 && (
-                    <a href="/admin/orders" className="tkt3-orders-link">عرض كل الطلبات <ExternalLink size={10} /></a>
-                  )}
-                </div>
-              )}
-            </div>
-
-          </aside>
-        )}
-      </div>
+        </div>
 
 
   );

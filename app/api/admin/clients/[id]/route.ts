@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/data/admin-team";
 
 export const dynamic = "force-dynamic";
 
 export async function PATCH(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await requireRole("admin");
+
     const { id } = await params;
     const body = await _request.json();
     const supabase = createClient(
@@ -28,6 +32,9 @@ export async function PATCH(_request: Request, { params }: { params: Promise<{ i
 
     return NextResponse.json({ error: "invalid_action" }, { status: 400 });
   } catch (e) {
+    if (e instanceof Error && (e.message === "unauthorized" || e.message === "forbidden")) {
+      return NextResponse.json({ error: "غير مصرح لك بهذا الإجراء" }, { status: 403 });
+    }
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }

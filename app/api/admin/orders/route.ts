@@ -2,17 +2,18 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { createAdminOrder, listAdminOrders } from "@/lib/data/admin-orders";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { requireRole } from "@/lib/data/admin-team";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   if (!isSupabaseConfigured()) return NextResponse.json({ error: "database_not_configured" }, { status: 503 });
-  try { return NextResponse.json({ data: await listAdminOrders() }); }
+  try { await requireRole("operator"); return NextResponse.json({ data: await listAdminOrders() }); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "unknown_error" }, { status: 500 }); }
 }
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) return NextResponse.json({ error: "database_not_configured" }, { status: 503 });
-  try { return NextResponse.json({ data: await createAdminOrder(await request.json()) }, { status: 201 }); }
+  try { await requireRole("operator"); return NextResponse.json({ data: await createAdminOrder(await request.json()) }, { status: 201 }); }
   catch (error) { if (error instanceof ZodError) return NextResponse.json({ error: "validation_error", issues: error.issues }, { status: 400 }); return NextResponse.json({ error: error instanceof Error ? error.message : "unknown_error" }, { status: 500 }); }
 }

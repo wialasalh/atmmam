@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageSquare, Plus, AlertTriangle, ChevronLeft, Loader, Clock, CheckCircle, XCircle, RefreshCw, Search } from "lucide-react";
+import { MessageSquare, Plus, AlertTriangle, ChevronLeft, Loader, Clock, CheckCircle, XCircle, RefreshCw, Search, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -193,7 +193,7 @@ export default function TicketsPage() {
           يمكنك التواصل معنا مباشرة عبر واتساب للحالات العاجلة.
         </p>
         <a href="https://wa.me/966592693456" target="_blank" rel="noopener" className="client-dash-secondary-btn">
-          💬 واتساب
+          <MessageCircle size={12} /> واتساب
         </a>
       </div>
     </div>

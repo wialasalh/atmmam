@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { requireRole } from "@/lib/data/admin-team";
 
 export const dynamic = "force-dynamic";
 export async function GET() {
   if (!isSupabaseConfigured()) return NextResponse.json({ error: "database_not_configured" }, { status: 503 });
+  await requireRole("operator");
   const supabase = await createSupabaseServerClient();
   const [clients, services, agencies, profiles, orders] = await Promise.all([
     supabase.from("clients").select("id,name,phone,email").is("deleted_at", null).order("name"),

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { deleteTeamMember } from "@/lib/data/admin-team";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { requireRole } from "@/lib/data/admin-team";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,7 @@ export async function POST(request: Request) {
   if (!isSupabaseConfigured())
     return NextResponse.json({ error: "database_not_configured" }, { status: 503 });
   try {
+    await requireRole("admin");
     const body = await request.json();
     if (!body.profileId)
       return NextResponse.json({ error: "معرف العضو مطلوب" }, { status: 400 });

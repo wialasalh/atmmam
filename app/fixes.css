@@ -167,7 +167,7 @@ body{
 .hero{
   grid-template-columns:minmax(0,1fr) 410px;
   gap:30px 64px;
-  align-items:start;
+  align-items:flex-start;
   min-height:0;
   padding-top:34px;
   padding-bottom:36px}
@@ -727,7 +727,7 @@ body{
   display:grid;
   grid-template-columns:48px minmax(0,1fr) auto;
   gap:16px;
-  align-items:start;
+  align-items:flex-start;
   padding:22px;
   box-shadow:0 1px 0 rgba(16,35,63,.04)}
 .services-item-num{
@@ -1018,7 +1018,7 @@ background:var(--success)}
   gap:8px}
 .cform-inline{
   grid-template-columns:minmax(0,1fr) minmax(250px,.9fr);
-  align-items:end}
+  align-items:flex-end}
 .cform.cform-compact input,
 .cform.cform-compact select,
 .cform.cform-compact textarea{
@@ -1161,7 +1161,7 @@ background:var(--success)}
 
 .packages-heading{
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  align-items:end;
+  align-items:flex-end;
   gap:20px 48px}
 
 .package-filter-bar{
@@ -1631,7 +1631,7 @@ background:var(--success)}
 .free-tools-section.is-directory .free-tool-card{
   position:relative;
   grid-template-columns:58px minmax(0,1fr);
-  align-items:start;
+  align-items:flex-start;
   min-height:228px;
   border-radius:16px;
   padding:20px;
@@ -1965,7 +1965,7 @@ background:var(--success)}
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(300px,430px);
   gap:36px;
-  align-items:end;
+  align-items:flex-end;
   margin-bottom:38px;
   text-align:start}
 
@@ -2416,7 +2416,7 @@ background:var(--success)}
   display:grid;
   grid-template-columns:20px minmax(0,1fr);
   gap:8px;
-  align-items:start;
+  align-items:flex-start;
   padding-right:0;
   font-size:.9rem}
 
@@ -2657,7 +2657,7 @@ background:var(--success)}
   .free-tools-section.is-compact .section-heading{
     grid-template-columns:1fr;
     gap:18px;
-    align-items:start}
+    align-items:flex-start}
 
   .free-tools-section.is-compact .free-tools-head-action{
     width:fit-content}
@@ -2905,7 +2905,7 @@ background:var(--success)}
   position:static;
   display:grid;
   grid-template-columns:minmax(0,1fr) auto;
-  align-items:end;
+  align-items:flex-end;
   gap:26px;
   margin:0 0 26px;
   text-align:start}
@@ -4584,7 +4584,7 @@ background:var(--success)}
 .formation-estimator-page .estimator-result .checklist-score{
   display:grid;
   gap:2px;
-  align-items:start;
+  align-items:flex-start;
   margin:0;
   border:0;
   padding:0}
@@ -4944,7 +4944,7 @@ background:var(--success)}
   min-height:126px}
 
 .scope-summary-step{
-  align-self:start}
+  align-self:flex-start}
 
 .scope-selection-summary{
   display:grid;
@@ -5125,11 +5125,11 @@ background:var(--success)}
   display:grid;
   grid-template-columns:1fr;
   gap:14px;
-  align-content:start;
+  align-content:flex-start;
   padding:28px 30px}
 
 .budget-planner-controls .calculator-group{
-  align-content:start;
+  align-content:flex-start;
   border:1px solid rgba(36,107,206,.12);
   border-radius:15px;
   padding:15px;
@@ -5811,7 +5811,7 @@ background:var(--success)}
 
 /* Compact service-intent navigator in the homepage hero. */
 .hero-situation{
-  align-content:start;
+  align-content:flex-start;
   gap:16px;
   padding:20px;
   overflow:hidden}

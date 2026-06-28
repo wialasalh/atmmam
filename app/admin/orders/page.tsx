@@ -2,9 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useState, useRef } from "react";
 import { AdminOrder, initialAdminOrders, OrderStatus, readAdminOrders, statusTone, writeAdminOrders } from "@/lib/admin-orders";
-import { AdminOpsHeader } from "@/components/admin-ops-header";
 import { allowedOrderStatuses, canChangeOrderStatus, filterAdminOrders } from "@/lib/domain/orders";
-import { X, Search, Plus, AlertTriangle, Check, Clock, Flag, User, FileText, Building2, Phone, Mail, Calendar, MessageSquare, ChevronDown, Layers, ListChecks, ExternalLink, Upload, RefreshCw, Copy, ChevronLeft, AlertCircle } from "lucide-react";
+import { X, Search, Plus, AlertTriangle, Check, Clock, Flag, User, FileText, Building2, Phone, Mail, Calendar, CheckCircle, MessageSquare, ChevronDown, Layers, ListChecks, ExternalLink, Upload, RefreshCw, Copy, ChevronLeft, AlertCircle } from "lucide-react";
+import { useRoleGuard } from "@/lib/auth/use-role-guard";
 
 const statusTabs: Array<OrderStatus | "الكل"> = ["الكل", "جديد", "بانتظار المستندات", "قيد التنفيذ", "مكتمل", "ملغي", "معلق"];
 type CatalogItem = { id: string; name?: string; full_name?: string; phone?: string; email?: string; agency_id?: string };
@@ -38,6 +38,7 @@ export default function AdminOrdersPage() {
   const [pendingTargetStatus, setPendingTargetStatus] = useState<OrderStatus | null>(null);
   const [relatedTickets, setRelatedTickets] = useState<RelatedTicket[]>([]);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const { role, loading } = useRoleGuard("operator");
 
   async function loadDatabase() {
     const [ordersResponse, catalogResponse] = await Promise.all([fetch("/api/admin/orders"), fetch("/api/admin/catalog")]);
@@ -113,9 +114,9 @@ export default function AdminOrdersPage() {
           agencyId:form.get("agencyId") || service?.agency_id || undefined,
           assigneeId:form.get("assigneeId")||undefined,
           priority:form.get("priority")||"normal",
-          dueAt:form.get("dueAt")||undefined,
+          dueAt:form.get("dueAt")?new Date(form.get("dueAt") as string).toISOString():undefined,
           nextActionText:form.get("nextActionText")||undefined,
-          nextActionAt:form.get("nextActionAt")||undefined,
+          nextActionAt:form.get("nextActionAt")?new Date(form.get("nextActionAt") as string).toISOString():undefined,
           notes:form.get("notes")||undefined,
         })
       });
@@ -140,8 +141,8 @@ export default function AdminOrdersPage() {
 
   async function uploadSupportingDocument(file:File){if(!selected)return;if(databaseMode&&selected.databaseId){const form=new FormData();form.set("name","المستند الداعم");form.set("file",file);const response=await fetch(`/api/admin/orders/${selected.databaseId}/documents`,{method:"POST",body:form});if(!response.ok){setNotice("تعذر رفع المستند؛ تحقق من النوع والحجم والصلاحية");return}const documentsResponse=await fetch(`/api/admin/orders/${selected.databaseId}/documents`);if(documentsResponse.ok){const payload=await documentsResponse.json() as {data:Array<{name:string;status:string;download_url?:string|null}>};setRemoteDocs((current)=>({...current,[selected.id]:payload.data}))}setNotice("تم رفع المستند وتسجيله");return}setUploadedDocs((current)=>({...current,[selected.id]:[...(current[selected.id]??[]),"supporting"]}));setNotice("تمت إضافة المستند إلى الطلب")}
 
-  return <main className="ops-shell" dir="rtl">
-    <AdminOpsHeader active="orders" />
+  if (loading) return <div style={{display:"grid",placeItems:"center",height:"calc(100vh - 76px)"}}><div style={{width:24,height:24,border:"2px solid #e5ecf3",borderTopColor:"#073766",borderRadius:"50%",animation:"spin .6s linear infinite"}} /></div>;
+  return <>
 
     <div style={{
       display: "grid",
@@ -611,8 +612,8 @@ export default function AdminOrdersPage() {
       </div>
     ) : null}
 
-    {notice ? <div className="ops-toast" role="status">✓ {notice}</div> : null}
-  </main>;
+    {notice ? <div className="ops-toast" role="status"><CheckCircle size={14} /> {notice}</div> : null}
+  </>;
 }
 
 /* ── Full Create Order Form (Database Mode) ── */

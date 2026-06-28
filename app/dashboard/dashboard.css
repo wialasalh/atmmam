@@ -957,3 +957,7 @@ div[style*="max-height: 220px"]::-webkit-scrollbar-thumb {
 }
 .spin { animation: dashSpin .8s linear infinite; }
 @keyframes dashSpin { to { transform: rotate(360deg); } }
+
+/* Hide site footer + sticky bar inside dashboard/admin */
+.client-dash-shell ~ footer,
+.client-dash-shell ~ .mobile-sticky-bar { display: none; }

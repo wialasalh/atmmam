@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { changeTeamMemberPassword } from "@/lib/data/admin-team";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { requireRole } from "@/lib/data/admin-team";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,7 @@ export async function PATCH(request: Request) {
   if (!isSupabaseConfigured())
     return NextResponse.json({ error: "database_not_configured" }, { status: 503 });
   try {
+    await requireRole("admin");
     const body = await request.json();
     if (!body.profileId || !body.newPassword || body.newPassword.length < 6)
       return NextResponse.json({ error: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" }, { status: 400 });

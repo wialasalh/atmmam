@@ -10,7 +10,30 @@ const serviceClient = serviceRole && supabaseUrl
   ? createClient(supabaseUrl, serviceRole, { auth: { autoRefreshToken: false, persistSession: false } })
   : null;
 
-export async function listAdminTeam() {
+export async function requireAdminRole() {
+  return requireRole("admin");
+}
+
+export async function requireRole(minRole: "admin" | "manager" | "operator" | "viewer") {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("unauthorized");
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (!profile) throw new Error("forbidden");
+
+  const hierarchy: Record<string, number> = { viewer: 0, operator: 1, manager: 2, admin: 3 };
+  const userLevel = hierarchy[profile.role] ?? -1;
+  const requiredLevel = hierarchy[minRole] ?? 0;
+  if (userLevel < requiredLevel) throw new Error("لا تملك صلاحية الوصول إلى هذه الصفحة");
+
+  return { supabase, user, role: profile.role as "admin" | "manager" | "operator" | "viewer" };
+}
+
+export async function listAdminTeam(currentUserId?: string) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("profiles")
@@ -19,25 +42,11 @@ export async function listAdminTeam() {
     .order("full_name");
   if (error) throw new Error(`Unable to list team: ${error.message}`);
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (serviceClient) {
-    const { data: authUsers, error: authError } = await serviceClient.auth.admin.listUsers();
-    if (!authError && authUsers?.users) {
-      const emailMap = new Map(authUsers.users.map((u: { id: string; email?: string }) => [u.id, u.email || ""]));
-      return {
-        currentUserId: user?.id || "",
-        members: data.map((profile: { id: string }) => ({
-          ...profile,
-          email: emailMap.get(profile.id) || "",
-        })),
-      };
-    }
-  }
-  return { currentUserId: user?.id || "", members: data };
+  return { currentUserId: currentUserId || "", members: data };
 }
 
 export async function createTeamMember(input: { email: string; password: string; fullName: string; role: string; phone?: string }) {
+  await requireAdminRole();
   if (!serviceClient) throw new Error("service_role_not_configured");
 
   const { data: authUser, error: authError } = await serviceClient.auth.admin.createUser({
@@ -61,6 +70,7 @@ export async function createTeamMember(input: { email: string; password: string;
 }
 
 export async function inviteTeamMember(input: { email: string; role: string; invitedBy: string }) {
+  const { supabase } = await requireAdminRole();
   if (!serviceClient) throw new Error("service_role_not_configured");
 
   const { data, error } = await serviceClient.auth.admin.inviteUserByEmail(input.email, {
@@ -70,7 +80,6 @@ export async function inviteTeamMember(input: { email: string; role: string; inv
   if (error) throw new Error(error.message);
 
   const token = crypto.randomUUID();
-  const supabase = await createSupabaseServerClient();
   await supabase.from("team_invitations").insert({
     email: input.email,
     role: input.role,
@@ -90,11 +99,8 @@ export async function inviteTeamMember(input: { email: string; role: string; inv
 }
 
 export async function changeTeamMemberPassword(input: { profileId: string; newPassword: string }) {
+  const { supabase, user } = await requireAdminRole();
   if (!serviceClient) throw new Error("service_role_not_configured");
-
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("unauthorized");
 
   // Check if target is super_admin and requester is not the same user
   const { data: target, error: targetError } = await supabase
@@ -123,11 +129,22 @@ export async function changeTeamMemberPassword(input: { profileId: string; newPa
   return data.user;
 }
 
-export async function updateTeamMember(input: { profileId: string; role?: string; active?: boolean; fullName?: string; phone?: string; avatarUrl?: string }) {
+export async function updateTeamMember(input: { profileId: string; role?: string; active?: boolean; fullName?: string; phone?: string; avatarUrl?: string; permissions?: string[] }) {
   const supabase = await createSupabaseServerClient();
-
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("unauthorized");
+
+  const isOwnProfile = user.id === input.profileId;
+
+  // Changing role or active status requires admin role
+  if (input.role || input.active !== undefined) {
+    const { supabase: adminSupabase } = await requireAdminRole();
+  }
+
+  // Updating someone else's profile requires admin role
+  if (!isOwnProfile) {
+    await requireAdminRole();
+  }
 
   // Prevent changing super_admin role or deactivating them
   const { data: target, error: targetError } = await supabase
@@ -146,8 +163,10 @@ export async function updateTeamMember(input: { profileId: string; role?: string
   if (input.fullName) changes.full_name = input.fullName;
   if (input.phone !== undefined) changes.phone = input.phone;
   if (input.avatarUrl) changes.avatar_url = input.avatarUrl;
+  if (input.permissions) changes.permissions = input.permissions;
 
-  const { data, error } = await supabase
+  const db = serviceClient || supabase;
+  const { data, error } = await db
     .from("profiles")
     .update(changes)
     .eq("id", input.profileId)
@@ -167,11 +186,8 @@ export async function updateTeamMember(input: { profileId: string; role?: string
 }
 
 export async function deleteTeamMember(profileId: string) {
+  const { supabase, user } = await requireAdminRole();
   if (!serviceClient) throw new Error("service_role_not_configured");
-
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("unauthorized");
 
   // Get target member's role
   const { data: target, error: targetError } = await supabase

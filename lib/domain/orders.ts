@@ -5,6 +5,8 @@ const transitions: Record<OrderStatus, OrderStatus[]> = {
   "بانتظار المستندات": ["قيد التنفيذ"],
   "قيد التنفيذ": ["بانتظار المستندات", "مكتمل"],
   "مكتمل": [],
+  "ملغي": [],
+  "معلق": [],
 };
 
 export function allowedOrderStatuses(current: OrderStatus) { return [current, ...transitions[current]]; }

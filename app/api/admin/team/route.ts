@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { listAdminTeam, createTeamMember, updateTeamMember } from "@/lib/data/admin-team";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { requireRole } from "@/lib/data/admin-team";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,8 @@ export async function GET() {
   if (!isSupabaseConfigured())
     return NextResponse.json({ error: "database_not_configured" }, { status: 503 });
   try {
-    return NextResponse.json(await listAdminTeam());
+    const { user } = await requireRole("admin");
+    return NextResponse.json(await listAdminTeam(user.id));
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "unknown_error" }, { status: 500 });
   }
@@ -19,6 +21,7 @@ export async function POST(request: Request) {
   if (!isSupabaseConfigured())
     return NextResponse.json({ error: "database_not_configured" }, { status: 503 });
   try {
+    await requireRole("admin");
     const body = await request.json();
     const user = await createTeamMember({
       email: body.email,
@@ -47,6 +50,7 @@ export async function PATCH(request: Request) {
       fullName: body.fullName,
       phone: body.phone,
       avatarUrl: body.avatarUrl,
+      permissions: body.permissions,
     });
     return NextResponse.json({ data: result });
   } catch (error) {

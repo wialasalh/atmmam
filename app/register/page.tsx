@@ -50,7 +50,7 @@ export default function ClientRegisterPage() {
           <Link href="/"><img src="/assets/logo/atmmam-ai-lockup.png" alt="أتمم" className="client-auth-logo" /></Link>
           <h1>تم إنشاء الحساب</h1>
           <p className="client-auth-sub">يرجى التحقق من بريدك الإلكتروني <strong>{form.email}</strong> وتأكيد الحساب للتمكن من تسجيل الدخول وإرسال تذاكر الدعم ورفع المستندات.</p>
-          {confirmLink && (
+          {confirmLink && process.env.NODE_ENV === "development" && (
             <div style={{ background: "#f0f7ff", padding: "12px 14px", borderRadius: 10, marginBottom: 16, fontSize: ".65rem", color: "#2a4a6a", wordBreak: "break-all" }}>
               <strong>رابط التفعيل (بيئة تطوير):</strong><br />
               <a href={confirmLink} style={{ color: "#0875dc" }}>{confirmLink}</a>

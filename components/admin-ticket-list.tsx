@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { readTickets, saveTicket, Ticket, TicketStatus } from "@/lib/tickets";
+import { AlertCircle, CheckCircle } from "lucide-react";
 
 const workflowStatuses: TicketStatus[] = ["جديدة", "قيد المراجعة", "بانتظار العميل", "تم الحل", "مغلقة"];
 
@@ -59,7 +60,7 @@ export function AdminTicketList() {
       <div className="service-list">
         {tickets.map((ticket) => (
           <article className="service-card ticket-card" key={ticket.id}>
-            <span className="service-icon">{ticket.status === "جديدة" ? "!" : "✓"}</span>
+            <span className="service-icon">{ticket.status === "جديدة" ? <AlertCircle size={12} /> : <CheckCircle size={12} />}</span>
             <p className="eyebrow">{ticket.status}</p>
             <h3>{ticket.title}</h3>
             <p>رقم التذكرة: {ticket.id}</p>

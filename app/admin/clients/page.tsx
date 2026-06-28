@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { AdminOpsHeader } from "@/components/admin-ops-header";
-import { Search, FileText, ExternalLink, Eye, Edit2, Trash2, UserCheck, UserX, AlertTriangle, Users, Building2, UserCog, Activity, X, Phone, Mail, CreditCard, User, FileCheck, Clock, Save, Ban, CheckCircle, MoreHorizontal, KeyRound } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, FileText, ExternalLink, Eye, Edit2, Trash2, UserCheck, UserX, AlertTriangle, Users, Building2, UserCog, Activity, X, Phone, Mail, CreditCard, User, FileCheck, Clock, Save, Ban, CheckCircle, MoreHorizontal, KeyRound, MapPin, Download } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useRoleGuard } from "@/lib/auth/use-role-guard";
 
 type ClientRecord = {
   id: string;
@@ -25,6 +26,7 @@ type ClientRecord = {
   created_at: string;
   updated_at: string;
   profiles: { id: string; full_name: string } | null;
+  commercial_register_expiry: string | null;
 };
 
 const typeColors: Record<string, { bg: string; text: string }> = {
@@ -51,6 +53,7 @@ const inputStyle = {
 const focusStyle = { borderColor: "#0875dc", boxShadow: "0 0 0 2px rgba(8,117,220,.12)" };
 
 export default function AdminClientsPage() {
+  const { loading: authLoading } = useRoleGuard("admin");
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -63,8 +66,43 @@ export default function AdminClientsPage() {
   const [passModal, setPassModal] = useState<string | null>(null);
   const [newPass, setNewPass] = useState("");
   const [passLoading, setPassLoading] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState("");
+  const [clientDocs, setClientDocs] = useState<any[]>([]);
+  const router = useRouter();
 
-  useEffect(() => { loadClients(); }, []);
+  useEffect(() => { loadClients(); fetchRole(); }, []);
+
+  useEffect(() => {
+    if (!selected) { setClientDocs([]); return; }
+    const supabase = createSupabaseBrowserClient();
+    supabase.from("client_documents").select("*").eq("client_id", selected.id).order("created_at", { ascending: false }).then(async ({ data }) => {
+      if (data) {
+        const withUrls = await Promise.all(data.map(async (d) => {
+          const { data: signed } = await supabase.storage.from("client-documents").createSignedUrl(d.storage_path, 3600);
+          return { ...d, signedUrl: signed?.signedUrl };
+        }));
+        setClientDocs(withUrls);
+      }
+    });
+  }, [selected]);
+
+  async function fetchRole() {
+    try {
+      const res = await fetch("/api/admin/team");
+      if (res.ok) {
+        const payload = await res.json();
+        const list: any[] = Array.isArray(payload?.members) ? payload.members : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+        const uid = payload?.currentUserId ?? null;
+        const me = list.find((m: any) => m.id === uid);
+        if (me?.role) {
+          setCurrentUserRole(me.role);
+          if (me.role !== "admin") router.replace("/admin");
+        }
+      }
+    } catch {}
+  }
+
+  const isAdmin = currentUserRole === "admin";
 
   async function loadClients() {
     try {
@@ -102,13 +140,13 @@ export default function AdminClientsPage() {
       const res = await fetch("/api/admin/clients", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(editing),
+        body: JSON.stringify({ id: editing.id, name: editing.name, phone: editing.phone, email: editing.email, commercial_number: editing.commercial_number, national_id: editing.national_id, notes: editing.notes }),
       });
       if (!res.ok) { showNotice("تعذر حفظ التعديلات", "error"); return; }
-      await loadClients();
-      const updated = clients.find(c => c.id === editing.id) || null;
+      const { data: updated } = await res.json();
       setSelected(updated);
       setEditing(null);
+      loadClients();
       showNotice("تم حفظ التعديلات");
     } catch { showNotice("حدث خطأ", "error"); }
   }
@@ -195,10 +233,9 @@ export default function AdminClientsPage() {
     </div>
   );
 
+  if (authLoading) return <div className="follow-empty">جاري التحميل...</div>;
   return (
-    <main className="ops-shell" dir="rtl">
-      <AdminOpsHeader active="clients" />
-      <div className="ops-layout">
+      <div className="ops-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
         <div className="ops-main">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <h1 style={{ margin: 0, fontSize: "1.1rem", display: "flex", alignItems: "center", gap: 8 }}>
@@ -320,7 +357,7 @@ export default function AdminClientsPage() {
                           <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 72, overflowY: "auto" }}>
                             {acc.clients.map((c, i) => (
                               <span key={c.id} style={{
-                                display: "inline-flex", alignItems: "center", gap: 3,
+                                display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap",
                                 color: c.active ? "#344d69" : "#b0bcc9",
                                 fontSize: ".6rem",
                               }}>
@@ -332,6 +369,14 @@ export default function AdminClientsPage() {
                                 <span style={{ color: "#8b9dad", fontSize: ".5rem" }}>
                                   ({c.client_type === "company" ? "مؤسسة" : "فرد"})
                                 </span>
+                                {c.commercial_register_expiry && (() => {
+                                  const expiry = new Date(c.commercial_register_expiry);
+                                  const now = new Date();
+                                  const diff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                  if (diff < 0) return <span style={{ fontSize: ".5rem", background: "#fef2f2", color: "#dc2626", borderRadius: 4, padding: "0 5px", fontWeight: 700, border: "1px solid #fecaca" }}>منتهي</span>;
+                                  if (diff <= 30) return <span style={{ fontSize: ".5rem", background: "#fffbeb", color: "#d97706", borderRadius: 4, padding: "0 5px", fontWeight: 700, border: "1px solid #fde68a" }}>{diff} يوم</span>;
+                                  return null;
+                                })()}
                               </span>
                             ))}
                           </div>
@@ -360,8 +405,16 @@ export default function AdminClientsPage() {
           )}
         </div>
 
-        {/* Detail Panel */}
-        <div className="ops-summary" style={{ background: "#fafbfc" }}>
+        {/* Detail Panel - Modal overlay */}
+        {(selected || editing) && (
+          <div
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.3)", zIndex: 999, display: "grid", placeItems: "center", padding: 20 }}
+            onClick={() => { if (!editing) setSelected(null); }}
+          >
+            <div
+              style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.15)" }}
+              onClick={e => e.stopPropagation()}
+            >
           {editing ? (
             <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
               <div className="ops-summary-head" style={{ borderBottom: "1px solid #f0f4f8" }}>
@@ -421,14 +474,14 @@ export default function AdminClientsPage() {
               </div>
 
               <div style={{ padding: "12px 16px", display: "flex", gap: 6, flexWrap: "wrap", borderBottom: "1px solid #f0f4f8" }}>
-                <ActionBtn icon={Edit2} label="تعديل" color="#073766" bg="#eaf4ff" onClick={() => setEditing({ ...selected })} />
-                <ActionBtn icon={selected.active ? UserX : UserCheck}
+                {isAdmin && <ActionBtn icon={Edit2} label="تعديل" color="#073766" bg="#eaf4ff" onClick={() => setEditing({ ...selected })} />}
+                {isAdmin && <ActionBtn icon={selected.active ? UserX : UserCheck}
                   label={selected.active ? "إيقاف" : "تفعيل"}
                   color={selected.active ? "#dc2626" : "#15803d"}
                   bg={selected.active ? "#fef2f2" : "#f0fdf4"}
-                  onClick={() => toggleActive(selected)} />
-                <ActionBtn icon={Trash2} label="حذف" color="#dc2626" bg="#fef2f2" onClick={() => setConfirmDelete(selected.id)} />
-                {selected.user_id && <ActionBtn icon={KeyRound} label="تغيير كلمة المرور" color="#7c3aed" bg="#f5f3ff" onClick={() => { setPassModal(selected.user_id!); setNewPass(""); }} />}
+                  onClick={() => toggleActive(selected)} />}
+                {isAdmin && <ActionBtn icon={Trash2} label="حذف" color="#dc2626" bg="#fef2f2" onClick={() => setConfirmDelete(selected.id)} />}
+                {isAdmin && selected.user_id && <ActionBtn icon={KeyRound} label="تغيير كلمة المرور" color="#7c3aed" bg="#f5f3ff" onClick={() => { setPassModal(selected.user_id!); setNewPass(""); }} />}
               </div>
 
               {confirmDelete === selected.id && (
@@ -512,7 +565,22 @@ export default function AdminClientsPage() {
                 {selected.commercial_register_doc && <DocLink label="السجل التجاري" path={selected.commercial_register_doc} />}
                 {selected.company_license_doc && <DocLink label="رخصة المنشأة" path={selected.company_license_doc} />}
                 {selected.national_id_doc && <DocLink label="صورة الهوية" path={selected.national_id_doc} />}
-                {!selected.commercial_register_doc && !selected.company_license_doc && !selected.national_id_doc && (
+                {clientDocs.map(doc => (
+                  <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, padding: "6px 10px", background: "#f8fafc", borderRadius: 8 }}>
+                    <FileText size={13} style={{ color: "#6b7d93", flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <strong style={{ fontSize: ".62rem", color: "#1a2d40", display: "block" }}>{doc.filename}</strong>
+                      <span style={{ fontSize: ".55rem", color: "#8b9dad" }}>{doc.original_name} · {new Date(doc.created_at).toLocaleDateString("ar-SA")}</span>
+                    </div>
+                    {doc.signedUrl && (
+                      <a href={doc.signedUrl} target="_blank" rel="noopener"
+                        style={{ display: "grid", placeItems: "center", width: 28, height: 28, borderRadius: 6, background: "#eaf4ff", color: "#0875dc" }}>
+                        <Download size={12} />
+                      </a>
+                    )}
+                  </div>
+                ))}
+                {!selected.commercial_register_doc && !selected.company_license_doc && !selected.national_id_doc && clientDocs.length === 0 && (
                   <p style={{ color: "#b0bcc9", fontSize: ".65rem" }}>لا توجد مستندات مرفوعة</p>
                 )}
               </div>
@@ -530,9 +598,10 @@ export default function AdminClientsPage() {
               <p style={{ fontSize: ".62rem", marginTop: 4 }}>اضغط على أي عميل من الجدول</p>
             </div>
           )}
-        </div>
+            </div>
+          </div>
+        )}
       </div>
-    </main>
   );
 }
 
@@ -565,15 +634,6 @@ function InfoRow({ icon: Icon, label, value }: { icon: any; label: string; value
         <span style={{ fontSize: ".7rem", color: "#344d69", fontWeight: 500, wordBreak: "break-word" }}>{value}</span>
       </div>
     </div>
-  );
-}
-
-function MapPin(props: any) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={props.size || 14} height={props.size || 14} viewBox="0 0 24 24" fill="none" stroke={props.color || "#8b9dad"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
   );
 }
 

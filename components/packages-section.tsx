@@ -177,7 +177,7 @@ export function PackagesSection() {
                   <li key={point}><Check aria-hidden="true" size={16} strokeWidth={2.5} />{point}</li>
                 ))}
               </ul>
-              <a className="package-action" href={isAr ? "/#contact" : "/en/#contact"}>
+              <a className="package-action" href="/dashboard/packages">
                 <span>{isAr ? "اطلب باقتك" : "Request your package"}</span>
                 <ArrowUpLeft aria-hidden="true" size={17} strokeWidth={2.3} />
               </a>

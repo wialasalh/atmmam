@@ -1,18 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AlertCircle } from "lucide-react";
 import { ActivityRequirementsTool } from "@/components/activity-requirements-tool";
 import { Header } from "@/components/header";
 import { siteConfig } from "@/data/site";
-
-function AlertIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <line x1="12" y1="8" x2="12" y2="12"/>
-      <line x1="12" y1="16" x2="12.01" y2="16"/>
-    </svg>
-  );
-}
 
 export const metadata: Metadata = {
   title: "دليل المتطلبات حسب النشاط | أتمم",
@@ -60,7 +51,7 @@ export default function ActivityRequirementsPage() {
               اختر وصف النشاط وحالة الموقع والموظفين لتحصل على قراءة أولية للجهات والمتطلبات التي قد تحتاج مراجعتها.
             </p>
             <div className="tool-notice">
-              <AlertIcon />
+              <AlertCircle size={22} />
               <div>
                 <strong>تنبيه مهم</strong>
                 <p>

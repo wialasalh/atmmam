@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createTicketId, decodeTicket, findTicket, saveTicket, Ticket } from "@/lib/tickets";
+import { CheckCircle } from "lucide-react";
 
 export function TicketDetail({ ticketId }: { ticketId?: string }) {
   const searchParams = useSearchParams();
@@ -77,7 +78,7 @@ export function TicketDetail({ ticketId }: { ticketId?: string }) {
   return (
     <div className="ticket-detail">
       <article className="service-card">
-        <span className="service-icon">✓</span>
+        <CheckCircle size={12} />
         <p className="eyebrow">{ticket.status}</p>
         <h1>{ticket.title}</h1>
         <p>رقم التذكرة: {ticket.id}</p>

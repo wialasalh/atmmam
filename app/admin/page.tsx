@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AdminOpsHeader } from "@/components/admin-ops-header";
-import { initialAdminOrders, readAdminOrders } from "@/lib/admin-orders";
-import { fetchAdminOrdersFromApi } from "@/lib/admin-orders-api";
+import { useEffect, useState } from "react";
+import { useRoleGuard } from "@/lib/auth/use-role-guard";
+import { ClipboardList, Zap, Clock, Ticket, AlertTriangle, CheckCircle, BarChart3, Users, Star } from "lucide-react";
 
 function getTodayArabic() {
   const days = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
@@ -19,528 +18,472 @@ function getGreeting() {
   return "مساء النور";
 }
 
-type TeamMember = { id: string; full_name: string; role: string };
+type StaffRating = {
+  staff_id: string; avg_rating: number; total_ratings: number;
+  positive: number; negative: number; resolved_tickets: number;
+  staff_name?: string;
+  recent_ratings: Array<{ rating: number; comment: string; date: string; client_name: string; ticket_id: string }>;
+};
 
-export default function AdminOverviewPage() {
-  const [orders, setOrders] = useState(initialAdminOrders);
-  const [displayName, setDisplayName] = useState("مدير النظام");
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+type UrgentTask = { id: string; title: string; client: string; isLate: boolean };
+
+export default function AdminDashboardPage() {
+  const { role, userName, userAvatar, loading } = useRoleGuard("viewer");
+  const isAdmin = role === "admin";
+  const [data, setData] = useState<any>(null);
 
   useEffect(() => {
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL)
-      void fetchAdminOrdersFromApi().then((data) => { if (data) setOrders(data); });
-    else setOrders(readAdminOrders());
-  }, []);
+    async function load() {
+      const endpoints = [
+        fetch("/api/admin/orders").then(r => r.ok ? r.json() : { data: [] }),
+        fetch("/api/admin/tickets").then(r => r.ok ? r.json() : { data: [] }),
+        fetch("/api/admin/notifications").then(r => r.ok ? r.json() : {}),
+        fetch("/api/admin/tasks").then(r => r.ok ? r.json() : { data: [] }),
+        ...(isAdmin ? [fetch("/api/admin/team/ratings").then(r => r.ok ? r.json() : { data: [] })] : [Promise.resolve({ data: [] })]),
+        ...(isAdmin ? [fetch("/api/admin/team").then(r => r.ok ? r.json() : null)] : [Promise.resolve(null)]),
+      ];
+      const [ordersRes, ticketsRes, notifRes, tasksRes, ratingsRes, teamRes] = await Promise.all(endpoints);
+      const orders: any[] = ordersRes?.data || [];
+      const tickets: any[] = ticketsRes?.data || [];
+      const notif = notifRes || {};
+      const tasks: any[] = tasksRes?.data || [];
+      const ratings: StaffRating[] = ratingsRes?.data || [];
+      const teamMembers: any[] = isAdmin ? (teamRes?.members || teamRes?.data || []) : [];
 
-  useEffect(() => {
-    fetch("/api/admin/team")
-      .then(r => r.ok ? r.json() : null)
-      .then(payload => {
-        const members: TeamMember[] = payload?.members || payload?.data || [];
-        const uid: string = payload?.currentUserId || "";
-        const me = members.find((m) => m.id === uid) ?? members.find((m) => m.role === "admin");
-        if (me) {
-          const name: string = me.full_name || "";
-          setDisplayName(!name || name === "admin" ? "مدير النظام" : name);
-        }
-        // Deduplicate by id
-        const seen = new Set<string>();
-        const unique = members.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
-        setTeamMembers(unique.length ? unique : [{ id: "default", full_name: "مدير النظام", role: "admin" }]);
-      })
-      .catch(() => {});
-  }, []);
+      const teamNameMap: Record<string, string> = {};
+      for (const m of teamMembers) if (m.id) teamNameMap[m.id] = m.full_name || "";
 
-  const stats = useMemo(() => ({
-    total: orders.length,
-    active: orders.filter((o) => o.status === "قيد التنفيذ").length,
-    waiting: orders.filter((o) => o.status === "بانتظار المستندات").length,
-    done: orders.filter((o) => o.status === "مكتمل").length,
-    review: orders.filter((o) => o.status === "جديد").length,
-  }), [orders]);
+      const ratingsWithName = ratings.map(r => ({ ...r, staff_name: teamNameMap[r.staff_id] || "" }));
 
-  const priority = orders.filter((o) => o.status !== "مكتمل").slice(0, 5);
+      const ordStats = {
+        total: orders.length,
+        new: orders.filter((o: any) => o.status === "new" || o.status === "جديد").length,
+        active: orders.filter((o: any) => o.status === "in_progress" || o.status === "قيد التنفيذ").length,
+        waiting: orders.filter((o: any) => o.status === "waiting_documents" || o.status === "بانتظار المستندات").length,
+        done: orders.filter((o: any) => o.status === "completed" || o.status === "مكتمل").length,
+        cancelled: orders.filter((o: any) => o.status === "cancelled" || o.status === "ملغي").length,
+      };
+      const tktOpen = tickets.filter((t: any) => t.status !== "مغلقة" && t.status !== "closed").length;
+      const urgent: UrgentTask[] = notif.urgent || [];
+      const overdueTasks = notif.overdue ?? tasks.filter((t: any) => t.status === "open" && new Date(t.due_at) < new Date()).length;
+      const todayTasks = notif.today ?? tasks.filter((t: any) => {
+        if (t.status !== "open") return false;
+        const due = new Date(t.due_at); const now = new Date();
+        return due.toDateString() === now.toDateString();
+      }).length;
+      const recentOrders = orders.slice(0, 5);
+      const openTickets = tickets.filter((t: any) => t.status !== "مغلقة" && t.status !== "closed").slice(0, 4);
+
+      setData({ ordStats, tktOpen, urgent, overdueTasks, todayTasks, recentOrders, openTickets, ratings: ratingsWithName, teamCount: teamMembers.length, expiredRegs: notif.expiredRegs || [], soonRegs: notif.soonRegs || [] });
+    }
+    load();
+  }, [isAdmin]);
+
+  if (loading || !data) return Splash;
+
+  if (role === "viewer") {
+    return (
+      <div style={s.page}>
+        <div style={{ background: "#f0f4ff", border: "1px solid #bddcff", borderRadius: 12, padding: "24px", textAlign: "center", marginBottom: 20 }}>
+          <h2 style={{ fontSize: "1rem", color: "#073766", margin: "0 0 8px" }}>مرحباً بك في لوحة التحكم</h2>
+          <p style={{ fontSize: ".82rem", color: "#526983", margin: 0 }}>صلاحيتك (مشاهد) تسمح لك بعرض التقارير فقط. يمكنك الوصول إلى التقارير من القائمة الجانبية.</p>
+          <div style={{ marginTop: 16 }}>
+            <a href="/admin/reports" style={s.btnPrimary}><BarChart3 size={14} /> فتح التقارير</a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const { ordStats, tktOpen, urgent, overdueTasks, todayTasks, recentOrders, openTickets, ratings, teamCount, expiredRegs, soonRegs } = data;
+  const donePct = ordStats.total > 0 ? Math.round((ordStats.done / ordStats.total) * 100) : 0;
+  const activePct = ordStats.total > 0 ? Math.round((ordStats.active / ordStats.total) * 100) : 0;
+  const waitingPct = ordStats.total > 0 ? Math.round((ordStats.waiting / ordStats.total) * 100) : 0;
 
   return (
-    <main className="ops-shell" dir="rtl">
-      <AdminOpsHeader active="dashboard" />
-
-      <div className="ov-page">
-
-        {/* Top bar */}
-        <div className="ov-topbar">
-          <div className="ov-welcome">
-            <p className="ov-date">{getTodayArabic()}</p>
-            <h1 className="ov-title">{getGreeting()}، {displayName}</h1>
-            <p className="ov-sub">هذه أهم المؤشرات والأعمال التي تحتاجها اليوم.</p>
-          </div>
-          <div className="ov-top-actions">
-            <a href="/admin/reports" className="ov-btn-secondary">
-              <span>📊</span> التقارير
-            </a>
-            <a href="/admin/orders" className="ov-btn-primary">
-              <span>＋</span> طلب جديد
-            </a>
+    <div style={s.page}>
+      {/* ═══ HEADER ═══ */}
+      <div style={s.header}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {userAvatar ? (
+            <img src={userAvatar} alt="" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", border: "2px solid #e2e8f0", flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: 44, height: 44, borderRadius: "50%", background: "#e2e8f0", display: "grid", placeItems: "center", fontSize: "1.1rem", color: "#94a3b8", fontWeight: 700, flexShrink: 0 }}>
+              {(userName || "مدير النظام").charAt(0)}
+            </div>
+          )}
+          <div>
+            <p style={s.date}>{getTodayArabic()}</p>
+            <h1 style={s.greeting}>{getGreeting()}، {userName || "مدير النظام"}</h1>
+            <p style={s.sub}>ملخص الأداء والمؤشرات الرئيسية للمنصة</p>
           </div>
         </div>
-
-        {/* KPI Cards */}
-        <div className="ov-kpis">
-          <article className="ov-kpi">
-            <div className="ov-kpi-icon blue">▤</div>
-            <div>
-              <small>إجمالي الطلبات</small>
-              <strong className="ov-kpi-num">{stats.total}</strong>
-              <em>جميع الطلبات المسجلة</em>
-            </div>
-          </article>
-          <article className="ov-kpi">
-            <div className="ov-kpi-icon gold">⌁</div>
-            <div>
-              <small>قيد التنفيذ</small>
-              <strong className="ov-kpi-num gold">{stats.active}</strong>
-              <em>يعمل عليها الفريق</em>
-            </div>
-          </article>
-          <article className="ov-kpi warn">
-            <div className="ov-kpi-icon orange">!</div>
-            <div>
-              <small>بانتظار مستندات</small>
-              <strong className="ov-kpi-num orange">{stats.waiting}</strong>
-              <em className="warn-em">تحتاج تواصلاً فورياً</em>
-            </div>
-          </article>
-          <article className="ov-kpi">
-            <div className="ov-kpi-icon green">✓</div>
-            <div>
-              <small>مكتملة</small>
-              <strong className="ov-kpi-num green">{stats.done}</strong>
-              <em>تم إنجازها بنجاح</em>
-            </div>
-          </article>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <a href="/admin/reports" style={s.btnOutline}><BarChart3 size={14} /> التقارير</a>
+          <a href="/admin/orders" style={s.btnPrimary}><ClipboardList size={14} /> طلب جديد</a>
         </div>
-
-        {/* Progress bar */}
-        {stats.total > 0 && (
-          <div className="ov-progress-bar-wrap">
-            <div className="ov-progress-labels">
-              <span>تقدم الإنجاز الكلي</span>
-              <span className="ov-progress-pct">{Math.round((stats.done / stats.total) * 100)}%</span>
-            </div>
-            <div className="ov-progress-track">
-              <div className="ov-progress-fill" style={{ width: `${Math.round((stats.done / stats.total) * 100)}%` }} />
-            </div>
-          </div>
-        )}
-
-        {/* Main grid */}
-        <div className="ov-main-grid">
-
-          {/* Priority panel */}
-          <article className="ov-panel ov-priority-panel">
-            <header className="ov-panel-head">
-              <div>
-                <h2>أولوية اليوم</h2>
-                <p>أعمال يوصى بالبدء بها الآن</p>
-              </div>
-              <a href="/admin/followups">عرض المتابعات ←</a>
-            </header>
-            <div className="ov-priority-list">
-              {priority.length === 0 && (
-                <div className="ov-empty">✓ لا توجد طلبات معلقة، عمل رائع!</div>
-              )}
-              {priority.map((order, i) => (
-                <div className="ov-priority-row" key={order.id}>
-                  <b className={`ov-rank ${i < 2 ? "urgent" : ""}`}>{i + 1}</b>
-                  <div className="ov-priority-info">
-                    <strong>{order.nextAction}</strong>
-                    <span>{order.client} · <code>{order.id}</code></span>
-                  </div>
-                  <em className={`ov-tag ${i < 2 ? "urgent" : "normal"}`}>
-                    {i < 2 ? "عاجل" : order.nextActionAt}
-                  </em>
-                  <a href="/admin/orders" className="ov-open-link">فتح ←</a>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          {/* Side panels */}
-          <aside className="ov-side">
-
-            {/* Team workload */}
-            <div className="ov-panel ov-team-panel">
-              <header className="ov-panel-head">
-                <div>
-                  <h2>عبء الفريق</h2>
-                  <p>توزيع الطلبات النشطة</p>
-                </div>
-              </header>
-              <div className="ov-team-list">
-                {teamMembers.map((member) => {
-                  const name = member.full_name || "مدير النظام";
-                  const count = orders.filter((o) => o.assignee === name && o.status !== "مكتمل").length;
-                  const max = Math.max(...teamMembers.map((m) => orders.filter((o) => o.assignee === (m.full_name || "مدير النظام") && o.status !== "مكتمل").length), 1);
-                  const pct = Math.round((count / max) * 100);
-                  return (
-                    <div className="ov-team-row" key={member.id}>
-                      <span className="ov-avatar">{name.charAt(0)}</span>
-                      <div className="ov-team-info">
-                        <strong>{name}</strong>
-                        <small>{count} طلبات نشطة</small>
-                      </div>
-                      <div className="ov-bar-wrap">
-                        <div className="ov-bar-fill" style={{ width: `${pct}%` }} />
-                      </div>
-                      <b className="ov-team-count">{count}</b>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Status breakdown */}
-            <div className="ov-panel ov-status-panel">
-              <header className="ov-panel-head">
-                <div><h2>توزيع الحالات</h2></div>
-              </header>
-              <div className="ov-status-list">
-                {[
-                  { label: "قيد التنفيذ", count: stats.active, cls: "progress" },
-                  { label: "بانتظار مستندات", count: stats.waiting, cls: "waiting" },
-                  { label: "مكتمل", count: stats.done, cls: "done" },
-                ].map(({ label, count, cls }) => (
-                  <div className="ov-status-row" key={label}>
-                    <span className={`ops-status ${cls}`}>{label}</span>
-                    <div className="ov-status-bar-wrap">
-                      <div className={`ov-status-bar ${cls}`} style={{ width: stats.total > 0 ? `${Math.round((count / stats.total) * 100)}%` : "0%" }} />
-                    </div>
-                    <b>{count}</b>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </aside>
-        </div>
-
-        {/* Quick actions */}
-        <div className="ov-actions">
-          <h2 className="ov-section-title">وصول سريع</h2>
-          <div className="ov-actions-grid">
-            {[
-              { href: "/admin/orders", icon: "▤", label: "إدارة الطلبات", sub: "بحث وتحديث وإنشاء الطلبات" },
-              { href: "/admin/clients", icon: "♙", label: "ملفات العملاء", sub: "الوصول لبيانات وطلبات العميل" },
-              { href: "/admin/followups", icon: "◷", label: "المتابعات", sub: "الإجراءات والمواعيد القادمة" },
-              { href: "/admin/services", icon: "◇", label: "كتالوج الخدمات", sub: "إدارة الخدمات والمتطلبات" },
-              { href: "/admin/team", icon: "👥", label: "إدارة الفريق", sub: "الأعضاء والصلاحيات" },
-              { href: "/admin/reports", icon: "📈", label: "التقارير", sub: "إحصائيات الأداء والإنجاز" },
-            ].map(({ href, icon, label, sub }) => (
-              <a href={href} className="ov-action-card" key={href}>
-                <span className="ov-action-icon">{icon}</span>
-                <div>
-                  <strong>{label}</strong>
-                  <small>{sub}</small>
-                </div>
-              </a>
-            ))}
-          </div>
-        </div>
-
       </div>
 
-      <style>{`
-        .ov-page {
-          padding: 28px 28px 48px;
-          max-width: 1400px;
-          margin: 0 auto;
-          direction: rtl;
-        }
+      {/* ═══ KPI STRIP ═══ */}
+      <div style={s.kpiStrip}>
+        <KpiCard icon={<ClipboardList size={20} />} label="إجمالي الطلبات" value={ordStats.total} color="#0875dc" bg="#e8f1fb" />
+        <KpiCard icon={<Zap size={20} />} label="قيد التنفيذ" value={ordStats.active} color="#d06418" bg="#fff0e5" />
+        <KpiCard icon={<Clock size={20} />} label="بانتظار مستندات" value={ordStats.waiting} color="#ee892e" bg="#fff8e5" />
+        <KpiCard icon={<Ticket size={20} />} label="تذاكر مفتوحة" value={tktOpen} color="#7c3aed" bg="#f3e8ff" />
+        <KpiCard icon={<AlertTriangle size={20} />} label="مهام متأخرة" value={overdueTasks} color="#dc2626" bg="#fef2f2" />
+        <KpiCard icon={<CheckCircle size={20} />} label="مكتمل" value={ordStats.done} color="#13795a" bg="#e2f5ed" />
+      </div>
 
-        /* Top bar */
-        .ov-topbar {
-          display: flex;
-          align-items: flex-end;
-          justify-content: space-between;
-          margin-bottom: 24px;
-          gap: 16px;
-          flex-wrap: wrap;
-        }
-        .ov-date {
-          font-size: .72rem;
-          color: #7a8fa6;
-          margin: 0 0 4px;
-        }
-        .ov-title {
-          font-size: 1.6rem;
-          color: #073766;
-          margin: 0 0 4px;
-          font-weight: 800;
-        }
-        .ov-sub {
-          font-size: .78rem;
-          color: #7a8fa6;
-          margin: 0;
-        }
-        .ov-top-actions {
-          display: flex;
-          gap: 10px;
-          align-items: center;
-        }
-        .ov-btn-primary {
-          height: 40px;
-          padding: 0 18px;
-          border-radius: 8px;
-          background: #0875dc;
-          color: #fff;
-          font-weight: 800;
-          font-size: .8rem;
-          text-decoration: none;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          box-shadow: 0 4px 12px rgba(8,117,220,.2);
-          transition: background .15s;
-        }
-        .ov-btn-primary:hover { background: #065fb8; }
-        .ov-btn-secondary {
-          height: 40px;
-          padding: 0 16px;
-          border-radius: 8px;
-          background: #fff;
-          border: 1px solid #dce5ef;
-          color: #344d69;
-          font-weight: 700;
-          font-size: .78rem;
-          text-decoration: none;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          transition: background .15s;
-        }
-        .ov-btn-secondary:hover { background: #f5f8fc; }
+      {/* ═══ MAIN GRID ═══ */}
+      <div style={s.grid}>
 
-        /* KPIs */
-        .ov-kpis {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 14px;
-          margin-bottom: 18px;
-        }
-        .ov-kpi {
-          background: #fff;
-          border: 1px solid #e5eaf0;
-          border-radius: 13px;
-          padding: 18px;
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          box-shadow: 0 2px 10px rgba(18,55,94,.04);
-          transition: box-shadow .15s;
-        }
-        .ov-kpi:hover { box-shadow: 0 4px 18px rgba(18,55,94,.08); }
-        .ov-kpi.warn { border-color: #ffd5a8; background: #fffaf5; }
-        .ov-kpi-icon {
-          width: 44px;
-          height: 44px;
-          flex: 0 0 44px;
-          border-radius: 12px;
-          display: grid;
-          place-items: center;
-          font-size: 1.2rem;
-          font-weight: 900;
-        }
-        .ov-kpi-icon.blue { background: #e8f1fb; color: #1758a6; }
-        .ov-kpi-icon.gold { background: #fff4db; color: #c18409; }
-        .ov-kpi-icon.orange { background: #fff0e5; color: #d06418; }
-        .ov-kpi-icon.green { background: #e2f5ed; color: #13795a; }
-        .ov-kpi small { font-size: .7rem; color: #7f8da0; display: block; margin-bottom: 4px; }
-        .ov-kpi-num { font-size: 1.8rem; color: #073766; display: block; line-height: 1; font-weight: 800; }
-        .ov-kpi-num.gold { color: #c18409; }
-        .ov-kpi-num.orange { color: #d06418; }
-        .ov-kpi-num.green { color: #13795a; }
-        .ov-kpi em { font-size: .6rem; color: #92a0b0; font-style: normal; display: block; margin-top: 5px; }
-        .ov-kpi .warn-em { color: #c1612c; }
+        {/* LEFT COL */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-        /* Progress bar */
-        .ov-progress-bar-wrap {
-          background: #fff;
-          border: 1px solid #e5eaf0;
-          border-radius: 10px;
-          padding: 14px 18px;
-          margin-bottom: 18px;
-          box-shadow: 0 2px 8px rgba(18,55,94,.03);
-        }
-        .ov-progress-labels {
-          display: flex;
-          justify-content: space-between;
-          font-size: .72rem;
-          color: #526983;
-          margin-bottom: 8px;
-          font-weight: 700;
-        }
-        .ov-progress-pct { color: #0875dc; }
-        .ov-progress-track {
-          height: 8px;
-          background: #edf2f7;
-          border-radius: 20px;
-          overflow: hidden;
-        }
-        .ov-progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #0875dc, #12bcae);
-          border-radius: 20px;
-          transition: width .6s ease;
-        }
+          {/* Urgent tasks */}
+          {urgent.length > 0 && (
+            <Panel title="مهام عاجلة تحتاج انتباهك" sub="المهام المتأخرة تتطلب معالجة فورية">
+              {urgent.map((t: UrgentTask) => (
+                <div key={t.id} style={s.urgentRow}>
+                  <span style={s.urgentDot} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={s.urgentTitle}>{t.title}</div>
+                    <div style={s.urgentClient}>{t.client} · #{t.id.slice(0, 8).toUpperCase()}</div>
+                  </div>
+                  <span style={{ ...s.badge, background: t.isLate ? "#fef2f2" : "#fff8e5", color: t.isLate ? "#dc2626" : "#ee892e" }}>
+                    {t.isLate ? "متأخر" : "اليوم"}
+                  </span>
+                </div>
+              ))}
+              <a href="/admin/followups" style={s.panelLink}>عرض كل المتابعات ←</a>
+            </Panel>
+          )}
 
-        /* Main grid */
-        .ov-main-grid {
-          display: grid;
-          grid-template-columns: 1fr 320px;
-          gap: 16px;
-          margin-bottom: 24px;
-        }
+          {/* Open Tickets */}
+          <Panel title="التذاكر النشطة" sub={`${openTickets.length} تذاكر مفتوحة`}>
+            {openTickets.length === 0 ? (
+              <div style={s.empty}>✉ لا توجد تذاكر مفتوحة</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={s.ratingTable}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>المرجع</th>
+                      <th style={s.th}>العميل</th>
+                      <th style={s.th}>العنوان</th>
+                      <th style={s.th}>الحالة</th>
+                      <th style={s.th}>الأولوية</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {openTickets.map((t: any) => {
+                      const pColor = t.priority === "عاجلة" ? "#dc2626" : t.priority === "مرتفعة" ? "#d06418" : "#8b9dad";
+                      return (
+                        <tr key={t.id} style={{ borderBottom: "1px solid #f0f3f8" }}>
+                          <td style={s.td}><code style={s.code}>{t.ref_number || t.id.slice(0, 8).toUpperCase()}</code></td>
+                          <td style={s.td}>{t.client?.name || t.profiles?.full_name || "—"}</td>
+                          <td style={{ ...s.td, color: "#526983", fontSize: ".63rem", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</td>
+                          <td style={s.td}><OrderStatusBadge status={t.status} /></td>
+                          <td style={{ ...s.td }}><span style={{ fontSize: ".55rem", fontWeight: 700, color: pColor }}>●</span> {t.priority || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <a href="/admin/tickets" style={s.panelLink}>عرض كل التذاكر ←</a>
+          </Panel>
 
-        /* Panel base */
-        .ov-panel {
-          background: #fff;
-          border: 1px solid #e5eaf0;
-          border-radius: 13px;
-          box-shadow: 0 2px 10px rgba(18,55,94,.04);
-          overflow: hidden;
-        }
-        .ov-panel-head {
-          padding: 18px 20px 14px;
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          border-bottom: 1px solid #edf0f5;
-        }
-        .ov-panel-head h2 { font-size: .9rem; margin: 0 0 3px; color: #073766; }
-        .ov-panel-head p { font-size: .65rem; color: #8c99a8; margin: 0; }
-        .ov-panel-head > a { font-size: .68rem; color: #0875dc; text-decoration: none; font-weight: 700; white-space: nowrap; }
+          {/* Recent Orders */}
+          <Panel title="آخر الطلبات" sub="أحدث 5 طلبات في النظام">
+            {recentOrders.length === 0 ? (
+              <div style={s.empty}>لا توجد طلبات بعد</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ ...s.ratingTable }}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>المرجع</th>
+                      <th style={s.th}>العميل</th>
+                      <th style={s.th}>الخدمة</th>
+                      <th style={s.th}>الحالة</th>
+                      <th style={s.th}>المسؤول</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentOrders.map((o: any) => (
+                      <tr key={o.id} style={{ borderBottom: "1px solid #f0f3f8" }}>
+                        <td style={s.td}><code style={s.code}>{o.reference_no || o.id.slice(0, 8).toUpperCase()}</code></td>
+                        <td style={s.td}>{o.clients?.name || "—"}</td>
+                        <td style={{ ...s.td, color: "#526983", fontSize: ".63rem" }}>{o.services?.name || "—"}</td>
+                        <td style={s.td}><OrderStatusBadge status={o.status} /></td>
+                        <td style={{ ...s.td, color: "#526983", fontSize: ".63rem" }}>{o.profiles?.full_name || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <a href="/admin/orders" style={s.panelLink}>عرض كل الطلبات ←</a>
+          </Panel>
 
-        /* Priority list */
-        .ov-priority-list { padding: 0 20px; }
-        .ov-empty { padding: 20px 0; font-size: .75rem; color: #13795a; text-align: center; }
-        .ov-priority-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 13px 0;
-          border-bottom: 1px solid #f0f3f8;
-        }
-        .ov-priority-row:last-child { border-bottom: none; }
-        .ov-rank {
-          width: 26px;
-          height: 26px;
-          border-radius: 50%;
-          background: #edf2f7;
-          display: grid;
-          place-items: center;
-          font-size: .7rem;
-          color: #526983;
-          font-style: normal;
-          flex-shrink: 0;
-        }
-        .ov-rank.urgent { background: #fff0e5; color: #d06418; }
-        .ov-priority-info { flex: 1; min-width: 0; }
-        .ov-priority-info strong { font-size: .75rem; display: block; color: #1e3a56; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .ov-priority-info span { font-size: .62rem; color: #8295a8; }
-        .ov-priority-info code { font-family: inherit; background: #f0f4f8; padding: 1px 5px; border-radius: 4px; }
-        .ov-tag { font-size: .6rem; padding: 4px 10px; border-radius: 20px; font-weight: 700; font-style: normal; flex-shrink: 0; }
-        .ov-tag.urgent { background: #fff0e5; color: #d06418; border: 1px solid #ffd5a8; }
-        .ov-tag.normal { background: #eaf4ff; color: #0875dc; border: 1px solid #bddcff; }
-        .ov-open-link { font-size: .65rem; color: #0875dc; text-decoration: none; font-weight: 700; flex-shrink: 0; }
+          {/* Staff Ratings */}
+          {isAdmin && ratings.length > 0 && (
+            <Panel title="تقييمات الموظفين" sub="متوسط التقييمات من العملاء">
+              <div style={{ overflowX: "auto" }}>
+                <table style={s.ratingTable}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>الموظف</th>
+                      <th style={s.th}>التقييم</th>
+                      <th style={s.th}>إيجابي</th>
+                      <th style={s.th}>سلبي</th>
+                      <th style={s.th}>تم الحل</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ratings.map((r: StaffRating) => (
+                      <tr key={r.staff_id} style={{ borderBottom: "1px solid #f0f3f8" }}>
+                        <td style={s.td}>{r.staff_name || "—"}</td>
+                        <td style={s.td}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontSize: ".7rem", fontWeight: 800, color: "#073766" }}>{r.avg_rating}</span>
+                            <span style={{ display: "inline-flex", gap: 2 }}>{Array.from({ length: 5 }, (_, i) => <Star key={i} size={14} strokeWidth={1.5} fill={i < Math.round(r.avg_rating) ? "#f59e0b" : "#e5eaf0"} color={i < Math.round(r.avg_rating) ? "#f59e0b" : "#e5eaf0"} />)}</span>
+                            <span style={{ fontSize: ".55rem", color: "#8b9dad" }}>({r.total_ratings})</span>
+                          </span>
+                        </td>
+                        <td style={{ ...s.td, color: "#13795a", fontWeight: 700 }}>{r.positive}</td>
+                        <td style={{ ...s.td, color: "#dc2626", fontWeight: 700 }}>{r.negative}</td>
+                        <td style={{ ...s.td, color: "#0875dc", fontWeight: 700 }}>{r.resolved_tickets}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <a href="/admin/team" style={s.panelLink}>عرض تفاصيل التقييمات ←</a>
+            </Panel>
+          )}
+        </div>
 
-        /* Side panels */
-        .ov-side { display: flex; flex-direction: column; gap: 14px; }
+        {/* RIGHT COL */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-        /* Team */
-        .ov-team-list { padding: 8px 20px 12px; }
-        .ov-team-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 10px 0;
-          border-bottom: 1px solid #f0f3f8;
-        }
-        .ov-team-row:last-child { border-bottom: none; }
-        .ov-avatar {
-          width: 34px;
-          height: 34px;
-          border-radius: 50%;
-          background: #e8f1fb;
-          color: #1758a6;
-          display: grid;
-          place-items: center;
-          font-size: .72rem;
-          font-weight: 900;
-          flex-shrink: 0;
-        }
-        .ov-team-info { flex: 1; min-width: 0; }
-        .ov-team-info strong { font-size: .73rem; display: block; color: #1e3a56; }
-        .ov-team-info small { font-size: .6rem; color: #8c99a8; }
-        .ov-bar-wrap { width: 70px; height: 6px; background: #edf2f7; border-radius: 10px; overflow: hidden; flex-shrink: 0; }
-        .ov-bar-fill { height: 100%; background: #0875dc; border-radius: 10px; transition: width .4s; }
-        .ov-team-count { font-size: .75rem; font-weight: 800; color: #0875dc; min-width: 18px; text-align: center; }
+          {/* Order Pipeline */}
+          <Panel title="حالة الطلبات" sub="توزيع الطلبات حسب المرحلة">
+            <div style={{ padding: "8px 18px 4px" }}>
+              <PipelineRow label="قيد التنفيذ" count={ordStats.active} pct={activePct} color="#d06418" bg="#fff0e5" bar="#d06418" />
+              <PipelineRow label="بانتظار مستندات" count={ordStats.waiting} pct={waitingPct} color="#ee892e" bg="#fff8e5" bar="#ee892e" />
+              <PipelineRow label="مكتمل" count={ordStats.done} pct={donePct} color="#13795a" bg="#e2f5ed" bar="#13795a" />
+              <PipelineRow label="ملغي/معلق" count={ordStats.cancelled} pct={ordStats.total > 0 ? Math.round((ordStats.cancelled / ordStats.total) * 100) : 0} color="#8b9dad" bg="#f5f6f8" bar="#aab5c3" />
+            </div>
+            <div style={{ padding: "10px 18px 14px", borderTop: "1px solid #edf0f5", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: ".65rem", color: "#526983", fontWeight: 700 }}>معدل الإنجاز الكلي</span>
+              <span style={{ fontSize: ".85rem", fontWeight: 900, color: ordStats.done >= ordStats.active ? "#13795a" : "#d06418" }}>{donePct}%</span>
+            </div>
+          </Panel>
 
-        /* Status breakdown */
-        .ov-status-list { padding: 10px 20px 14px; }
-        .ov-status-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 8px 0;
-          border-bottom: 1px solid #f0f3f8;
-        }
-        .ov-status-row:last-child { border-bottom: none; }
-        .ov-status-row .ops-status { flex-shrink: 0; min-width: 110px; text-align: center; }
-        .ov-status-bar-wrap { flex: 1; height: 6px; background: #edf2f7; border-radius: 10px; overflow: hidden; }
-        .ov-status-bar { height: 100%; border-radius: 10px; transition: width .4s; }
-        .ov-status-bar.progress { background: #0875dc; }
-        .ov-status-bar.waiting { background: #ee892e; }
-        .ov-status-bar.done { background: #13795a; }
-        .ov-status-row b { font-size: .75rem; color: #526983; min-width: 20px; text-align: center; }
+          {/* Quick Stats */}
+          <div style={s.statsMiniGrid}>
+            <div style={{ ...s.statMini, background: "#f0f9ff", borderColor: "#bddcff" }}>
+              <div style={s.statMiniIcon}><ClipboardList size={18} color="#0875dc" /></div>
+              <div>
+                <div style={{ fontSize: ".55rem", color: "#526983", fontWeight: 700 }}>مهام اليوم</div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#0875dc" }}>{todayTasks}</div>
+              </div>
+            </div>
+            <div style={{ ...s.statMini, background: "#f5f3ff", borderColor: "#ddd6fe" }}>
+              <div style={s.statMiniIcon}><Users size={18} color="#7c3aed" /></div>
+              <div>
+                <div style={{ fontSize: ".55rem", color: "#526983", fontWeight: 700 }}>أعضاء الفريق</div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#7c3aed" }}>{teamCount}</div>
+              </div>
+            </div>
+            <div style={{ ...s.statMini, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
+              <div style={s.statMiniIcon}><Star size={18} color="#13795a" /></div>
+              <div>
+                <div style={{ fontSize: ".55rem", color: "#526983", fontWeight: 700 }}>متوسط التقييم</div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#13795a" }}>
+                  {ratings.length > 0 ? (ratings.reduce((a: number, r: StaffRating) => a + r.avg_rating, 0) / ratings.length).toFixed(1) : "—"}
+                </div>
+              </div>
+            </div>
+          </div>
 
-        /* Quick actions */
-        .ov-section-title { font-size: .8rem; color: #7a8fa6; margin: 0 0 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
-        .ov-actions-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
-        }
-        .ov-action-card {
-          background: #fff;
-          border: 1px solid #e5eaf0;
-          border-radius: 12px;
-          padding: 16px;
-          text-decoration: none;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          transition: box-shadow .15s, border-color .15s;
-        }
-        .ov-action-card:hover { box-shadow: 0 4px 16px rgba(18,55,94,.08); border-color: #bddcff; }
-        .ov-action-icon { font-size: 1.4rem; flex-shrink: 0; }
-        .ov-action-card strong { font-size: .78rem; display: block; color: #1e3a56; margin-bottom: 3px; }
-        .ov-action-card small { font-size: .62rem; color: #8c99a8; }
+          {/* Progress ring */}
+          <div style={s.progressCard}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ position: "relative", width: 64, height: 64, flexShrink: 0 }}>
+                <svg width="64" height="64" viewBox="0 0 64 64">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="#edf2f7" strokeWidth="5" />
+                  <circle cx="32" cy="32" r="28" fill="none" stroke={donePct >= 50 ? "#13795a" : "#0875dc"} strokeWidth="5"
+                    strokeDasharray={`${donePct * 1.76} 176`} transform="rotate(-90 32 32)" strokeLinecap="round" />
+                </svg>
+                <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: ".85rem", fontWeight: 900, color: donePct >= 50 ? "#13795a" : "#0875dc" }}>
+                  {donePct}%
+                </span>
+              </div>
+              <div>
+                <div style={{ fontSize: ".65rem", color: "#526983", fontWeight: 700 }}>نسبة الإنجاز</div>
+                <div style={{ fontSize: ".8rem", color: "#1e3a56", fontWeight: 800 }}>{ordStats.done} من {ordStats.total} طلبات</div>
+                <div style={{ fontSize: ".62rem", color: "#8b9dad", marginTop: 2 }}>{ordStats.new} طلبات جديدة تحتاج مراجعة</div>
+              </div>
+            </div>
+          </div>
 
-        /* Responsive */
-        @media (max-width: 1100px) {
-          .ov-kpis { grid-template-columns: repeat(2, 1fr); }
-          .ov-main-grid { grid-template-columns: 1fr; }
-          .ov-side { display: grid; grid-template-columns: 1fr 1fr; }
-          .ov-actions-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 680px) {
-          .ov-page { padding: 16px; }
-          .ov-kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
-          .ov-side { grid-template-columns: 1fr; }
-          .ov-actions-grid { grid-template-columns: 1fr; }
-          .ov-title { font-size: 1.25rem; }
-        }
-      `}</style>
-    </main>
+          {/* Expiry alerts */}
+          {(expiredRegs?.length > 0 || soonRegs?.length > 0) && (
+            <Panel title="تنبيهات السجلات التجارية" sub="سجلات تحتاج تجديد">
+              {expiredRegs?.length > 0 && (
+                <>
+                  <div style={{ padding: "6px 18px 0", fontSize: ".6rem", fontWeight: 700, color: "#dc2626" }}>منتهية</div>
+                  {expiredRegs.map((r: any) => (
+                    <div key={r.clientId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 18px", borderBottom: "1px solid #fef2f2" }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#dc2626", flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: ".65rem", fontWeight: 700, color: "#991b1b" }}>{r.clientName}</div>
+                        <div style={{ fontSize: ".55rem", color: "#b91c1c" }}>منتهي منذ {r.daysExpired} يوم</div>
+                      </div>
+                      <a href="/admin/clients" style={{ fontSize: ".55rem", padding: "2px 8px", borderRadius: 8, background: "#dc2626", color: "#fff", textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>تجديد</a>
+                    </div>
+                  ))}
+                </>
+              )}
+              {soonRegs?.length > 0 && (
+                <>
+                  <div style={{ padding: expiredRegs?.length > 0 ? "4px 18px 0" : "6px 18px 0", fontSize: ".6rem", fontWeight: 700, color: "#d97706" }}>ستنتهي قريباً</div>
+                  {soonRegs.map((r: any) => (
+                    <div key={r.clientId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 18px", borderBottom: "1px solid #fffbeb" }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#d97706", flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: ".65rem", fontWeight: 700, color: "#92400e" }}>{r.clientName}</div>
+                        <div style={{ fontSize: ".55rem", color: "#a16207" }}>بقي {r.daysLeft} يوم</div>
+                      </div>
+                      <a href="/admin/clients" style={{ fontSize: ".55rem", padding: "2px 8px", borderRadius: 8, background: "#d97706", color: "#fff", textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>تجديد</a>
+                    </div>
+                  ))}
+                </>
+              )}
+            </Panel>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
+
+/* ── Helpers ── */
+
+function KpiCard({ icon, label, value, color, bg }: { icon: React.ReactNode; label: string; value: number; color: string; bg: string }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e5eaf0", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 1px 6px rgba(18,55,94,.03)", borderBottom: `3px solid ${color}` }}>
+      <div style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", flexShrink: 0, background: bg, color }}>{icon}</div>
+      <div>
+        <div style={{ fontSize: ".6rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>{label}</div>
+        <div style={{ fontSize: "1.4rem", fontWeight: 900, color, lineHeight: 1 }}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function PipelineRow({ label, count, pct, color, bg, bar }: { label: string; count: number; pct: number; color: string; bg: string; bar: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #f0f3f8" }}>
+      <span style={{ fontSize: ".6rem", fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 6, minWidth: 95, textAlign: "center" }}>{label}</span>
+      <div style={{ flex: 1, height: 6, background: "#edf2f7", borderRadius: 10, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: bar, borderRadius: 10, transition: "width .5s" }} />
+      </div>
+      <b style={{ fontSize: ".7rem", color: "#526983", minWidth: 20, textAlign: "center" }}>{count}</b>
+    </div>
+  );
+}
+
+function Panel({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e5eaf0", borderRadius: 13, boxShadow: "0 2px 10px rgba(18,55,94,.04)", overflow: "hidden" }}>
+      <div style={{ padding: "14px 18px 10px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", borderBottom: "1px solid #edf0f5" }}>
+        <div>
+          <h3 style={{ fontSize: ".78rem", margin: 0, color: "#073766", fontWeight: 800 }}>{title}</h3>
+          {sub && <p style={{ fontSize: ".6rem", color: "#8c99a8", margin: "2px 0 0" }}>{sub}</p>}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function OrderStatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; bg: string; color: string }> = {
+    "new": { label: "جديد", bg: "#e8f1fb", color: "#0875dc" },
+    "جديد": { label: "جديد", bg: "#e8f1fb", color: "#0875dc" },
+    "in_progress": { label: "قيد التنفيذ", bg: "#fff0e5", color: "#d06418" },
+    "قيد التنفيذ": { label: "قيد التنفيذ", bg: "#fff0e5", color: "#d06418" },
+    "waiting_documents": { label: "بانتظار مستندات", bg: "#fff8e5", color: "#ee892e" },
+    "بانتظار المستندات": { label: "بانتظار مستندات", bg: "#fff8e5", color: "#ee892e" },
+    "completed": { label: "مكتمل", bg: "#e2f5ed", color: "#13795a" },
+    "مكتمل": { label: "مكتمل", bg: "#e2f5ed", color: "#13795a" },
+    "cancelled": { label: "ملغي", bg: "#f5f6f8", color: "#8b9dad" },
+    "ملغي": { label: "ملغي", bg: "#f5f6f8", color: "#8b9dad" },
+    "جديدة": { label: "جديدة", bg: "#e8f1fb", color: "#0875dc" },
+    "قيد المراجعة": { label: "قيد المراجعة", bg: "#fff0e5", color: "#d06418" },
+    "بانتظار العميل": { label: "بانتظار العميل", bg: "#fff8e5", color: "#ee892e" },
+    "تم الحل": { label: "تم الحل", bg: "#e2f5ed", color: "#13795a" },
+    "مغلقة": { label: "مغلقة", bg: "#f5f6f8", color: "#8b9dad" },
+  };
+  const m = map[status] || { label: status, bg: "#f0f4f8", color: "#526983" };
+  return <span style={{ fontSize: ".55rem", fontWeight: 700, background: m.bg, color: m.color, padding: "2px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>{m.label}</span>;
+}
+
+const Splash = (
+  <div style={{ display: "grid", placeItems: "center", height: "calc(100vh - 76px)" }}>
+    <div style={{ width: 24, height: 24, border: "2px solid #e5ecf3", borderTopColor: "#073766", borderRadius: "50%", animation: "spin .6s linear infinite" }} />
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
+
+const s: Record<string, React.CSSProperties> = {
+  page: { padding: "24px 24px 40px", maxWidth: 1400, margin: "0 auto", direction: "rtl" },
+
+  header: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 20, gap: 16, flexWrap: "wrap" },
+  date: { fontSize: ".7rem", color: "#7a8fa6", margin: "0 0 3px" },
+  greeting: { fontSize: "1.4rem", color: "#073766", margin: "0 0 3px", fontWeight: 800 },
+  sub: { fontSize: ".72rem", color: "#7a8fa6", margin: 0 },
+  btnPrimary: { height: 38, padding: "0 16px", borderRadius: 8, background: "#0875dc", color: "#fff", fontWeight: 800, fontSize: ".75rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, boxShadow: "0 4px 12px rgba(8,117,220,.2)" },
+  btnOutline: { height: 38, padding: "0 14px", borderRadius: 8, background: "#fff", border: "1px solid #dce5ef", color: "#344d69", fontWeight: 700, fontSize: ".72rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 },
+
+  kpiStrip: { display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 18 },
+
+  grid: { display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, marginBottom: 0 },
+
+  /* Urgent */
+  urgentRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", borderBottom: "1px solid #fef2f2" },
+  urgentDot: { width: 8, height: 8, borderRadius: "50%", background: "#dc2626", flexShrink: 0 },
+  urgentTitle: { fontSize: ".68rem", fontWeight: 700, color: "#1e3a56", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  urgentClient: { fontSize: ".57rem", color: "#8b9dad", marginTop: 1 },
+  badge: { fontSize: ".55rem", fontWeight: 700, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap", flexShrink: 0 },
+
+  /* Rating table */
+  ratingTable: { width: "100%", borderCollapse: "collapse", fontSize: ".64rem" },
+  th: { textAlign: "right", fontSize: ".6rem", color: "#7a8fa6", fontWeight: 700, padding: "7px 12px", borderBottom: "2px solid #edf0f5", whiteSpace: "nowrap" },
+  td: { padding: "9px 12px", color: "#1e3a56", borderBottom: "1px solid #f0f3f8" },
+  code: { fontFamily: "inherit", background: "#f0f4f8", padding: "1px 5px", borderRadius: 4, fontSize: ".58rem" },
+  panelLink: { display: "block", fontSize: ".62rem", color: "#0875dc", textDecoration: "none", fontWeight: 700, padding: "10px 18px", borderTop: "1px solid #edf0f5", textAlign: "center" as const },
+
+  /* Ticket row */
+  ticketRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", borderBottom: "1px solid #f0f3f8" },
+  ticketTitle: { fontSize: ".65rem", fontWeight: 700, color: "#1e3a56", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+
+  /* Mini stats */
+  statsMiniGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 },
+  statMini: { borderRadius: 10, padding: "11px", display: "flex", alignItems: "center", gap: 9, border: "1px solid" },
+  statMiniIcon: { fontSize: "1rem", flexShrink: 0 },
+
+  /* Progress card */
+  progressCard: { background: "#fff", border: "1px solid #e5eaf0", borderRadius: 13, padding: "16px 18px", boxShadow: "0 2px 10px rgba(18,55,94,.04)" },
+
+  /* Actions */
+  actionGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 },
+  actionCard: { display: "flex", alignItems: "center", gap: 10, padding: "12px", background: "#fff", border: "1px solid #e5eaf0", borderRadius: 10, textDecoration: "none", boxShadow: "0 1px 4px rgba(18,55,94,.02)" },
+  actionIcon: { width: 34, height: 34, borderRadius: 9, display: "grid", placeItems: "center", fontSize: ".9rem", flexShrink: 0 },
+  empty: { textAlign: "center", padding: "18px 0", fontSize: ".68rem", color: "#8b9dad" },
+};

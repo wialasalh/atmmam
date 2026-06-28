@@ -10,11 +10,28 @@ export async function GET() {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, full_name, role, phone, avatar_url, created_at")
-    .eq("id", user.id)
-    .single();
+  // Try with permissions column first (may fail if migration not run)
+  let profile: any = null;
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name, role, phone, avatar_url, created_at, permissions")
+      .eq("id", user.id)
+      .single();
+    profile = data;
+  } catch {}
+
+  // Fallback without permissions if the column doesn't exist
+  if (!profile) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name, role, phone, avatar_url, created_at")
+      .eq("id", user.id)
+      .single();
+    profile = data;
+  }
+
+  const permissions: string[] = profile?.permissions || [];
 
   // Get client records if user is a client
   let clientRecords = null;
@@ -32,6 +49,7 @@ export async function GET() {
       ...profile,
       email: user.email,
       clients: clientRecords,
+      permissions,
     },
   });
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AlertCircle, ArrowLeft, Check, Clock, FileText, List } from "lucide-react";
 import { Header } from "@/components/header";
 import { services, siteConfig } from "@/data/site";
 
@@ -28,66 +29,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       locale: "ar_SA",
     },
   };
-}
-
-function CheckIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 6L9 17l-5-5"/>
-    </svg>
-  );
-}
-
-function ArrowLeftIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 12H5M12 19l-7-7 7-7"/>
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <polyline points="12 6 12 12 16 14"/>
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="16" y1="13" x2="8" y2="13"/>
-      <line x1="16" y1="17" x2="8" y2="17"/>
-      <polyline points="10 9 9 9 8 9"/>
-    </svg>
-  );
-}
-
-function ListIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="8" y1="6" x2="21" y2="6"/>
-      <line x1="8" y1="12" x2="21" y2="12"/>
-      <line x1="8" y1="18" x2="21" y2="18"/>
-      <line x1="3" y1="6" x2="3.01" y2="6"/>
-      <line x1="3" y1="12" x2="3.01" y2="12"/>
-      <line x1="3" y1="18" x2="3.01" y2="18"/>
-    </svg>
-  );
-}
-
-function AlertIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <line x1="12" y1="8" x2="12" y2="12"/>
-      <line x1="12" y1="16" x2="12.01" y2="16"/>
-    </svg>
-  );
 }
 
 export default async function ServiceDetailPage({ params }: Props) {
@@ -187,21 +128,21 @@ export default async function ServiceDetailPage({ params }: Props) {
           <div className="sd-strip">
             <div className="sd-strip-item">
               <span className="sd-strip-head">
-                <ClockIcon />
+                <Clock size={18} />
                 <span className="sd-strip-label">المدة التقريبية</span>
               </span>
               <span className="sd-strip-value">{service.duration}</span>
             </div>
             <div className="sd-strip-item">
               <span className="sd-strip-head">
-                <FileIcon />
+                <FileText size={18} />
                 <span className="sd-strip-label">المتطلبات</span>
               </span>
               <span className="sd-strip-value">{service.requirements.length}</span>
             </div>
             <div className="sd-strip-item">
               <span className="sd-strip-head">
-                <ListIcon />
+                <List size={18} />
                 <span className="sd-strip-label">خطوات العمل</span>
               </span>
               <span className="sd-strip-value">{service.process.length}</span>
@@ -217,7 +158,7 @@ export default async function ServiceDetailPage({ params }: Props) {
               <ul className="sd-list">
                 {service.deliverables.map((item) => (
                   <li key={item}>
-                    <span className="sd-list-icon"><CheckIcon /></span>
+                    <span className="sd-list-icon"><Check size={16} strokeWidth={2.5} /></span>
                     <span>{item}</span>
                   </li>
                 ))}
@@ -229,7 +170,7 @@ export default async function ServiceDetailPage({ params }: Props) {
               <ul className="sd-list">
                 {service.requirements.map((item) => (
                   <li key={item}>
-                    <span className="sd-list-icon is-warm"><CheckIcon /></span>
+                    <span className="sd-list-icon is-warm"><Check size={16} strokeWidth={2.5} /></span>
                     <span>{item}</span>
                   </li>
                 ))}
@@ -267,7 +208,7 @@ export default async function ServiceDetailPage({ params }: Props) {
                   <ul className="sd-list">
                     {painPoints.map((item) => (
                       <li key={item}>
-                        <span className="sd-list-icon is-danger"><AlertIcon /></span>
+                        <span className="sd-list-icon is-danger"><AlertCircle size={16} /></span>
                         <span>{item}</span>
                       </li>
                     ))}
@@ -282,7 +223,7 @@ export default async function ServiceDetailPage({ params }: Props) {
                     {relatedTools.map((tool) => (
                       <Link href={tool.href} key={tool.href} className="sd-tool-link">
                         {tool.label}
-                        <ArrowLeftIcon />
+                        <ArrowLeft size={16} />
                       </Link>
                     ))}
                   </div>

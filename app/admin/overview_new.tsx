@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AdminOpsHeader } from "@/components/admin-ops-header";
 import { initialAdminOrders, readAdminOrders } from "@/lib/admin-orders";
 import { fetchAdminOrdersFromApi } from "@/lib/admin-orders-api";
+import { ClipboardList, CheckCircle, Users, RefreshCw, Package, BarChart3, UserCog, LayoutDashboard } from "lucide-react";
 
 function getTodayArabic() {
   const days = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
@@ -55,7 +56,7 @@ export default function AdminOverviewPage() {
           </div>
           <div className="ov-top-actions">
             <a href="/admin/reports" className="ov-btn-secondary">
-              <span>📊</span> التقارير
+              <span><BarChart3 size={14} /></span> التقارير
             </a>
             <a href="/admin" className="ov-btn-primary">
               <span>＋</span> طلب جديد
@@ -66,7 +67,7 @@ export default function AdminOverviewPage() {
         {/* KPI Cards */}
         <div className="ov-kpis">
           <article className="ov-kpi">
-            <div className="ov-kpi-icon blue">▤</div>
+            <div className="ov-kpi-icon blue"><ClipboardList size={22} /></div>
             <div>
               <small>إجمالي الطلبات</small>
               <strong className="ov-kpi-num">{stats.total}</strong>
@@ -90,7 +91,7 @@ export default function AdminOverviewPage() {
             </div>
           </article>
           <article className="ov-kpi">
-            <div className="ov-kpi-icon green">✓</div>
+            <div className="ov-kpi-icon green"><CheckCircle size={22} /></div>
             <div>
               <small>مكتملة</small>
               <strong className="ov-kpi-num green">{stats.done}</strong>
@@ -126,7 +127,7 @@ export default function AdminOverviewPage() {
             </header>
             <div className="ov-priority-list">
               {priority.length === 0 && (
-                <div className="ov-empty">✓ لا توجد طلبات معلقة، عمل رائع!</div>
+                <div className="ov-empty">لا توجد طلبات معلقة، عمل رائع!</div>
               )}
               {priority.map((order, i) => (
                 <div className="ov-priority-row" key={order.id}>
@@ -207,12 +208,12 @@ export default function AdminOverviewPage() {
           <h2 className="ov-section-title">وصول سريع</h2>
           <div className="ov-actions-grid">
             {[
-              { href: "/admin", icon: "▤", label: "إدارة الطلبات", sub: "بحث وتحديث وإنشاء الطلبات" },
-              { href: "/admin/clients", icon: "♙", label: "ملفات العملاء", sub: "الوصول لبيانات وطلبات العميل" },
-              { href: "/admin/followups", icon: "◷", label: "المتابعات", sub: "الإجراءات والمواعيد القادمة" },
-              { href: "/admin/services", icon: "◇", label: "كتالوج الخدمات", sub: "إدارة الخدمات والمتطلبات" },
-              { href: "/admin/team", icon: "👥", label: "إدارة الفريق", sub: "الأعضاء والصلاحيات" },
-              { href: "/admin/reports", icon: "📈", label: "التقارير", sub: "إحصائيات الأداء والإنجاز" },
+              { href: "/admin", icon: <ClipboardList size={18} />, label: "إدارة الطلبات", sub: "بحث وتحديث وإنشاء الطلبات" },
+              { href: "/admin/clients", icon: <Users size={18} />, label: "ملفات العملاء", sub: "الوصول لبيانات وطلبات العميل" },
+              { href: "/admin/followups", icon: <RefreshCw size={18} />, label: "المتابعات", sub: "الإجراءات والمواعيد القادمة" },
+              { href: "/admin/services", icon: <Package size={18} />, label: "كتالوج الخدمات", sub: "إدارة الخدمات والمتطلبات" },
+              { href: "/admin/team", icon: <UserCog size={18} />, label: "إدارة الفريق", sub: "الأعضاء والصلاحيات" },
+              { href: "/admin/reports", icon: <BarChart3 size={18} />, label: "التقارير", sub: "إحصائيات الأداء والإنجاز" },
             ].map(({ href, icon, label, sub }) => (
               <a href={href} className="ov-action-card" key={href}>
                 <span className="ov-action-icon">{icon}</span>

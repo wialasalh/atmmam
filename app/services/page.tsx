@@ -1,26 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AlertCircle, ArrowLeft } from "lucide-react";
 import { Header } from "@/components/header";
 import { ContactSection } from "@/components/contact-section";
 import { freeTools, services, serviceStages } from "@/data/site";
-
-function AlertIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <line x1="12" y1="8" x2="12" y2="12"/>
-      <line x1="12" y1="16" x2="12.01" y2="16"/>
-    </svg>
-  );
-}
-
-function ArrowLeftIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 12H5M12 19l-7-7 7-7"/>
-    </svg>
-  );
-}
 
 export const metadata: Metadata = {
   title: "الخدمات",
@@ -47,7 +30,7 @@ export default function ServicesPage() {
                 ابدأ من المرحلة الأقرب لك، ثم ادخل إلى تفاصيل الخدمة المناسبة.
               </p>
               <div className="services-index-notice">
-                <AlertIcon />
+                <AlertCircle size={22} />
                 <div>
                   <strong>قبل اختيار الخدمة</strong>
                   <p>إذا لم تعرف أين تقع حالتك، أرسل وصفاً مختصراً وسنوجهك للمسار الأنسب قبل التسعير.</p>
@@ -73,7 +56,7 @@ export default function ServicesPage() {
                 <p>{stage.body}</p>
                 <span className="services-stage-link">
                   اعرف المسار
-                  <ArrowLeftIcon />
+                  <ArrowLeft size={16} />
                 </span>
               </Link>
             ))}

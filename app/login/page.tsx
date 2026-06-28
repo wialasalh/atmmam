@@ -41,7 +41,7 @@ export default function ClientLoginPage() {
         .eq("id", data.user.id)
         .single();
 
-      if (profile?.role === "admin" || profile?.role === "manager" || profile?.role === "operator") {
+      if (profile?.role === "admin" || profile?.role === "manager" || profile?.role === "operator" || profile?.role === "viewer") {
         await supabase.auth.signOut();
         setMessage("هذا الحساب خاص بلوحة تحكم الفريق");
         return;
