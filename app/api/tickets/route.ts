@@ -114,13 +114,7 @@ export async function GET(request: Request) {
   if (isStaff && serviceClient) {
     query = serviceClient
       .from("tickets")
-      .select(`
-        *,
-        profiles:user_id(full_name, email),
-        assigned_profile:assigned_to(full_name),
-        client:client_id(name, client_type),
-        locked_profile:locked_by(full_name)
-      `);
+      .select(`*, client:clients(name, client_type)`);
 
     if (assignedToFilter) query = query.eq("assigned_to", assignedToFilter);
     if (categoryFilter) query = query.eq("category", categoryFilter);
