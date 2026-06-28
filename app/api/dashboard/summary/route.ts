@@ -15,14 +15,43 @@ export async function GET() {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
-  const [profileRes, clientsRes, ticketsRes] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, role, phone, avatar_url").eq("id", user.id).single(),
+  const [profileRes, clientsRes] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, role, phone, avatar_url, member_of_client_id").eq("id", user.id).single(),
     supabase.from("clients").select("id, name, commercial_register_expiry").eq("user_id", user.id),
-    supabase.from("tickets").select("id, title, status, priority, updated_at, client:client_id(name, client_type)").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(10),
   ]);
 
-  const clients = clientsRes.data ?? [];
-  const tickets = ticketsRes.data ?? [];
+  const memberClientId = profileRes.data?.member_of_client_id || null;
+
+  // For members: use their linked company; for regular clients: own records
+  let clients = clientsRes.data ?? [];
+  if (memberClientId && serviceClient) {
+    const { data: memberClient } = await serviceClient
+      .from("clients")
+      .select("id, name, commercial_register_expiry")
+      .eq("id", memberClientId)
+      .limit(1);
+    clients = memberClient ?? [];
+  }
+
+  // Fetch tickets: members see company tickets, clients see own tickets
+  let tickets: any[] = [];
+  if (memberClientId && serviceClient) {
+    const { data } = await serviceClient
+      .from("tickets")
+      .select("id, title, status, priority, updated_at, client:clients(name, client_type)")
+      .eq("client_id", memberClientId)
+      .order("updated_at", { ascending: false })
+      .limit(10);
+    tickets = data ?? [];
+  } else {
+    const { data } = await supabase
+      .from("tickets")
+      .select("id, title, status, priority, updated_at, client:client_id(name, client_type)")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(10);
+    tickets = data ?? [];
+  }
 
   // Orders are linked via client_id, not user_id
   let orders: { id: string; reference_no: string; service_name: string; status: string; created_at: string }[] = [];

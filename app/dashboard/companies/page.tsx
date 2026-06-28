@@ -5,7 +5,7 @@ import {
   Building2, Plus, Save, Upload, MapPin, Hash, Briefcase,
   FileText, Users, Globe, Clock, Calendar, X, Check,
   AlertCircle, ChevronDown, ExternalLink, Trash2, CheckCircle2, Phone,
-  User, CheckCircle
+  User, CheckCircle, XCircle
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -31,6 +31,11 @@ type FormData = {
   national_id: string; unified_register_number: string; notes: string;
   phone: string; saudization_percentage: string;
 };
+
+// تحويل الأرقام العربية/الهندية إلى إنجليزية
+function toWesternNums(val: string): string {
+  return val.replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 1632));
+}
 
 // ── Validation helpers ──────────────────────────
 function validatePhone(phone: string): string | null {
@@ -270,6 +275,10 @@ export default function CompaniesPage() {
 
   return (
     <div className="client-dash-page" dir="rtl">
+      <style>{`
+        .client-dash-page { font-feature-settings: "lnum" 1; }
+        .client-dash-page * { font-variant-numeric: lining-nums !important; }
+      `}</style>
 
       {/* ── Header ── */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, marginBottom:4 }}>
@@ -332,7 +341,7 @@ export default function CompaniesPage() {
               </div>
               <div>
                 <label style={{ display:"block", fontSize:".63rem", fontWeight:700, color:"#425c76", marginBottom:5 }}>الرقم الضريبي</label>
-                <input value={newCompany.tax_number} onChange={e => setNewCompany({...newCompany, tax_number:e.target.value})}
+                <input value={newCompany.tax_number} onChange={e => setNewCompany({...newCompany, tax_number:toWesternNums(e.target.value)})}
                   placeholder="15 رقماً"
                   style={{ width:"100%", height:42, border:"1px solid #dfe7ef", borderRadius:10, padding:"0 14px", font:"inherit", fontSize:".75rem", boxSizing:"border-box", outline:"none" }}
                   onFocus={e => e.target.style.borderColor="#0875dc"} onBlur={e => e.target.style.borderColor="#dfe7ef"} />
@@ -435,14 +444,14 @@ export default function CompaniesPage() {
                 </div>
                 <div>
                   <FieldLabel icon={Hash} label="الرقم الضريبي" />
-                  <input value={form.tax_number} onChange={e => { setForm({...form,tax_number:e.target.value}); setFieldErrors(prev => ({...prev, tax_number: ""})); }}
+                  <input value={form.tax_number} onChange={e => { setForm({...form,tax_number:toWesternNums(e.target.value)}); setFieldErrors(prev => ({...prev, tax_number: ""})); }}
                     placeholder="15 رقماً يبدأ بـ 3" className="form-input"
                     style={{ borderColor: fieldErrors.tax_number ? "#dc2626" : undefined }} />
                   {fieldErrors.tax_number && <p style={{ margin:"4px 0 0", fontSize:".6rem", color:"#dc2626" }}>{fieldErrors.tax_number}</p>}
                 </div>
                 <div>
                   <FieldLabel icon={FileText} label="رقم السجل التجاري" />
-                  <input value={form.commercial_number} onChange={e => setForm({...form,commercial_number:e.target.value})} placeholder="10 أرقام" className="form-input" />
+                  <input value={form.commercial_number} onChange={e => setForm({...form,commercial_number:toWesternNums(e.target.value)})} placeholder="10 أرقام" className="form-input" />
                 </div>
                 <div>
                   <FieldLabel icon={Calendar} label="تاريخ إصدار السجل" />
@@ -454,11 +463,11 @@ export default function CompaniesPage() {
                 </div>
                 <div>
                   <FieldLabel icon={Hash} label="رقم الهوية الوطنية" />
-                  <input value={form.national_id} onChange={e => setForm({...form,national_id:e.target.value})} placeholder="10 أرقام" className="form-input" />
+                  <input value={form.national_id} onChange={e => setForm({...form,national_id:toWesternNums(e.target.value)})} placeholder="10 أرقام" className="form-input" />
                 </div>
                 <div>
                   <FieldLabel icon={Hash} label="رقم السجل الموحد" />
-                  <input value={form.unified_register_number} onChange={e => setForm({...form,unified_register_number:e.target.value})} placeholder="رقم السجل الموحد" className="form-input" />
+                  <input value={form.unified_register_number} onChange={e => setForm({...form,unified_register_number:toWesternNums(e.target.value)})} placeholder="رقم السجل الموحد" className="form-input" />
                 </div>
               </div>
             </div>}
@@ -495,7 +504,7 @@ export default function CompaniesPage() {
                 </div>
                 <div>
                   <FieldLabel icon={Phone} label="جوال المنشأة" />
-                  <input value={form.phone} onChange={e => { setForm({...form, phone:e.target.value}); setFieldErrors(prev => ({...prev, phone: ""})); }}
+                  <input value={form.phone} onChange={e => { setForm({...form, phone:toWesternNums(e.target.value)}); setFieldErrors(prev => ({...prev, phone: ""})); }}
                     placeholder="05XXXXXXXX" className="form-input" maxLength={10}
                     style={{ borderColor: fieldErrors.phone ? "#dc2626" : undefined }} />
                   {fieldErrors.phone && <p style={{ margin:"4px 0 0", fontSize:".6rem", color:"#dc2626" }}>{fieldErrors.phone}</p>}
@@ -641,12 +650,147 @@ export default function CompaniesPage() {
             {openSection === "employees" && <EmployeesSection clientId={selected.id} maxEmployees={selected.employee_count || 0} />}
           </div>
 
+          {/* ── Invitations ── */}
+          <div style={{ background:"#fff", border:"1px solid #e8edf3", borderRadius:16, overflow:"hidden" }}>
+            <button onClick={() => setOpenSection(openSection === "invitations" ? "" : "invitations")}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"16px 20px", border:0, background: openSection === "invitations" ? "#f8fafc" : "#fff", cursor:"pointer", borderBottom: openSection === "invitations" ? "1px solid #f0f4f8" : "none", borderRadius: openSection === "invitations" ? "16px 16px 0 0" : 16 }}>
+              <div style={{ width:36, height:36, borderRadius:10, background:"#f0f7ff", display:"grid", placeItems:"center", flexShrink:0 }}>
+                <Users size={18} color="#0875dc" />
+              </div>
+              <div style={{ flex:1, textAlign:"right" }}>
+                <div style={{ fontSize:".78rem", fontWeight:800, color:"#0b1e36" }}>دعوة موظف / ممثل</div>
+                <div style={{ fontSize:".65rem", color:"#9aafbf", marginTop:2 }}>أرسل رابط دعوة لمنح وصول محدود</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "invitations" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            {openSection === "invitations" && <InvitationsSection clientId={selected.id} />}
+          </div>
+
           {/* ── Save Button ── */}
           <button onClick={handleSave} disabled={saving} className="client-dash-primary-btn"
             style={{ width:"100%", height:48, fontSize:".8rem", gap:8 }}>
             <Save size={16} /> {saving ? "جاري الحفظ..." : "حفظ جميع التغييرات"}
           </button>
         </>
+      )}
+    </div>
+  );
+}
+
+// ── Invitations Section ─────────────────────────────────────────────────
+function InvitationsSection({ clientId }: { clientId: string }) {
+  const [invitations, setInvitations] = useState<{id:string;email:string;full_name:string|null;status:string;token:string;expires_at:string}[]>([]);
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [sending, setSending] = useState(false);
+  const [msg, setMsg] = useState<{type:"success"|"error";text:string}|null>(null);
+  const [copiedToken, setCopiedToken] = useState<string|null>(null);
+
+  async function load() {
+    const res = await fetch(`/api/client/invitations?client_id=${clientId}`);
+    if (res.ok) { const { data } = await res.json(); setInvitations(data || []); }
+  }
+  useEffect(() => { load(); }, [clientId]);
+
+  async function sendInvite() {
+    if (!email.trim()) return;
+    setSending(true); setMsg(null);
+    const res = await fetch("/api/client/invitations", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ client_id: clientId, email: email.trim(), full_name: fullName.trim()||null }),
+    });
+    const json = await res.json();
+    if (!res.ok) { setMsg({type:"error", text: json.error || "فشل الإرسال"}); }
+    else {
+      setMsg({type:"success", text:"تم إرسال الدعوة بنجاح"});
+      setEmail(""); setFullName(""); load();
+    }
+    setSending(false);
+  }
+
+  async function cancelInvite(id: string) {
+    await fetch("/api/client/invitations", { method:"DELETE", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ id }) });
+    load();
+  }
+
+  function copyLink(token: string) {
+    const url = `${window.location.origin}/register?invitation=${token}`;
+    navigator.clipboard.writeText(url);
+    setCopiedToken(token);
+    setTimeout(() => setCopiedToken(null), 2000);
+  }
+
+  const statusLabel: Record<string,{label:string;color:string;bg:string}> = {
+    pending:  { label:"بانتظار القبول", color:"#b45309", bg:"#fef9ec" },
+    accepted: { label:"مقبولة",         color:"#15803d", bg:"#f0fdf4" },
+    expired:  { label:"منتهية",         color:"#9aafbf", bg:"#f8fafc" },
+  };
+
+  return (
+    <div style={{ padding:"20px" }}>
+      {/* Form */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr auto", gap:10, marginBottom:16 }}>
+        <input value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="الاسم (اختياري)"
+          style={{ height:40, border:"1px solid #dfe7ef", borderRadius:10, padding:"0 12px", font:"inherit", fontSize:".75rem", outline:"none" }} />
+        <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="البريد الإلكتروني"
+          style={{ height:40, border:"1px solid #dfe7ef", borderRadius:10, padding:"0 12px", font:"inherit", fontSize:".75rem", outline:"none", direction:"ltr" }} />
+        <button onClick={sendInvite} disabled={sending||!email.trim()}
+          style={{ height:40, padding:"0 18px", background:"#0875dc", color:"#fff", border:0, borderRadius:10, fontSize:".75rem", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", opacity:sending||!email.trim()?0.6:1 }}>
+          {sending ? "جاري الإرسال..." : "إرسال دعوة"}
+        </button>
+      </div>
+
+      {msg && (
+        <div style={{ padding:"10px 14px", borderRadius:10, marginBottom:14, fontSize:".73rem", fontWeight:600,
+          background: msg.type==="success"?"#f0fdf4":"#fef2f2", color: msg.type==="success"?"#15803d":"#dc2626", border:`1px solid ${msg.type==="success"?"#86efac":"#fca5a5"}` }}>
+          {msg.text}
+        </div>
+      )}
+
+      {/* List */}
+      {invitations.length === 0 ? (
+        <div style={{ textAlign:"center", color:"#9aafbf", fontSize:".73rem", padding:"20px 0" }}>لا توجد دعوات بعد</div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {invitations.map(inv => {
+            const s = statusLabel[inv.status] || statusLabel.expired;
+            return (
+              <div key={inv.id} style={{ background:"#f8fafc", borderRadius:10, border:"1px solid #e8edf3", overflow:"hidden" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px" }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:".75rem", fontWeight:700, color:"#0b1e36" }}>{inv.full_name || inv.email}</div>
+                  <div style={{ fontSize:".65rem", color:"#9aafbf", direction:"ltr", textAlign:"right" }}>{inv.email}</div>
+                </div>
+                <span style={{ fontSize:".65rem", fontWeight:700, padding:"2px 8px", borderRadius:6, background:s.bg, color:s.color, border:`1px solid ${s.color}33`, whiteSpace:"nowrap" }}>
+                  {s.label}
+                </span>
+                {inv.status === "pending" && (
+                  <>
+                    <button onClick={() => copyLink(inv.token)}
+                      style={{ display:"flex", alignItems:"center", gap:5, height:28, padding:"0 10px", border:"1px solid #bfdbfe", borderRadius:7, background:"#eff6ff", color:"#1d4ed8", fontSize:".65rem", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+                      {copiedToken===inv.token ? <><Check size={12}/> تم النسخ</> : <><ExternalLink size={12}/> نسخ الرابط</>}
+                    </button>
+                    <button onClick={() => cancelInvite(inv.id)}
+                      style={{ width:28, height:28, border:"1px solid #fca5a5", borderRadius:7, background:"#fef2f2", cursor:"pointer", display:"grid", placeItems:"center" }}>
+                      <X size={12} color="#dc2626"/>
+                    </button>
+                  </>
+                )}
+                </div>
+                {inv.status === "pending" && (
+                  <div style={{ padding:"8px 14px", borderTop:"1px solid #e8edf3", background:"#fff", display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ fontSize:".6rem", color:"#9aafbf", flexShrink:0 }}>رمز الدعوة:</span>
+                    <code style={{ flex:1, fontSize:".62rem", color:"#1d4ed8", fontFamily:"monospace", letterSpacing:".03em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {`${typeof window!=="undefined"?window.location.origin:""}/register?invitation=${inv.token}`}
+                    </code>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -716,7 +860,7 @@ function EmployeesSection({ clientId, maxEmployees }: { clientId: string; maxEmp
           body: JSON.stringify({ employeeId: editing.id, full_name: form.full_name, phone: form.phone, email: form.email, position: form.position, national_id: form.national_id }),
         });
         if (!res.ok) { const d = await res.json(); throw new Error(d.error || "فشل التحديث"); }
-        setMsg("✅ تم التحديث");
+        setMsg("success:تم التحديث بنجاح");
       } else {
         const res = await fetch("/api/client/employees", {
           method: "POST",
@@ -724,11 +868,11 @@ function EmployeesSection({ clientId, maxEmployees }: { clientId: string; maxEmp
           body: JSON.stringify({ client_id: clientId, full_name: form.full_name, phone: form.phone, email: form.email, position: form.position, national_id: form.national_id }),
         });
         if (!res.ok) { const d = await res.json(); throw new Error(d.error || "فشلت الإضافة"); }
-        setMsg("✅ تمت الإضافة");
+        setMsg("success:تمت إضافة الموظف بنجاح");
       }
       setShowForm(false);
       await loadEmployees();
-    } catch (err) { setMsg("❌ " + (err instanceof Error ? err.message : "فشل العملية")); }
+    } catch (err) { setMsg("error:" + (err instanceof Error ? err.message : "فشل العملية")); }
     setSaving(false);
     setTimeout(() => setMsg(""), 3000);
   }
@@ -762,8 +906,15 @@ function EmployeesSection({ clientId, maxEmployees }: { clientId: string; maxEmp
       </div>
 
       {msg && (
-        <div style={{ padding: "8px 12px", borderRadius: 8, background: msg.startsWith("✅") ? "#f0fdf4" : "#fef2f2", color: msg.startsWith("✅") ? "#15803d" : "#dc2626", fontSize: ".65rem", fontWeight: 600, marginBottom: 10 }}>
-          {msg}
+        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 14px", borderRadius:10, marginBottom:12,
+          background: msg.startsWith("success") ? "#f0fdf4" : "#fef2f2",
+          border: `1px solid ${msg.startsWith("success") ? "#86efac" : "#fca5a5"}`,
+          color: msg.startsWith("success") ? "#15803d" : "#dc2626",
+          fontSize:".72rem", fontWeight:600 }}>
+          {msg.startsWith("success")
+            ? <CheckCircle size={15} color="#16a34a"/>
+            : <XCircle size={15} color="#dc2626"/>}
+          <span>{msg.split(":")[1]}</span>
         </div>
       )}
 
@@ -836,7 +987,7 @@ function EmployeesSection({ clientId, maxEmployees }: { clientId: string; maxEmp
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
                   <label style={{ display: "block", fontSize: ".63rem", fontWeight: 700, color: "#425c76", marginBottom: 5 }}>رقم الجوال</label>
-                  <input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="05XXXXXXXX"
+                  <input value={form.phone} onChange={e => setForm({...form, phone: toWesternNums(e.target.value)})} placeholder="05XXXXXXXX"
                     style={{ width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", boxSizing: "border-box", outline: "none" }}
                     onFocus={e => e.target.style.borderColor = "#0875dc"} onBlur={e => e.target.style.borderColor = "#dfe7ef"} />
                 </div>
@@ -849,7 +1000,7 @@ function EmployeesSection({ clientId, maxEmployees }: { clientId: string; maxEmp
               </div>
               <div>
                 <label style={{ display: "block", fontSize: ".63rem", fontWeight: 700, color: "#425c76", marginBottom: 5 }}>رقم الهوية</label>
-                <input value={form.national_id} onChange={e => setForm({...form, national_id: e.target.value})} placeholder="10 أرقام"
+                <input value={form.national_id} onChange={e => setForm({...form, national_id: toWesternNums(e.target.value)})} placeholder="10 أرقام"
                   style={{ width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem", boxSizing: "border-box", outline: "none" }}
                   onFocus={e => e.target.style.borderColor = "#0875dc"} onBlur={e => e.target.style.borderColor = "#dfe7ef"} />
               </div>

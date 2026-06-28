@@ -15,7 +15,7 @@ export async function GET() {
   try {
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, role, phone, avatar_url, created_at, permissions")
+      .select("id, full_name, role, phone, avatar_url, created_at, permissions, member_of_client_id")
       .eq("id", user.id)
       .single();
     profile = data;
@@ -27,7 +27,7 @@ export async function GET() {
   if (!profile) {
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, role, phone, avatar_url, created_at")
+      .select("id, full_name, role, phone, avatar_url, created_at, member_of_client_id")
       .eq("id", user.id)
       .single();
     profile = data;
@@ -35,15 +35,24 @@ export async function GET() {
 
   const permissions: string[] = profile?.permissions || [];
 
-  // Get client records if user is a client
+  // Get client records — own records for client, linked record for member
   let clientRecords = null;
-  if (profile?.role === "client") {
-    const { data: cr } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true });
-    clientRecords = cr || [];
+  if (profile?.role === "client" || profile?.role === "member") {
+    if (profile?.member_of_client_id) {
+      const { data: cr } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", profile.member_of_client_id)
+        .limit(1);
+      clientRecords = cr || [];
+    } else {
+      const { data: cr } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+      clientRecords = cr || [];
+    }
   }
 
   return NextResponse.json({

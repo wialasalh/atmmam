@@ -57,8 +57,13 @@ export async function middleware(request: NextRequest) {
   if (!user && isTicketApi) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   if (!user && isClientApi) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
-  // Dashboard protection
+  // Dashboard protection — staff must never access client dashboard
   if (!user && isDashboard) return NextResponse.redirect(new URL("/login", request.url));
+  if (user && isDashboard) {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    if (profile?.role && ["admin","manager","operator","viewer"].includes(profile.role))
+      return NextResponse.redirect(new URL("/admin", request.url));
+  }
   if (user && (isLoginPage || isRegisterPage) && !path.startsWith("/admin")) return NextResponse.redirect(new URL("/dashboard", request.url));
 
   return response;

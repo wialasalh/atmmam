@@ -1,16 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/header";
 import "../dashboard/dashboard.css";
 
-export default function ClientRegisterPage() {
+function RegisterForm() {
+  const searchParams = useSearchParams();
+  const invitationToken = searchParams.get("invitation");
+
   const [form, setForm] = useState({ fullName: "", companyName: "", email: "", phone: "", password: "", confirm: "" });
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
   const [confirmLink, setConfirmLink] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isInvite, setIsInvite] = useState(false);
+
+  useEffect(() => {
+    if (invitationToken) setIsInvite(true);
+  }, [invitationToken]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,14 +37,21 @@ export default function ClientRegisterPage() {
           email: form.email,
           phone: form.phone,
           password: form.password,
-          clientType: form.companyName ? "company" : "person",
-          companyName: form.companyName || undefined,
+          clientType: invitationToken ? "person" : (form.companyName ? "company" : "person"),
+          companyName: !invitationToken && form.companyName ? form.companyName : undefined,
+          invitationToken: invitationToken || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) { setMessage(data.error || "فشل إنشاء الحساب"); return; }
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch { setMessage(`خطأ في الاستجابة: ${text}`); setLoading(false); return; }
+      if (!res.ok) { setMessage(data.error || `فشل (${res.status}): ${text}`); return; }
       setSuccess(true);
       if (data.confirmationLink) setConfirmLink(data.confirmationLink);
+      // Invited members go straight to login
+      if (invitationToken) {
+        setTimeout(() => { window.location.href = "/login?invited=1"; }, 1500);
+      }
     } catch {
       setMessage("حدث خطأ في الاتصال");
     } finally { setLoading(false); }
@@ -49,7 +65,11 @@ export default function ClientRegisterPage() {
         <section className="client-auth-card">
           <Link href="/"><img src="/assets/logo/atmmam-ai-lockup.png" alt="أتمم" className="client-auth-logo" /></Link>
           <h1>تم إنشاء الحساب</h1>
-          <p className="client-auth-sub">يرجى التحقق من بريدك الإلكتروني <strong>{form.email}</strong> وتأكيد الحساب للتمكن من تسجيل الدخول وإرسال تذاكر الدعم ورفع المستندات.</p>
+          {isInvite ? (
+            <p className="client-auth-sub">تم قبول الدعوة بنجاح. سيتم تحويلك لتسجيل الدخول...</p>
+          ) : (
+            <p className="client-auth-sub">يرجى التحقق من بريدك الإلكتروني <strong>{form.email}</strong> وتأكيد الحساب للتمكن من تسجيل الدخول وإرسال تذاكر الدعم ورفع المستندات.</p>
+          )}
           {confirmLink && process.env.NODE_ENV === "development" && (
             <div style={{ background: "#f0f7ff", padding: "12px 14px", borderRadius: 10, marginBottom: 16, fontSize: ".65rem", color: "#2a4a6a", wordBreak: "break-all" }}>
               <strong>رابط التفعيل (بيئة تطوير):</strong><br />
@@ -69,17 +89,28 @@ export default function ClientRegisterPage() {
       <main className="client-auth-page" dir="rtl">
         <section className="client-auth-card">
         <Link href="/"><img src="/assets/logo/atmmam-ai-lockup.png" alt="أتمم" className="client-auth-logo" /></Link>
-        <h1>إنشاء حساب جديد</h1>
-        <p className="client-auth-sub">سجل الآن لتتمكن من متابعة طلباتك ورفع المستندات</p>
+        {isInvite ? (
+          <>
+            <h1>قبول الدعوة</h1>
+            <p className="client-auth-sub">أنت مدعو للانضمام كموظف/ممثل — أنشئ حسابك للبدء</p>
+          </>
+        ) : (
+          <>
+            <h1>إنشاء حساب جديد</h1>
+            <p className="client-auth-sub">سجل الآن لتتمكن من متابعة طلباتك ورفع المستندات</p>
+          </>
+        )}
         <form onSubmit={handleSubmit}>
           <label>
             <span>الاسم الكامل</span>
             <input required value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} placeholder="مثال: محمد أحمد" />
           </label>
-          <label>
-            <span>اسم المؤسسة أو الكيان (اختياري)</span>
-            <input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="مثال: مؤسسة النهضة للتجارة" />
-          </label>
+          {!isInvite && (
+            <label>
+              <span>اسم المؤسسة أو الكيان (اختياري)</span>
+              <input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="مثال: مؤسسة النهضة للتجارة" />
+            </label>
+          )}
           <div className="client-auth-row">
             <label>
               <span>البريد الإلكتروني</span>
@@ -107,5 +138,13 @@ export default function ClientRegisterPage() {
       </section>
     </main>
     </>
+  );
+}
+
+export default function ClientRegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
   );
 }

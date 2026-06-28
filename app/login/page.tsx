@@ -28,20 +28,21 @@ export default function ClientLoginPage() {
         return;
       }
 
-      // Check email confirmed
-      if (!data.user?.email_confirmed_at) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, member_of_client_id")
+        .eq("id", data.user.id)
+        .single();
+
+      // Allow invited members without email confirmation
+      const isMember = !!profile?.member_of_client_id;
+      if (!data.user?.email_confirmed_at && !isMember) {
         await supabase.auth.signOut();
         setMessage("البريد الإلكتروني غير مؤكد. يرجى التحقق من بريدك والضغط على رابط التفعيل.");
         return;
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .single();
-
-      if (profile?.role === "admin" || profile?.role === "manager" || profile?.role === "operator" || profile?.role === "viewer") {
+      if (["admin", "manager", "operator", "viewer"].includes(profile?.role)) {
         await supabase.auth.signOut();
         setMessage("هذا الحساب خاص بلوحة تحكم الفريق");
         return;

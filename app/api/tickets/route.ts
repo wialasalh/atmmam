@@ -119,10 +119,27 @@ export async function GET(request: Request) {
     if (assignedToFilter) query = query.eq("assigned_to", assignedToFilter);
     if (categoryFilter) query = query.eq("category", categoryFilter);
   } else {
-    query = supabase
-      .from("tickets")
-      .select(`*, client:client_id(name, client_type)`)
-      .eq("user_id", user.id);
+    // For members, fetch tickets by their linked client company
+    const { data: memberProfile } = await supabase
+      .from("profiles")
+      .select("member_of_client_id")
+      .eq("id", user.id)
+      .single();
+
+    const memberClientId = memberProfile?.member_of_client_id;
+
+    if (memberClientId && serviceClient) {
+      // Use service client to bypass RLS for member access to company tickets
+      query = serviceClient
+        .from("tickets")
+        .select(`*, client:clients(name, client_type)`)
+        .eq("client_id", memberClientId);
+    } else {
+      query = supabase
+        .from("tickets")
+        .select(`*, client:client_id(name, client_type)`)
+        .eq("user_id", user.id);
+    }
 
     if (clientIdFilter) query = query.eq("client_id", clientIdFilter);
   }
@@ -150,13 +167,18 @@ export async function POST(request: Request) {
   }
 
   // Staff members must never get auto-created client records
-  const { data: callerProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const { data: callerProfile } = await supabase.from("profiles").select("role, member_of_client_id").eq("id", user.id).single();
   const STAFF_ROLES = ["admin", "manager", "operator", "viewer"];
   const isStaffCaller = callerProfile && STAFF_ROLES.includes(callerProfile.role);
+  const memberClientId = callerProfile?.member_of_client_id || null;
 
   // Validate client_id belongs to this user, or auto-create (clients only)
   let resolvedClientId: string | null = null;
-  if (client_id) {
+
+  // Members: always use their linked company
+  if (memberClientId) {
+    resolvedClientId = memberClientId;
+  } else if (client_id) {
     const { data: clientCheck } = await supabase
       .from("clients")
       .select("id")
@@ -182,7 +204,7 @@ export async function POST(request: Request) {
       .select("full_name, phone, email")
       .eq("id", user.id)
       .single();
-    const { data: newClient } = await supabase
+    const { data: newClient, error: insertErr } = await supabase
       .from("clients")
       .insert({
         client_type: "person",
@@ -194,7 +216,18 @@ export async function POST(request: Request) {
       })
       .select("id")
       .single();
-    resolvedClientId = newClient?.id || null;
+    if (insertErr && insertErr.code === "23505") {
+      // Unique constraint hit — fetch the existing client
+      const { data: existing } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .single();
+      resolvedClientId = existing?.id || null;
+    } else {
+      resolvedClientId = newClient?.id || null;
+    }
   }
 
   // Calculate SLA

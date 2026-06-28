@@ -97,12 +97,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const res = await fetch("/api/auth/me");
       if (!res.ok) { router.replace("/login"); return; }
       const { data } = await res.json();
-      if (data?.role === "admin" || data?.role === "manager" || data?.role === "operator") {
-        // Don't render anything, just redirect
+      const STAFF_ROLES = ["admin", "manager", "operator", "viewer"];
+      if (data?.role && STAFF_ROLES.includes(data.role)) {
         setUser(null);
         router.replace("/admin");
         return;
       }
+      // member role is allowed in dashboard but with limited access
       setUser(data);
       setLoading(false);
     });

@@ -62,6 +62,8 @@ font-display:swap}
   color-scheme:light;
   --font-body:"Thmanyah Sans",system-ui,sans-serif;
   --font-heading:"Thmanyah Display","Thmanyah Sans",serif}
+/* Force Western Arabic numerals (0-9) across all RTL content */
+:lang(ar), [dir="rtl"] { -webkit-font-feature-settings:"lnum" 1; font-feature-settings:"lnum" 1; }
 *{
 box-sizing:border-box}
 html{

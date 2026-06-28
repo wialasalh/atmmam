@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "محاولات كثيرة، حاول بعد قليل" }, { status: 429, headers: { "Retry-After": String(retryAfter) } });
 
     const body = await request.json();
-    const { fullName, email, phone, password, clientType, companyName } = body;
+    const { fullName, email, phone, password, clientType, companyName, invitationToken } = body;
 
     if (!fullName || !email || !phone || !password) {
       return NextResponse.json({ error: "fullName, email, phone, password مطلوبة" }, { status: 400 });
@@ -39,49 +39,66 @@ export async function POST(request: Request) {
     const { data, error } = await serviceClient.auth.admin.createUser({
       email,
       password,
-      email_confirm: false,
+      email_confirm: !!invitationToken,
       user_metadata: meta,
     });
+
     if (error) {
-      if (error.message.toLowerCase().includes("already") || error.message.toLowerCase().includes("exists"))
+      if (error.message?.toLowerCase().includes("already") || error.message?.toLowerCase().includes("exists"))
         return NextResponse.json({ error: "البريد الإلكتروني مستخدم بالفعل" }, { status: 409 });
-      throw new Error(error.message);
+      return NextResponse.json({ error: error.message || "فشل إنشاء المستخدم" }, { status: 500 });
     }
 
-    // Create profile and clients entry
     if (data.user?.id) {
+      let memberOfClientId: string | null = null;
+      if (invitationToken) {
+        const { data: inv } = await serviceClient
+          .from("client_invitations")
+          .select("id, client_id, status, expires_at")
+          .eq("token", invitationToken)
+          .single();
+        if (inv && inv.status === "pending" && new Date(inv.expires_at) > new Date()) {
+          memberOfClientId = inv.client_id;
+          await serviceClient.from("client_invitations").update({ status: "accepted" }).eq("id", inv.id);
+        }
+      }
+
       await serviceClient.from("profiles").upsert({
         id: data.user.id,
-        email,
         full_name: fullName,
         phone,
         role: "client",
         avatar_url: null,
-        created_at: new Date().toISOString(),
-      }, { onConflict: "id" }).maybeSingle();
+        member_of_client_id: memberOfClientId,
+      }, { onConflict: "id" });
 
-      await serviceClient.from("clients").upsert({
-        client_type: clientType || "person",
-        name: companyName || fullName,
-        phone,
-        email,
-        user_id: data.user.id,
-        notes: "مسجل تلقائياً",
-      }, { onConflict: "user_id" }).maybeSingle();
+      if (!invitationToken) {
+        await serviceClient.from("clients").insert({
+          client_type: clientType || "person",
+          name: companyName || fullName,
+          phone,
+          email,
+          user_id: data.user.id,
+          notes: "مسجل تلقائياً",
+        });
+      }
     }
 
-    // Generate confirmation link (user will receive this via email when SMTP is configured)
-    const { data: linkData } = await serviceClient.auth.admin.generateLink({
-      type: "signup",
-      email,
-      password,
-    });
+    let confirmationLink: string | undefined;
+    if (!invitationToken) {
+      try {
+        const { data: linkData } = await serviceClient.auth.admin.generateLink({ type: "signup", email, password });
+        if (process.env.NODE_ENV === "development") confirmationLink = linkData?.properties?.action_link;
+      } catch { /* SMTP not configured — skip */ }
+    }
 
     return NextResponse.json({
       data: { id: data.user?.id, email },
-      confirmationLink: process.env.NODE_ENV === "development" ? linkData?.properties?.action_link : undefined,
+      confirmationLink,
     }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "unknown_error" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : JSON.stringify(error);
+    console.error("[register] error:", error);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
