@@ -81,7 +81,7 @@ export default function AdminSubscriptionsPage() {
       if (subsRes.ok) { const d = await subsRes.json(); setSubs(d.data || []); }
       if (clientsRes.ok) { const d = await clientsRes.json(); setClients(d.data || []); }
       if (pkgsRes.ok) { const d = await pkgsRes.json(); setPackages(d.data || []); }
-    } catch {} finally { setLoading(false); }
+    } catch { /* network error */ } finally { setLoading(false); }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -137,7 +137,7 @@ export default function AdminSubscriptionsPage() {
         body: JSON.stringify({ id, status: "cancelled" }),
       });
       if (res.ok) load();
-    } catch {}
+    } catch { /* network error */ }
   }
 
   const clientMap = Object.fromEntries(clients.map(c => [c.id, c]));

@@ -67,7 +67,7 @@ export default function DashboardHome() {
             alerts.push({ id: c.id, name: c.name, expiryDate: c.commercial_register_expiry, status: result.status, days: result.days });
         }
         setExpiryAlerts(alerts);
-      } catch {} finally { setLoading(false); }
+      } catch { /* network error — keep empty state */ } finally { setLoading(false); }
     })();
   }, []);
 

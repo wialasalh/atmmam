@@ -99,7 +99,7 @@ export default function AdminClientsPage() {
           if (me.role !== "admin") router.replace("/admin");
         }
       }
-    } catch {}
+    } catch { /* non-critical role check */ }
   }
 
   const isAdmin = currentUserRole === "admin";
@@ -111,7 +111,7 @@ export default function AdminClientsPage() {
         const { data } = await res.json();
         if (data) setClients(data as ClientRecord[]);
       }
-    } catch {}
+    } catch { /* network error */ }
     setLoading(false);
   }
 

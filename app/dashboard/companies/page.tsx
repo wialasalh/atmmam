@@ -682,7 +682,7 @@ function EmployeesSection({ clientId, maxEmployees }: { clientId: string; maxEmp
     try {
       const res = await fetch(`/api/client/employees?client_id=${clientId}`);
       if (res.ok) { const d = await res.json(); setEmployees(d.data || []); }
-    } catch {} finally { setLoading(false); }
+    } catch { /* network error */ } finally { setLoading(false); }
   }
 
   function openNewForm() {
@@ -743,7 +743,7 @@ function EmployeesSection({ clientId, maxEmployees }: { clientId: string; maxEmp
       });
       if (!res.ok) return;
       await loadEmployees();
-    } catch {}
+    } catch { /* network error */ }
   }
 
   const canAdd = maxEmployees <= 0 || employees.length < maxEmployees;

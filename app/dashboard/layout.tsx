@@ -69,7 +69,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           setNotifCount(count);
           setNotifTickets(tickets || []);
         }
-      } catch {}
+      } catch { /* non-critical polling — ignore */ }
     }
     fetchNotifs();
     const iv = setInterval(fetchNotifs, 30000);
