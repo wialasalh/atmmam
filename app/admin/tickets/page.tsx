@@ -195,6 +195,7 @@ export default function AdminTicketsPage() {
   const [showHistory,      setShowHistory]      = useState(false);
   const [relatedOrders,    setRelatedOrders]    = useState<RelatedOrder[]>([]);
   const [subscription,    setSubscription]      = useState<ActiveSubscription | null>(null);
+  const [subscriptions,   setSubscriptions]     = useState<ActiveSubscription[]>([]);
   const [loadingSub,      setLoadingSub]        = useState(false);
   const [openSection,      setOpenSection]      = useState<"info" | "docs" | "orders" | "subscription" | null>("info");
   const [currentUserId,    setCurrentUserId]    = useState("");
@@ -295,8 +296,8 @@ export default function AdminTicketsPage() {
     setLoadingSub(true);
     fetch(`/api/client/active-subscription?client_id=${selected.clients.id}`)
       .then(r => r.ok ? r.json() : null)
-      .then(res => { setSubscription(res?.data || null); })
-      .catch(() => setSubscription(null))
+      .then(res => { setSubscription(res?.data || null); setSubscriptions(res?.subscriptions || []); })
+      .catch(() => { setSubscription(null); setSubscriptions([]); })
       .finally(() => setLoadingSub(false));
   }, [selected?.clients?.id]);
 
@@ -766,40 +767,40 @@ export default function AdminTicketsPage() {
                     <div style={{ borderBottom: "1px solid #f0f3f8" }}>
                       <button onClick={() => toggleSection("subscription")} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "11px 20px", border: 0, background: "transparent", cursor: "pointer", font: "inherit", fontSize: ".68rem", fontWeight: 700, color: "#344d69", textAlign: "right", transition: "background .15s" }}
                         onMouseOver={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"} onMouseOut={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
-                        <CreditCard size={13} color="#15803d" /> <span style={{ flex: 1, textAlign: "right" }}>الباقة النشطة</span>
-                        {loadingSub ? <Loader size={11} className="spin" /> : subscription ? <span style={{ fontSize: ".54rem", fontWeight: 800, padding: "1px 7px", borderRadius: 10, background: "#f0fdf4", color: "#15803d", marginRight: "auto" }}>نشطة</span> : null}
+                        <CreditCard size={13} color="#15803d" /> <span style={{ flex: 1, textAlign: "right" }}>الباقات النشطة</span>
+                        {loadingSub ? <Loader size={11} className="spin" /> : subscriptions.length > 0 ? <span style={{ fontSize: ".54rem", fontWeight: 800, padding: "1px 7px", borderRadius: 10, background: "#f0fdf4", color: "#15803d", marginRight: "auto" }}>{subscriptions.length} نشطة</span> : null}
                         {openSection === "subscription" ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </button>
                       {openSection === "subscription" && (
-                        <div style={{ padding: "0 20px 12px" }}>
+                        <div style={{ padding: "0 20px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
                           {loadingSub ? (
                             <div style={{ textAlign: "center", padding: 12, color: "#8b9dad" }}>جاري التحميل...</div>
-                          ) : subscription ? (
-                            <div style={{ background: "linear-gradient(135deg,#063461,#0875dc)", borderRadius: 12, padding: 14, color: "#fff" }}>
+                          ) : subscriptions.length > 0 ? subscriptions.map((sub) => (
+                            <div key={sub.id} style={{ background: "linear-gradient(135deg,#063461,#0875dc)", borderRadius: 12, padding: 14, color: "#fff" }}>
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                                 <div>
-                                  <div style={{ fontSize: ".55rem", opacity: .7, fontWeight: 600 }}>{subscription.packages?.tier_ar || "—"}</div>
-                                  <div style={{ fontSize: ".82rem", fontWeight: 800 }}>{subscription.packages?.title_ar || "—"}</div>
+                                  <div style={{ fontSize: ".55rem", opacity: .7, fontWeight: 600 }}>{sub.packages?.tier_ar || "—"}</div>
+                                  <div style={{ fontSize: ".82rem", fontWeight: 800 }}>{sub.packages?.title_ar || "—"}</div>
                                 </div>
                                 <div style={{ textAlign: "center" }}>
-                                  <div style={{ fontSize: "1.2rem", fontWeight: 900, lineHeight: 1 }}>{subscription.total_price.toLocaleString("ar-SA")}</div>
+                                  <div style={{ fontSize: "1.2rem", fontWeight: 900, lineHeight: 1 }}>{sub.total_price.toLocaleString("ar-SA")}</div>
                                   <div style={{ fontSize: ".5rem", opacity: .7 }}>ر.س</div>
                                 </div>
                               </div>
                               <div style={{ background: "rgba(255,255,255,.15)", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".6rem", marginBottom: 4 }}>
-                                  <span style={{ opacity: .8 }}>تاريخ البداية: {subscription.start_date}</span>
-                                  <span style={{ opacity: .8 }}>{subscription.end_date ? `النهاية: ${subscription.end_date}` : "مستمر"}</span>
+                                  <span style={{ opacity: .8 }}>البداية: {sub.start_date}</span>
+                                  <span style={{ opacity: .8 }}>{sub.end_date ? `النهاية: ${sub.end_date}` : "مستمر"}</span>
                                 </div>
-                                {subscription.employee_count > 0 && (
+                                {sub.employee_count > 0 && (
                                   <div style={{ fontSize: ".58rem", opacity: .8, display: "flex", alignItems: "center", gap: 4 }}>
-                                    <Users size={10} /> {subscription.employee_count} موظف
+                                    <Users size={10} /> {sub.employee_count} موظف
                                   </div>
                                 )}
                               </div>
-                              {subscription.packages?.features && subscription.packages.features.length > 0 && (
+                              {sub.packages?.features && sub.packages.features.length > 0 && (
                                 <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                                  {subscription.packages.features.slice(0, 3).map((f, i) => (
+                                  {sub.packages.features.slice(0, 3).map((f, i) => (
                                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: ".58rem", opacity: .85 }}>
                                       <CheckCircle size={9} /> {f}
                                     </div>
@@ -807,9 +808,9 @@ export default function AdminTicketsPage() {
                                 </div>
                               )}
                             </div>
-                          ) : (
+                          )) : (
                             <div style={{ fontSize: ".62rem", color: "#aab5c3", textAlign: "center", padding: 10 }}>
-                              لا توجد باقة نشطة لهذه المنشأة
+                              لا توجد باقات نشطة لهذه المنشأة
                             </div>
                           )}
                         </div>

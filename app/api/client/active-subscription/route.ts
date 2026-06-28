@@ -50,12 +50,12 @@ export async function GET(request: NextRequest) {
       .select("*, packages(id, title_ar, tier_ar, category, billing_cycle, price, features)")
       .eq("client_id", clientId)
       .eq("status", "active")
-      .order("created_at", { ascending: false })
-      .limit(1);
+      .order("created_at", { ascending: false });
 
     if (error) throw new Error(`Unable to fetch subscription: ${error.message}`);
 
-    return NextResponse.json({ data: data?.[0] || null });
+    // Return all active subscriptions; keep backward-compat single `data` field as first item
+    return NextResponse.json({ data: data?.[0] || null, subscriptions: data || [] });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "unknown_error" },
