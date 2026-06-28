@@ -700,7 +700,7 @@ export default function AdminTicketsPage() {
                         <span style={{ fontSize: ".62rem", color: "#8b9dad" }}>{selected.clients.name}</span>
                       )}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {selected.clients?.phone && (
                         <a href={`tel:${selected.clients.phone}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: ".65rem", color: "#344d69", textDecoration: "none", background: "#f5f8fc", border: "1px solid #e5eaf0", borderRadius: 8, padding: "7px 11px", transition: "all .15s" }}
                           onMouseOver={e => { (e.currentTarget as HTMLElement).style.borderColor = "#0875dc"; (e.currentTarget as HTMLElement).style.color = "#0875dc"; (e.currentTarget as HTMLElement).style.background = "#eaf4ff"; }}

@@ -28,15 +28,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "client_id is required" }, { status: 400 });
     }
 
-    // Confirm this client belongs to the requesting user
-    const { data: clientRow } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("id", clientId)
-      .eq("user_id", user.id)
-      .maybeSingle();
+    // Staff can query any client; regular users can only query their own
+    const { data: callerProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    const STAFF_ROLES = ["admin", "manager", "operator", "viewer"];
+    const isStaff = callerProfile && STAFF_ROLES.includes(callerProfile.role);
 
-    if (!clientRow) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    if (!isStaff) {
+      const { data: clientRow } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("id", clientId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!clientRow) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
 
     if (!serviceClient) throw new Error("Service client not configured");
 
