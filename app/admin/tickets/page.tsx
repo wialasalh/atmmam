@@ -484,13 +484,7 @@ export default function AdminTicketsPage() {
   }
 
   function toggleSection(s: "info" | "docs" | "orders" | "subscription") {
-    setOpenSection(p => {
-      const next = p === s ? null : s;
-      if (next === "subscription") {
-        setTimeout(() => subSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-      }
-      return next;
-    });
+    setOpenSection(p => p === s ? null : s);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -737,7 +731,7 @@ export default function AdminTicketsPage() {
                   </div>
 
                   {/* ── Collapsible sections ── */}
-                  <div style={{ borderTop: "1px solid #f0f3f8" }}>
+                  <div style={{ borderTop: "1px solid #f0f3f8", overflowY: "auto", maxHeight: "55vh" }}>
 
                     {/* Company info */}
                     {selected.clients && (
