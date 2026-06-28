@@ -33,6 +33,7 @@ export default function TicketsPage() {
   const [emailConfirmed, setEmailConfirmed] = useState(false);
   const [tickets, setTickets] = useState<DbTicket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
 
@@ -40,12 +41,15 @@ export default function TicketsPage() {
     const supabase = createSupabaseBrowserClient();
     Promise.all([
       supabase.auth.getUser(),
-      fetch("/api/tickets").then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
-    ]).then(([{ data: { user } }, json]) => {
+      fetch("/api/tickets")
+    ]).then(async ([{ data: { user } }, r]) => {
       if (user?.email_confirmed_at) setEmailConfirmed(true);
+      if (!r.ok) { setError("تعذّر تحميل التذاكر، حاول مجدداً"); return; }
+      const json = await r.json();
       setTickets(json.data || []);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      setError("تعذّر الاتصال بالخادم، تحقق من اتصالك بالإنترنت");
+    }).finally(() => setLoading(false));
   }, []);
 
   async function loadTickets() {
@@ -136,6 +140,12 @@ export default function TicketsPage() {
       {/* List */}
       {loading ? (
         <div className="client-dash-empty"><Loader size={32} className="spin" /><p>جاري التحميل...</p></div>
+      ) : error ? (
+        <div style={{textAlign:"center",padding:48,background:"#fff8f8",borderRadius:16,border:"1px solid #fecaca"}}>
+          <AlertTriangle size={32} color="#f87171" style={{marginBottom:12}}/>
+          <p style={{color:"#dc2626",fontSize:".75rem",margin:"0 0 12px"}}>{error}</p>
+          <button onClick={()=>window.location.reload()} style={{padding:"6px 16px",borderRadius:8,border:"1px solid #fecaca",background:"#fff",color:"#dc2626",fontSize:".68rem",cursor:"pointer"}}>إعادة المحاولة</button>
+        </div>
       ) : filtered.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {filtered.map(ticket => {

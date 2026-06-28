@@ -46,6 +46,7 @@ export default function DocumentsPage() {
   const [clientId, setClientId] = useState<string | null>(null);
   const [docs, setDocs] = useState<DocRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [showUpload, setShowUpload] = useState(false);
   const [fileName, setFileName] = useState("");
   const [fileDesc, setFileDesc] = useState("");
@@ -58,26 +59,34 @@ export default function DocumentsPage() {
 
   async function load() {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    setError("");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setLoading(false); return; }
 
-    const { data: client } = await supabase.from("clients").select("id").eq("user_id", user.id).maybeSingle();
-    if (!client) { setLoading(false); return; }
-    setClientId(client.id);
+      const { data: client, error: clientErr } = await supabase.from("clients").select("id").eq("user_id", user.id).maybeSingle();
+      if (clientErr) { setError("تعذّر تحميل بيانات المنشأة"); setLoading(false); return; }
+      if (!client) { setLoading(false); return; }
+      setClientId(client.id);
 
-    const { data: records } = await supabase
-      .from("client_documents")
-      .select("*")
-      .eq("client_id", client.id)
-      .order("created_at", { ascending: false });
-    if (records) {
-      const withUrls = await Promise.all(records.map(async (r) => {
-        const { data } = await supabase.storage.from("client-documents").createSignedUrl(r.storage_path, 3600);
-        return { ...r, signedUrl: data?.signedUrl };
-      }));
-      setDocs(withUrls);
+      const { data: records, error: docsErr } = await supabase
+        .from("client_documents")
+        .select("*")
+        .eq("client_id", client.id)
+        .order("created_at", { ascending: false });
+      if (docsErr) { setError("تعذّر تحميل المستندات"); setLoading(false); return; }
+      if (records) {
+        const withUrls = await Promise.all(records.map(async (r) => {
+          const { data } = await supabase.storage.from("client-documents").createSignedUrl(r.storage_path, 3600);
+          return { ...r, signedUrl: data?.signedUrl };
+        }));
+        setDocs(withUrls);
+      }
+    } catch {
+      setError("تعذّر الاتصال بالخادم");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleUpload() {
@@ -220,6 +229,11 @@ export default function DocumentsPage() {
 
       {loading ? (
         <div className="client-dash-empty"><Loader2 size={30} style={{ animation: "spin 1s linear infinite" }} /></div>
+      ) : error ? (
+        <div style={{textAlign:"center",padding:48,background:"#fff8f8",borderRadius:16,border:"1px solid #fecaca"}}>
+          <p style={{color:"#dc2626",fontSize:".75rem",margin:"0 0 12px"}}>{error}</p>
+          <button onClick={load} style={{padding:"6px 16px",borderRadius:8,border:"1px solid #fecaca",background:"#fff",color:"#dc2626",fontSize:".68rem",cursor:"pointer"}}>إعادة المحاولة</button>
+        </div>
       ) : visible.length === 0 ? (
         <div className="client-dash-empty">
           <FileText size={40} />

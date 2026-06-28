@@ -36,20 +36,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       notes, created_at, updated_at, completed_at,
       client_id,
       service_id,
-      clients!inner(id, name, phone, email),
-      services!inner(id, name)
+      clients(id, name, phone, email),
+      services(id, name)
     `)
     .eq("id", id)
     .in("client_id", clientIds)
     .is("deleted_at", null)
-    .single();
+    .maybeSingle();
 
   if (orderError || !order) {
     return NextResponse.json({ error: "الطلب غير موجود" }, { status: 404 });
   }
 
-  const clientData = order.clients as unknown as { id: string; name: string; phone: string | null; email: string | null };
-  const serviceData = order.services as unknown as { id: string; name: string };
+  const clientData = order.clients as unknown as { id: string; name: string; phone: string | null; email: string | null } | null;
+  const serviceData = order.services as unknown as { id: string; name: string } | null;
 
   return NextResponse.json({
     data: {
@@ -64,8 +64,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       created_at: order.created_at,
       updated_at: order.updated_at,
       completed_at: order.completed_at,
-      client: clientData || { name: "—", phone: null, email: null },
-      service_name: serviceData?.name || "—",
+      client: clientData ?? { name: "—", phone: null, email: null },
+      service_name: serviceData?.name ?? "—",
     },
   });
 }

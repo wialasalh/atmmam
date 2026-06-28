@@ -16,6 +16,7 @@ const STATUS_CONFIG: Record<string,{label:string;color:string;bg:string}> = {
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
 
@@ -23,10 +24,11 @@ export default function OrdersPage() {
     (async () => {
       try {
         const r = await fetch("/api/client/orders");
+        if (!r.ok) { setError("تعذّر تحميل الطلبات، حاول مجدداً"); return; }
         const j = await r.json();
         setOrders(j.data ?? []);
-      } catch(e) {
-        console.error(e);
+      } catch {
+        setError("تعذّر الاتصال بالخادم، تحقق من اتصالك بالإنترنت");
       } finally {
         setLoading(false);
       }
@@ -78,6 +80,12 @@ export default function OrdersPage() {
 
       {loading ? (
         <div style={{textAlign:"center",padding:60,color:"#8b9dad",fontSize:".75rem"}}>جاري التحميل...</div>
+      ) : error ? (
+        <div style={{textAlign:"center",padding:60,background:"#fff8f8",borderRadius:16,border:"1px solid #fecaca"}}>
+          <AlertCircle size={36} color="#f87171" style={{marginBottom:12}}/>
+          <p style={{color:"#dc2626",fontSize:".75rem",margin:0}}>{error}</p>
+          <button onClick={()=>window.location.reload()} style={{marginTop:12,padding:"6px 16px",borderRadius:8,border:"1px solid #fecaca",background:"#fff",color:"#dc2626",fontSize:".68rem",cursor:"pointer"}}>إعادة المحاولة</button>
+        </div>
       ) : filtered.length===0 ? (
         <div style={{textAlign:"center",padding:60,background:"#fff",borderRadius:16,border:"1px solid #e5ecf3"}}>
           <ClipboardList size={36} color="#d1d9e0" style={{marginBottom:12}}/>
