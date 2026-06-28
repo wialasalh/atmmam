@@ -149,7 +149,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "العنوان والوصف مطلوبان" }, { status: 400 });
   }
 
-  // Validate client_id belongs to this user, or auto-create
+  // Staff members must never get auto-created client records
+  const { data: callerProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const STAFF_ROLES = ["admin", "manager", "operator", "viewer"];
+  const isStaffCaller = callerProfile && STAFF_ROLES.includes(callerProfile.role);
+
+  // Validate client_id belongs to this user, or auto-create (clients only)
   let resolvedClientId: string | null = null;
   if (client_id) {
     const { data: clientCheck } = await supabase
@@ -160,7 +165,7 @@ export async function POST(request: Request) {
       .single();
     if (clientCheck) resolvedClientId = clientCheck.id;
   }
-  if (!resolvedClientId) {
+  if (!resolvedClientId && !isStaffCaller) {
     // Default: first client of user
     const { data: clients } = await supabase
       .from("clients")
@@ -170,8 +175,8 @@ export async function POST(request: Request) {
       .limit(1);
     resolvedClientId = clients?.[0]?.id || null;
   }
-  // If still no client, auto-create one from profile
-  if (!resolvedClientId) {
+  // If still no client, auto-create one from profile — only for non-staff
+  if (!resolvedClientId && !isStaffCaller) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("full_name, phone, email")
