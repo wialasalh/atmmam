@@ -209,6 +209,7 @@ export default function AdminTicketsPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const adminFileRef = useRef<HTMLInputElement>(null);
   const lastViewRef = useRef<Record<string, number>>({});
+  const subSectionRef = useRef<HTMLDivElement>(null);
   const [unreadTickets, setUnreadTickets] = useState<Set<string>>(new Set());
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [pendingStatus, setPendingStatus] = useState("");
@@ -483,7 +484,13 @@ export default function AdminTicketsPage() {
   }
 
   function toggleSection(s: "info" | "docs" | "orders" | "subscription") {
-    setOpenSection(p => p === s ? null : s);
+    setOpenSection(p => {
+      const next = p === s ? null : s;
+      if (next === "subscription") {
+        setTimeout(() => subSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      }
+      return next;
+    });
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -765,7 +772,7 @@ export default function AdminTicketsPage() {
 
                     {/* Active Subscription */}
                     <div style={{ borderBottom: "1px solid #f0f3f8" }}>
-                      <button onClick={() => toggleSection("subscription")} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "11px 20px", border: 0, background: "transparent", cursor: "pointer", font: "inherit", fontSize: ".68rem", fontWeight: 700, color: "#344d69", textAlign: "right", transition: "background .15s" }}
+                      <button ref={subSectionRef} onClick={() => toggleSection("subscription")} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "11px 20px", border: 0, background: "transparent", cursor: "pointer", font: "inherit", fontSize: ".68rem", fontWeight: 700, color: "#344d69", textAlign: "right", transition: "background .15s" }}
                         onMouseOver={e => (e.currentTarget as HTMLElement).style.background = "#f8fafc"} onMouseOut={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
                         <CreditCard size={13} color="#15803d" /> <span style={{ flex: 1, textAlign: "right" }}>الباقات النشطة</span>
                         {loadingSub ? <Loader size={11} className="spin" /> : subscriptions.length > 0 ? <span style={{ fontSize: ".54rem", fontWeight: 800, padding: "1px 7px", borderRadius: 10, background: "#f0fdf4", color: "#15803d", marginRight: "auto" }}>{subscriptions.length} نشطة</span> : null}
