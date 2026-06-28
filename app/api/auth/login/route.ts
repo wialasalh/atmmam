@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const { allowed, retryAfter } = rateLimit(`login:${ip}`, 10, 60_000);
+    if (!allowed)
+      return NextResponse.json({ error: "محاولات كثيرة، حاول بعد قليل" }, { status: 429, headers: { "Retry-After": String(retryAfter) } });
+
     const body = await request.json();
     const { email, password } = body;
     if (!email || !password) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { rateLimit } from "@/lib/rate-limit";
 
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -9,6 +10,11 @@ const serviceClient = serviceRole && supabaseUrl
 
 export async function POST(request: Request) {
   try {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const { allowed, retryAfter } = rateLimit(`register:${ip}`, 5, 60_000);
+    if (!allowed)
+      return NextResponse.json({ error: "محاولات كثيرة، حاول بعد قليل" }, { status: 429, headers: { "Retry-After": String(retryAfter) } });
+
     const body = await request.json();
     const { fullName, email, phone, password, clientType, companyName } = body;
 
@@ -20,13 +26,6 @@ export async function POST(request: Request) {
     }
     if (!serviceClient) {
       return NextResponse.json({ error: "service_not_configured" }, { status: 503 });
-    }
-
-    // Check existing user
-    const { data: existing } = await serviceClient.auth.admin.listUsers();
-    const emailTaken = existing?.users?.some((u: { email?: string }) => u.email === email);
-    if (emailTaken) {
-      return NextResponse.json({ error: "البريد الإلكتروني مستخدم بالفعل" }, { status: 409 });
     }
 
     const meta: Record<string, string> = {
@@ -43,7 +42,11 @@ export async function POST(request: Request) {
       email_confirm: false,
       user_metadata: meta,
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.message.toLowerCase().includes("already") || error.message.toLowerCase().includes("exists"))
+        return NextResponse.json({ error: "البريد الإلكتروني مستخدم بالفعل" }, { status: 409 });
+      throw new Error(error.message);
+    }
 
     // Create profile and clients entry
     if (data.user?.id) {

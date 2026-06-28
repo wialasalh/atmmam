@@ -50,45 +50,23 @@ export default function DashboardHome() {
   useEffect(() => {
     void (async () => {
       try {
-        const [meRes, ordersRes, ticketsRes] = await Promise.all([
-          fetch("/api/auth/me"),
-          fetch("/api/client/orders"),
-          fetch("/api/tickets"),
-        ]);
-        if (meRes.ok) {
-          const { data } = await meRes.json();
-          setName(data?.full_name || "");
-          const companies: { id: string; name: string; commercial_register_expiry: string }[] = data?.clients || [];
-          const alerts: CompanyExpiry[] = [];
-          for (const c of companies) {
-            if (!c.commercial_register_expiry) continue;
-            const result = getExpiryDays(c.commercial_register_expiry);
-            if (result.status === "expired" || result.status === "soon") {
-              alerts.push({ id: c.id, name: c.name, expiryDate: c.commercial_register_expiry, status: result.status, days: result.days });
-            }
-          }
-          setExpiryAlerts(alerts);
+        const res = await fetch("/api/dashboard/summary");
+        if (!res.ok) return;
+        const { profile, stats: s, recentOrders: orders, recentTickets: tickets, clients } = await res.json();
+
+        setName(profile?.full_name || "");
+        setStats({ orders: s.totalOrders, activeOrders: s.activeOrders, tickets: s.totalTickets, openTickets: s.openTickets });
+        setRecentOrders(orders || []);
+        setRecentTickets(tickets || []);
+
+        const alerts: CompanyExpiry[] = [];
+        for (const c of (clients || []) as { id: string; name: string; commercial_register_expiry: string }[]) {
+          if (!c.commercial_register_expiry) continue;
+          const result = getExpiryDays(c.commercial_register_expiry);
+          if (result.status === "expired" || result.status === "soon")
+            alerts.push({ id: c.id, name: c.name, expiryDate: c.commercial_register_expiry, status: result.status, days: result.days });
         }
-        if (ordersRes.ok) {
-          const { data } = await ordersRes.json();
-          const orders: Order[] = data || [];
-          setRecentOrders(orders.slice(0, 3));
-          setStats(prev => ({
-            ...prev,
-            orders: orders.length,
-            activeOrders: orders.filter(o => !["completed","cancelled"].includes(o.status)).length,
-          }));
-        }
-        if (ticketsRes.ok) {
-          const { data } = await ticketsRes.json();
-          const tickets: Ticket[] = data || [];
-          setRecentTickets(tickets.slice(0, 3));
-          setStats(prev => ({
-            ...prev,
-            tickets: tickets.length,
-            openTickets: tickets.filter(t => !["مغلقة","تم الحل"].includes(t.status)).length,
-          }));
-        }
+        setExpiryAlerts(alerts);
       } catch {} finally { setLoading(false); }
     })();
   }, []);

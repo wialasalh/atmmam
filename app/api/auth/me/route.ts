@@ -19,7 +19,9 @@ export async function GET() {
       .eq("id", user.id)
       .single();
     profile = data;
-  } catch {}
+  } catch (_e) {
+    // permissions column not yet migrated — fall through to query without it
+  }
 
   // Fallback without permissions if the column doesn't exist
   if (!profile) {
