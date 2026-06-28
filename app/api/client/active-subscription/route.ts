@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -15,12 +16,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "database_not_configured" }, { status: 503 });
 
   try {
+    // Verify the caller owns the requested client_id
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get("client_id");
 
     if (!clientId) {
       return NextResponse.json({ error: "client_id is required" }, { status: 400 });
     }
+
+    // Confirm this client belongs to the requesting user
+    const { data: clientRow } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("id", clientId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!clientRow) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
     if (!serviceClient) throw new Error("Service client not configured");
 
