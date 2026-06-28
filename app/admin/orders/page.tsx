@@ -10,7 +10,7 @@ const statusTabs: Array<OrderStatus | "الكل"> = ["الكل", "جديد", "ب
 type CatalogItem = { id: string; name?: string; full_name?: string; phone?: string; email?: string; agency_id?: string };
 type RelatedTicket = { id: string; title: string; status: string; priority: string; category: string; client_id?: string };
 type Catalog = { clients: CatalogItem[]; services: CatalogItem[]; agencies: CatalogItem[]; profiles: CatalogItem[] };
-type DatabaseOrder = { id:string; reference_no:string; status:string; next_action_text?:string; next_action_at?:string; updated_at:string; clients?:CatalogItem|null; services?:CatalogItem|null; agencies?:CatalogItem|null; profiles?:CatalogItem|null; notes?:string|null };
+type DatabaseOrder = { id:string; reference_no:string; status:string; next_action_text?:string; next_action_at?:string; updated_at:string; archived_at?:string|null; clients?:CatalogItem|null; services?:CatalogItem|null; agencies?:CatalogItem|null; profiles?:CatalogItem|null; notes?:string|null };
 const statusFromDatabase: Record<string, OrderStatus> = { new:"جديد", waiting_documents:"بانتظار المستندات", in_progress:"قيد التنفيذ", completed:"مكتمل", cancelled:"ملغي", blocked:"معلق" };
 const statusToDatabase: Record<OrderStatus, string> = { "جديد":"new", "بانتظار المستندات":"waiting_documents", "قيد التنفيذ":"in_progress", "مكتمل":"completed", "ملغي":"cancelled", "معلق":"blocked" };
 
@@ -35,6 +35,8 @@ export default function AdminOrdersPage() {
   const [catalog, setCatalog] = useState<Catalog>({ clients:[], services:[], agencies:[], profiles:[] });
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [showReasonDialog, setShowReasonDialog] = useState(false);
+  const [confirmDeleteOrder, setConfirmDeleteOrder] = useState<string|null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [pendingTargetStatus, setPendingTargetStatus] = useState<OrderStatus | null>(null);
   const [relatedTickets, setRelatedTickets] = useState<RelatedTicket[]>([]);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
@@ -44,13 +46,16 @@ export default function AdminOrdersPage() {
     const [ordersResponse, catalogResponse] = await Promise.all([fetch("/api/admin/orders"), fetch("/api/admin/catalog")]);
     if (!ordersResponse.ok || !catalogResponse.ok) return false;
     const ordersPayload = await ordersResponse.json() as { data: DatabaseOrder[] }; const catalogPayload = await catalogResponse.json() as { data: Catalog };
-    const mapped = ordersPayload.data.map((order):AdminOrder => ({ databaseId:order.id, clientId:order.clients?.id, serviceId:order.services?.id, agencyId:order.agencies?.id, assigneeId:order.profiles?.id, id:order.reference_no, client:order.clients?.name??"عميل غير معروف", service:order.services?.name??"خدمة غير معروفة", agency:order.agencies?.name??"غير محددة", agencyType:order.agencies?.name?.includes("الزكاة")?"zatca":order.agencies?.name?.includes("التجارة")?"commerce":"ip", status:statusFromDatabase[order.status]??"جديد", assignee:order.profiles?.full_name??"غير مسند", updatedAt:new Date(order.updated_at).toLocaleString("ar-SA"), phone:order.clients?.phone??"", email:order.clients?.email??"", nextAction:order.next_action_text??"تحديد الإجراء التالي", nextActionAt:order.next_action_at?new Date(order.next_action_at).toLocaleString("ar-SA"):"غير محدد", statusReason:(order as any).notes || undefined }));
+    const mapped = ordersPayload.data.map((order):AdminOrder => ({ databaseId:order.id, clientId:order.clients?.id, serviceId:order.services?.id, agencyId:order.agencies?.id, assigneeId:order.profiles?.id, id:order.reference_no, client:order.clients?.name??"عميل غير معروف", service:order.services?.name??"خدمة غير معروفة", agency:order.agencies?.name??"غير محددة", agencyType:order.agencies?.name?.includes("الزكاة")?"zatca":order.agencies?.name?.includes("التجارة")?"commerce":"ip", status:statusFromDatabase[order.status]??"جديد", assignee:order.profiles?.full_name??"غير مسند", updatedAt:new Date(order.updated_at).toLocaleString("ar-SA"), phone:order.clients?.phone??"", email:order.clients?.email??"", nextAction:order.next_action_text??"تحديد الإجراء التالي", nextActionAt:order.next_action_at?new Date(order.next_action_at).toLocaleString("ar-SA"):"غير محدد", statusReason:(order as any).notes || undefined, archivedAt: order.archived_at || null }));
     setCatalog(catalogPayload.data); setOrders(mapped); setDatabaseMode(true); return true;
   }
 
   useEffect(() => { const client = new URLSearchParams(window.location.search).get("client"); if (client) setQuery(client); if (process.env.NEXT_PUBLIC_SUPABASE_URL) void loadDatabase(); else setOrders(readAdminOrders()); }, []);
 
-  const filteredOrders = useMemo(() => filterAdminOrders(orders, query, statusFilter), [orders, query, statusFilter]);
+  const filteredOrders = useMemo(() => {
+    const base = showArchived ? orders.filter(o => o.archivedAt) : orders.filter(o => !o.archivedAt);
+    return showArchived ? base : filterAdminOrders(base, query, statusFilter);
+  }, [orders, query, statusFilter, showArchived]);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
   useEffect(()=>{if(!databaseMode||!selected?.databaseId)return;void fetch(`/api/admin/orders/${selected.databaseId}/documents`).then(async(response)=>{if(response.ok){const payload=await response.json() as {data:Array<{name:string;status:string;download_url?:string|null}>};setRemoteDocs((current)=>({...current,[selected.id]:payload.data}))}})},[databaseMode,selected?.databaseId,selected?.id]);
@@ -80,6 +85,23 @@ export default function AdminOrdersPage() {
     writeAdminOrders(nextOrders);
     setNotice(message);
     window.setTimeout(() => setNotice(""), 2600);
+  }
+
+  async function archiveOrder(orderId: string, archive: boolean) {
+    const res = await fetch(`/api/admin/orders/${orderId}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ archive }) });
+    if (res.ok) { await loadDatabase(); setNotice(archive ? "تم أرشفة الطلب" : "تم استعادة الطلب"); setTimeout(() => setNotice(""), 2500); }
+    else setNotice("تعذّر تغيير حالة الأرشيف");
+  }
+
+  async function deleteOrder(orderId: string) {
+    const res = await fetch(`/api/admin/orders/${orderId}`, { method: "DELETE" });
+    if (res.ok) {
+      setSelectedId(undefined);
+      setConfirmDeleteOrder(null);
+      await loadDatabase();
+    } else {
+      setNotice("تعذّر حذف الطلب");
+    }
   }
 
   async function confirmStatusChange(status: OrderStatus, reason?: string) {
@@ -237,6 +259,23 @@ export default function AdminOrdersPage() {
               }}>{counts[label]}</span>
             </button>
           ))}
+          <button
+            onClick={() => { setShowArchived(v => !v); setSelectedId(undefined); }}
+            style={{
+              padding: "4px 12px", borderRadius: 16, border: 0,
+              font: "inherit", fontSize: ".62rem", fontWeight: showArchived ? 800 : 600,
+              cursor: "pointer", whiteSpace: "nowrap",
+              background: showArchived ? "#64748b" : "#f1f5f9",
+              color: showArchived ? "#fff" : "#536a82",
+              display: "inline-flex", alignItems: "center", gap: 6,
+              transition: "all .15s",
+            }}
+          >
+            الأرشيف
+            <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", minWidth:18, height:18, borderRadius:9, fontSize:".5rem", fontWeight:800, background: showArchived ? "rgba(255,255,255,.2)" : "#dfe7ef", color: showArchived ? "#fff" : "#536a82", padding:"0 6px" }}>
+              {orders.filter(o => o.archivedAt).length}
+            </span>
+          </button>
         </div>
 
         {/* Orders Table */}
@@ -310,7 +349,12 @@ export default function AdminOrdersPage() {
           <h2 style={{ fontSize: ".85rem", display: "flex", alignItems: "center", gap: 6 }}>
             <FileText size={16} style={{ color: "#0875dc" }} /> ملخص الطلب
           </h2>
-          <button onClick={() => setSelectedId(undefined)} aria-label="إغلاق" style={{ border: 0, background: "#f1f4f7", color: "#536b84", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "grid", placeItems: "center", fontSize: ".9rem" }}><X size={16} /></button>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {selected?.databaseId && !selected?.archivedAt && <button onClick={()=>archiveOrder(selected.databaseId!, true)} style={{padding:"4px 10px",border:"1px solid #e5eaf0",background:"#f5f8fc",color:"#526983",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>أرشفة</button>}
+            {selected?.databaseId && selected?.archivedAt && <button onClick={()=>archiveOrder(selected.databaseId!, false)} style={{padding:"4px 10px",border:"1px solid #bfdbfe",background:"#eff6ff",color:"#1d4ed8",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>استعادة</button>}
+            {selected?.databaseId && <button onClick={()=>setConfirmDeleteOrder(selected.databaseId!)} style={{padding:"4px 10px",border:"1px solid #fecaca",background:"#fef2f2",color:"#dc2626",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>حذف</button>}
+            <button onClick={() => setSelectedId(undefined)} aria-label="إغلاق" style={{ border: 0, background: "#f1f4f7", color: "#536b84", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "grid", placeItems: "center", fontSize: ".9rem" }}><X size={16} /></button>
+          </div>
         </div>
 
         {/* Order Info */}
@@ -613,6 +657,19 @@ export default function AdminOrdersPage() {
     ) : null}
 
     {notice ? <div className="ops-toast" role="status"><CheckCircle size={14} /> {notice}</div> : null}
+
+    {confirmDeleteOrder&&(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:9999,display:"grid",placeItems:"center"}} onClick={()=>setConfirmDeleteOrder(null)}>
+        <div style={{background:"#fff",borderRadius:14,padding:"24px 28px",width:340,boxShadow:"0 8px 32px rgba(0,0,0,.18)"}} onClick={e=>e.stopPropagation()}>
+          <h3 style={{margin:"0 0 8px",color:"#dc2626",fontSize:16}}>حذف الطلب نهائياً</h3>
+          <p style={{margin:"0 0 20px",fontSize:13,color:"#526983"}}>سيتم حذف الطلب بشكل نهائي ولا يمكن التراجع عن هذا الإجراء.</p>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button onClick={()=>setConfirmDeleteOrder(null)} style={{padding:"8px 16px",border:"1px solid #e5eaf0",background:"#f5f8fc",color:"#526983",borderRadius:8,cursor:"pointer",fontWeight:600}}>إلغاء</button>
+            <button onClick={()=>deleteOrder(confirmDeleteOrder)} style={{padding:"8px 16px",background:"#dc2626",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer"}}>حذف نهائي</button>
+          </div>
+        </div>
+      </div>
+    )}
   </>;
 }
 

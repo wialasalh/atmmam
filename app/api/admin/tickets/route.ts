@@ -26,7 +26,7 @@ export async function GET(req: Request) {
       .select(`
         id, title, body, description, status, priority, category,
         created_at, updated_at, user_id, client_id,
-        assigned_to, files,
+        assigned_to, files, archived_at,
         clients (
           id, name, client_type,
           tax_number, commercial_number,
@@ -75,6 +75,49 @@ export async function GET(req: Request) {
     }));
 
     return NextResponse.json({ data });
+  } catch (e) {
+    const msg = String(e);
+    const status = msg === "unauthorized" ? 401 : msg === "forbidden" ? 403 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}
+
+// Archive or unarchive a ticket
+export async function PUT(req: Request) {
+  try {
+    await requireRole("operator");
+    const serviceClient = makeServiceClient();
+    const { ticketId, archive } = await req.json() as { ticketId: string; archive: boolean };
+    if (!ticketId) return NextResponse.json({ error: "ticketId مطلوب" }, { status: 400 });
+
+    const { error } = await serviceClient
+      .from("tickets")
+      .update({ archived_at: archive ? new Date().toISOString() : null })
+      .eq("id", ticketId);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    const msg = String(e);
+    const status = msg === "unauthorized" ? 401 : msg === "forbidden" ? 403 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}
+
+// Permanently delete a ticket
+export async function DELETE(req: Request) {
+  try {
+    await requireRole("admin");
+    const serviceClient = makeServiceClient();
+    const { ticketId } = await req.json() as { ticketId: string };
+    if (!ticketId) return NextResponse.json({ error: "ticketId مطلوب" }, { status: 400 });
+
+    await serviceClient.from("ticket_messages").delete().eq("ticket_id", ticketId);
+    await serviceClient.from("ticket_status_history").delete().eq("ticket_id", ticketId);
+    const { error } = await serviceClient.from("tickets").delete().eq("id", ticketId);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true });
   } catch (e) {
     const msg = String(e);
     const status = msg === "unauthorized" ? 401 : msg === "forbidden" ? 403 : 500;

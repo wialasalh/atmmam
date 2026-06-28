@@ -5,7 +5,7 @@ import { createOrderSchema, updateOrderStatusSchema } from "@/lib/validation/adm
 
 export async function listAdminOrders() {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.from("orders").select(`id, reference_no, status, priority, due_at, next_action_text, next_action_at, created_at, updated_at, clients(id,name,phone,email), services(id,name), agencies(id,name,logo_url), profiles!orders_assignee_id_fkey(id,full_name,avatar_url)`).is("deleted_at", null).order("updated_at", { ascending: false }).limit(100);
+  const { data, error } = await supabase.from("orders").select(`id, reference_no, status, priority, due_at, next_action_text, next_action_at, created_at, updated_at, archived_at, clients(id,name,phone,email), services(id,name), agencies(id,name,logo_url), profiles!orders_assignee_id_fkey(id,full_name,avatar_url)`).is("deleted_at", null).order("updated_at", { ascending: false }).limit(200);
   if (error) throw new Error(`Unable to list orders: ${error.message}`);
   return data;
 }

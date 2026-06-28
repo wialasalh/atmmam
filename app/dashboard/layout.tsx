@@ -7,7 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard, ClipboardList, FileText, MessageSquare,
   User, LogOut, Menu, X, ChevronLeft, Building2, Building,
-  Bell, MessageCircle, Package, CreditCard, CalendarDays
+  Bell, MessageCircle, Package, CreditCard, CalendarDays, LayoutGrid
 } from "lucide-react";
 
 type ClientRecord = {
@@ -37,6 +37,7 @@ type ClientData = {
 
 const navItems = [
   { href: "/dashboard", label: "الرئيسية", icon: LayoutDashboard },
+  { href: "/dashboard/services", label: "الخدمات", icon: LayoutGrid },
   { href: "/dashboard/orders", label: "طلباتي", icon: ClipboardList },
   { href: "/dashboard/packages", label: "الباقات", icon: Package },
   { href: "/dashboard/subscriptions", label: "اشتراكاتي", icon: CreditCard },

@@ -50,9 +50,10 @@ export const orderDocumentMetadataSchema = z.object({
 export const serviceInputSchema = z.object({
   name: z.string().trim().min(3).max(180),
   category: z.string().trim().min(2).max(100),
-  agencyId: z.uuid(),
-  defaultDurationDays: z.coerce.number().int().min(1).max(365),
-  requiredDocuments: z.array(z.string().trim().min(2).max(180)).max(30).default([]),
+  agencyId: z.uuid().optional().nullable(),
+  defaultDurationDays: z.coerce.number().int().min(1).max(365).optional().nullable(),
+  requiredDocuments: z.array(z.string().trim().min(1).max(180)).max(30).default([]),
+  price: z.coerce.number().min(0).optional().nullable(),
   active: z.boolean().default(true),
 });
 

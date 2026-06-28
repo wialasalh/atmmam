@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
-import { CheckCircle } from "lucide-react";
+import { CheckCircle, Lock, ShieldCheck, Trash2 } from "lucide-react";
 
 
 type Role = "admin" | "manager" | "operator" | "viewer";
@@ -159,6 +159,17 @@ export default function SettingsPage() {
     window.setTimeout(() => setNotice(""), 2200);
   }
 
+  async function deleteMember(member: TeamMember) {
+    if (!member.id) return;
+    if (!confirm(`حذف ${member.full_name} نهائياً؟ لا يمكن التراجع.`)) return;
+    const res = await fetch("/api/admin/team/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ profileId: member.id }) });
+    const data = await res.json();
+    if (!res.ok) { setNotice(data.error || "فشل الحذف"); setTimeout(() => setNotice(""), 3000); return; }
+    setNotice("تم حذف العضو");
+    setTimeout(() => setNotice(""), 2500);
+    await loadTeam();
+  }
+
   const [pwForm, setPwForm] = useState({ current: "", new: "", confirm: "" });
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState("");
@@ -221,31 +232,36 @@ export default function SettingsPage() {
             {savingProfile ? "جارٍ الحفظ..." : "حفظ التغييرات"}
           </button>
         </form>
-        <hr style={{ border: "none", borderTop: "1px solid #e5ecf3", margin: "2rem 0" }} />
-        <section>
-          <h3 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>تغيير كلمة المرور</h3>
-          <p style={{ fontSize: "0.82rem", color: "#64748b", marginBottom: "1rem" }}>سيتم تسجيل الخروج بعد تغيير كلمة المرور.</p>
+        <div style={{background:"#fff",border:"1px solid #e5ecf3",borderRadius:16,padding:"20px",boxShadow:"0 1px 3px rgba(0,0,0,.04)",marginTop:24}}>
+          <h3 style={{margin:"0 0 16px",fontSize:".82rem",color:"#073766",display:"flex",alignItems:"center",gap:8}}><ShieldCheck size={15} strokeWidth={2.2} /> تغيير كلمة المرور</h3>
           <form onSubmit={handlePasswordChange}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", maxWidth: 600 }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                <span style={{ fontSize: "0.82rem", color: "#64748b" }}>كلمة المرور الحالية</span>
-                <input type="password" value={pwForm.current} onChange={(e) => setPwForm(f => ({ ...f, current: e.target.value }))} required minLength={6} style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "0.6rem 0.9rem", fontSize: "0.95rem" }} />
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                <span style={{ fontSize: "0.82rem", color: "#64748b" }}>كلمة المرور الجديدة</span>
-                <input type="password" value={pwForm.new} onChange={(e) => setPwForm(f => ({ ...f, new: e.target.value }))} required minLength={6} style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "0.6rem 0.9rem", fontSize: "0.95rem" }} />
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                <span style={{ fontSize: "0.82rem", color: "#64748b" }}>تأكيد كلمة المرور الجديدة</span>
-                <input type="password" value={pwForm.confirm} onChange={(e) => setPwForm(f => ({ ...f, confirm: e.target.value }))} required minLength={6} style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "0.6rem 0.9rem", fontSize: "0.95rem" }} />
-              </label>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+              <div>
+                <label style={{fontSize:".68rem",color:"#8b9dad",fontWeight:600,display:"block",marginBottom:4}}>كلمة المرور الحالية</label>
+                <input type="password" value={pwForm.current} onChange={e=>setPwForm(f=>({...f,current:e.target.value}))} required minLength={6}
+                  style={{width:"100%",border:"1px solid #e5eaf0",borderRadius:10,padding:"10px 14px",font:"inherit",fontSize:".75rem",color:"#344d69",boxSizing:"border-box",outline:"none"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:".68rem",color:"#8b9dad",fontWeight:600,display:"block",marginBottom:4}}>كلمة المرور الجديدة</label>
+                <input type="password" value={pwForm.new} onChange={e=>setPwForm(f=>({...f,new:e.target.value}))} required minLength={6}
+                  style={{width:"100%",border:"1px solid #e5eaf0",borderRadius:10,padding:"10px 14px",font:"inherit",fontSize:".75rem",color:"#344d69",boxSizing:"border-box",outline:"none"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:".68rem",color:"#8b9dad",fontWeight:600,display:"block",marginBottom:4}}>تأكيد كلمة المرور الجديدة</label>
+                <input type="password" value={pwForm.confirm} onChange={e=>setPwForm(f=>({...f,confirm:e.target.value}))} required minLength={6}
+                  style={{width:"100%",border:"1px solid #e5eaf0",borderRadius:10,padding:"10px 14px",font:"inherit",fontSize:".75rem",color:"#344d69",boxSizing:"border-box",outline:"none"}}/>
+              </div>
             </div>
-            <button type="submit" disabled={pwSaving} style={{ marginTop: "1rem", background: pwSaving ? "#94a3b8" : "#dc2626", color: "#fff", border: "none", borderRadius: "8px", padding: "0.65rem 1.5rem", fontWeight: 600, cursor: pwSaving ? "not-allowed" : "pointer", fontSize: "0.95rem" }}>
-              {pwSaving ? "جاري..." : "تغيير كلمة المرور"}
-            </button>
-            {pwError ? <p style={{ color: "#dc2626", fontSize: "0.82rem", marginTop: "0.5rem" }}>{pwError}</p> : null}
+            <div style={{fontSize:".6rem",color:"#aab5c3",marginTop:8}}>يجب أن تحتوي كلمة المرور الجديدة على 6 أحرف على الأقل.</div>
+            {pwError && <div style={{marginTop:10,padding:"10px 14px",borderRadius:8,background:"#fef2f2",color:"#dc2626",fontSize:".72rem",fontWeight:600}}>{pwError}</div>}
+            <div style={{marginTop:16}}>
+              <button type="submit" disabled={pwSaving}
+                style={{display:"flex",alignItems:"center",gap:6,height:40,padding:"0 18px",border:0,borderRadius:10,background:pwSaving||!pwForm.current||!pwForm.new||!pwForm.confirm?"#e5eaf0":"#073766",color:pwSaving||!pwForm.current||!pwForm.new||!pwForm.confirm?"#aab5c3":"#fff",cursor:pwSaving||!pwForm.current||!pwForm.new||!pwForm.confirm?"not-allowed":"pointer",font:"inherit",fontSize:".7rem",fontWeight:700}}>
+                <Lock size={13} strokeWidth={2.5} /> {pwSaving?"جاري التغيير...":"تغيير كلمة المرور"}
+              </button>
+            </div>
           </form>
-        </section>
+        </div>
       </>
     ) : <div className="follow-empty">جارٍ تحميل بيانات الحساب...</div>;
   } else if (tab === "الفريق والصلاحيات") {
@@ -257,6 +273,10 @@ export default function SettingsPage() {
           {(Object.keys(roleLabels) as Role[]).map((r) => <option value={r} key={r}>{roleLabels[r]}</option>)}
         </select>
         <span>{member.active ? "نشط" : "موقوف"}</span>
+        <button onClick={() => void deleteMember(member)} title="حذف العضو"
+          style={{ background: "none", border: "1px solid #fecaca", borderRadius: 7, padding: "4px 8px", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center" }}>
+          <Trash2 size={13} />
+        </button>
       </div>
     ));
   } else if (tab === "الأمان وسجل الدخول") {

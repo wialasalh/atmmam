@@ -26,7 +26,7 @@
   border-left: 1px solid #dde3ea;
 }
 
-.tc-list-head { padding: 14px 12px 0; flex-shrink: 0; }
+.tc-list-head { padding: 14px 12px 0; flex-shrink: 0; background: #fff; }
 .tc-list-title {
   font-size: 15px; font-weight: 800; color: #0b1e36;
   margin: 0 0 10px;
@@ -66,13 +66,14 @@
 .tc-search-inp::placeholder { color: #a0b0c0; }
 
 /* Filters */
-.tc-filter-row { display: flex; gap: 5px; margin-bottom: 8px; }
+.tc-filter-row { display: flex; gap: 5px; margin-bottom: 8px; background: #fff; }
 .tc-filter-sel {
   flex: 1; height: 32px;
   border: 1.5px solid #dde3ea; border-radius: 8px;
   background: #fff; padding: 0 7px;
   font-size: 12px; color: #334155; outline: none; cursor: pointer;
   transition: border-color .15s;
+  -webkit-appearance: none; appearance: none;
 }
 .tc-filter-sel:focus { border-color: #0875dc; }
 .tc-icon-btn {
@@ -99,7 +100,7 @@
   cursor: pointer; flex-shrink: 0;
 }
 .tc-clear-btn:hover { background: #fecaca; }
-.tc-adv { padding: 6px 0; display: flex; flex-direction: column; gap: 5px; margin-bottom: 4px; }
+.tc-adv { padding: 6px 0; display: flex; flex-direction: column; gap: 5px; margin-bottom: 4px; background: #fff; }
 .tc-adv-row { display: flex; gap: 5px; }
 .tc-date-inp {
   flex: 1; height: 32px;

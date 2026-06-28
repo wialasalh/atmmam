@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CircleDollarSign, Search, Plus, X, Loader2, XCircle, Pencil, RefreshCw, Clock } from "lucide-react";
+import { CircleDollarSign, Search, Plus, X, Loader2, XCircle, Pencil, RefreshCw, Clock, Trash2 } from "lucide-react";
 
 type ClientRecord = { id: string; name: string; email: string | null; phone: string | null };
 type PackageRecord = { id: string; title_ar: string; tier_ar: string; category: string; billing_cycle: string; price: number; features: any; max_employees: number; extra_employee_price: number };
@@ -128,6 +128,14 @@ export default function AdminSubscriptionsPage() {
     setTimeout(() => setMsg(""), 3000);
   }
 
+  async function handleDelete(id: string) {
+    if (!confirm("حذف هذا الاشتراك نهائياً؟ لا يمكن التراجع.")) return;
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${id}`, { method: "DELETE" });
+      if (res.ok) load();
+    } catch { /* network error */ }
+  }
+
   async function handleCancel(id: string) {
     if (!confirm("إلغاء هذا الاشتراك؟")) return;
     try {
@@ -241,10 +249,14 @@ export default function AdminSubscriptionsPage() {
                       </button>
                       {sub.status === "active" && (
                         <button onClick={() => handleCancel(sub.id)}
-                          style={{ border: "1px solid #fecaca", borderRadius: 6, background: "#fff", color: "#dc2626", cursor: "pointer", padding: "4px 10px", fontSize: ".6rem", fontWeight: 700, font: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          style={{ border: "1px solid #fecaca", borderRadius: 6, background: "#fff", color: "#dc2626", cursor: "pointer", padding: "4px 10px", fontSize: ".6rem", fontWeight: 700, font: "inherit", display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
                           <XCircle size={11} /> إلغاء
                         </button>
                       )}
+                      <button onClick={() => handleDelete(sub.id)}
+                        style={{ border: "1px solid #fecaca", borderRadius: 6, background: "#fff", color: "#dc2626", cursor: "pointer", padding: "4px 10px", fontSize: ".6rem", fontWeight: 700, font: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <Trash2 size={11} /> حذف
+                      </button>
                     </td>
                   </tr>
                 );

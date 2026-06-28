@@ -19,6 +19,7 @@ export type AdminOrder = {
   nextAction: string;
   nextActionAt: string;
   statusReason?: string;
+  archivedAt?: string | null;
 };
 
 export const statusTone: Record<OrderStatus, string> = {

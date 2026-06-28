@@ -17,7 +17,7 @@ import { parseTicketDetails } from "@/lib/ticket-details";
 type AdminTicket = {
   id: string; title: string; body?: string; description?: string; category: string; priority: string; status: string;
   created_at: string; updated_at: string; user_id: string;
-  client_id?: string | null; assigned_to?: string | null; files?: string[] | null;
+  client_id?: string | null; assigned_to?: string | null; files?: string[] | null; archived_at?: string | null;
   profiles?: { full_name: string; email: string; avatar_url?: string } | null;
   clients?: {
     id: string; name: string; client_type: string;
@@ -168,6 +168,8 @@ export default function AdminTicketsPage() {
   const [addingCanned,    setAddingCanned]    = useState(false);
   const [unreadTickets,   setUnreadTickets]   = useState<Set<string>>(new Set());
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showArchived,    setShowArchived]    = useState(false);
+  const [confirmDelete,   setConfirmDelete]   = useState<string|null>(null);
   const [pendingStatus,   setPendingStatus]   = useState("");
   const [statusNote,      setStatusNote]      = useState("");
 
@@ -179,6 +181,8 @@ export default function AdminTicketsPage() {
   const activeFilters = [priorityFilter,categoryFilter,assignedFilter,dateFrom,dateTo].filter(Boolean).length;
 
   const filtered = useMemo(()=>tickets.filter(t=>{
+    if(showArchived) return !!t.archived_at;
+    if(t.archived_at) return false;
     const q=search.trim().toLowerCase();
     if(q&&!`${t.id.slice(0,8)} ${t.title} ${t.profiles?.full_name??""} ${t.clients?.name??""}`.toLowerCase().includes(q)) return false;
     if(statusFilter   && t.status   !==statusFilter)   return false;
@@ -188,7 +192,7 @@ export default function AdminTicketsPage() {
     if(dateFrom && new Date(t.created_at)<new Date(dateFrom)) return false;
     if(dateTo   && new Date(t.created_at)>new Date(dateTo+"T23:59:59")) return false;
     return true;
-  }),[tickets,search,statusFilter,priorityFilter,categoryFilter,assignedFilter,dateFrom,dateTo]);
+  }),[tickets,search,statusFilter,priorityFilter,categoryFilter,assignedFilter,dateFrom,dateTo,showArchived]);
 
   const stats = useMemo(()=>({
     total:         tickets.length,
@@ -321,6 +325,19 @@ export default function AdminTicketsPage() {
     setUpdating(false);
   }
 
+  async function archiveTicket(ticketId: string, archive: boolean) {
+    await fetch("/api/admin/tickets", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticketId, archive }) });
+    setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, archived_at: archive ? new Date().toISOString() : null } : t));
+    if (archive) setSelected(null);
+  }
+
+  async function deleteTicket(ticketId: string) {
+    await fetch("/api/admin/tickets", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticketId }) });
+    setTickets(prev => prev.filter(t => t.id !== ticketId));
+    setSelected(null);
+    setConfirmDelete(null);
+  }
+
   async function sendNote(e: React.FormEvent) {
     e.preventDefault();
     if((!newNote.trim()&&adminFiles.length===0)||!selected) return;
@@ -448,8 +465,9 @@ export default function AdminTicketsPage() {
             {val:"تم الحل",label:"حُلّ"},
             {val:"مغلقة",  label:"مغلقة"},
           ].map(s=>(
-            <button key={s.val} onClick={()=>setStatusFilter(s.val)} className={`tc-tab${statusFilter===s.val?" on":""}`}>{s.label}</button>
+            <button key={s.val} onClick={()=>{setStatusFilter(s.val);setShowArchived(false);}} className={`tc-tab${!showArchived&&statusFilter===s.val?" on":""}`}>{s.label}</button>
           ))}
+          <button onClick={()=>{setShowArchived(v=>!v);setStatusFilter("");}} className={`tc-tab${showArchived?" on":""}`}>الأرشيف</button>
         </div>
 
         {(activeFilters>0||search||priorityFilter)&&(
@@ -555,6 +573,12 @@ export default function AdminTicketsPage() {
                 </div>
                 <div className="tc-head-actions">
                   <span className="tc-live-pill"><span className="tc-live-dot"/> مباشر</span>
+                  {selected.archived_at ? (
+                    <button onClick={()=>archiveTicket(selected.id,false)} title="إلغاء الأرشفة" style={{padding:"5px 10px",border:"1px solid #d1fae5",background:"#f0fdf4",color:"#15803d",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>إلغاء الأرشفة</button>
+                  ) : (
+                    <button onClick={()=>archiveTicket(selected.id,true)} title="أرشفة" style={{padding:"5px 10px",border:"1px solid #e5eaf0",background:"#f5f8fc",color:"#526983",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>أرشفة</button>
+                  )}
+                  <button onClick={()=>setConfirmDelete(selected.id)} title="حذف نهائي" style={{padding:"5px 10px",border:"1px solid #fecaca",background:"#fef2f2",color:"#dc2626",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>حذف</button>
                   <button onClick={()=>setSelected(null)} className="tc-close-btn"><X size={16}/></button>
                 </div>
               </div>
@@ -616,6 +640,24 @@ export default function AdminTicketsPage() {
                   <div className="tc-modal-foot">
                     <button className="tc-btn tc-btn-ghost" onClick={()=>setShowStatusModal(false)}>إلغاء</button>
                     <button className="tc-btn tc-btn-primary" onClick={async()=>{await updateStatus(selected.id,pendingStatus,statusNote);setShowStatusModal(false);}}>تأكيد التغيير</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {confirmDelete&&(
+              <div className="tc-overlay" onClick={()=>setConfirmDelete(null)}>
+                <div className="tc-modal" onClick={e=>e.stopPropagation()}>
+                  <div className="tc-modal-head">
+                    <h3 style={{color:"#dc2626"}}>حذف نهائي</h3>
+                    <button className="tc-modal-close" onClick={()=>setConfirmDelete(null)}><X size={16}/></button>
+                  </div>
+                  <div className="tc-modal-body">
+                    <p style={{margin:0,fontSize:14,color:"#526983"}}>سيتم حذف التذكرة ورسائلها بشكل نهائي ولا يمكن التراجع عن هذا الإجراء.</p>
+                  </div>
+                  <div className="tc-modal-foot">
+                    <button className="tc-btn tc-btn-ghost" onClick={()=>setConfirmDelete(null)}>إلغاء</button>
+                    <button style={{padding:"8px 18px",background:"#dc2626",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer"}} onClick={()=>deleteTicket(confirmDelete)}>حذف نهائي</button>
                   </div>
                 </div>
               </div>
