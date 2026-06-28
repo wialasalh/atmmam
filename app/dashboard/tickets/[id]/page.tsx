@@ -125,7 +125,11 @@ export default function TicketDetailPage() {
   async function loadTicket() {
     try {
       const res = await fetch(`/api/tickets/${ticketId}`);
-      if (!res.ok) { return; }
+      if (!res.ok) {
+        if (res.status === 404) router.replace("/dashboard/tickets");
+        setLoading(false);
+        return;
+      }
       const { data } = await res.json();
       setTicket(data);
       if (data?.files?.length) {
@@ -138,7 +142,7 @@ export default function TicketDetailPage() {
       } else {
         setTicketFiles([]);
       }
-    } catch { return; }
+    } catch { /* network error — keep previous state */ }
     setLoading(false);
   }
 

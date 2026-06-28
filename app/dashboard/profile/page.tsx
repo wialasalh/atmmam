@@ -45,9 +45,10 @@ export default function ProfilePage() {
       if (res.ok) {
         const { avatar_url } = await res.json();
         setProfile(p => p ? {...p, avatar_url} : p);
-        setUploading(false);
+      } else {
+        setMsg("تعذّر رفع الصورة، حاول مجدداً");
       }
-    } catch {}
+    } catch { setMsg("تعذّر الاتصال بالخادم"); }
     setUploading(false);
   }
 

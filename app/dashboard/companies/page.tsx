@@ -147,13 +147,13 @@ export default function CompaniesPage() {
   async function loadCompanies() {
     try {
       const res = await fetch("/api/auth/me");
-      if (res.ok) {
-        const { data } = await res.json();
-        const list: Company[] = data?.clients || [];
-        setCompanies(list);
-        if (list.length > 0 && !selectedId) setSelectedId(list[0].id);
-      }
-    } catch {} finally { setLoading(false); }
+      if (!res.ok) { setMessage({ text: "تعذّر تحميل بيانات المنشآت، حاول مجدداً", type: "error" }); return; }
+      const { data } = await res.json();
+      const list: Company[] = data?.clients || [];
+      setCompanies(list);
+      if (list.length > 0 && !selectedId) setSelectedId(list[0].id);
+    } catch { setMessage({ text: "تعذّر الاتصال بالخادم", type: "error" }); }
+    finally { setLoading(false); }
   }
 
   function populateForm(c: Company) {
