@@ -187,7 +187,7 @@ export default function AdminServicesPage() {
         .svc-card-meta{display:flex;flex-direction:column;gap:5px}
         .svc-card-meta-row{display:flex;align-items:center;gap:6px;font-size:.62rem;color:#6b829b}
         .svc-card-meta-row svg{flex-shrink:0;opacity:.7}
-        .svc-card-status{position:absolute;top:14px;left:14px;font-size:.5rem;font-weight:800;padding:2px 8px;border-radius:20px}
+        .svc-card-status{font-size:.5rem;font-weight:800;padding:2px 8px;border-radius:20px;flex-shrink:0}
         .svc-card-status.on{background:#f0fdf4;color:#15803d}
         .svc-card-status.off{background:#fef2f2;color:#dc2626}
         .svc-card-footer{padding:10px 14px;background:#fafbfd;border-top:1px solid #f0f4f8;display:flex;gap:6px}
@@ -303,12 +303,15 @@ export default function AdminServicesPage() {
                     <div key={svc.id ?? svc.name} className={`svc-card ${svc.active ? "" : "inactive"}`}>
                       <div className="svc-card-accent" style={{ background: cs.dot }} />
                       <div className="svc-card-body">
-                        <div className="svc-card-top">
-                          <span className="svc-card-name">{svc.name}</span>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6, marginBottom:6 }}>
+                          <span className={`svc-card-status ${svc.active ? "on" : "off"}`}>{svc.active ? "● نشطة" : "● متوقفة"}</span>
                           {svc.price
                             ? <span className="svc-card-price">{svc.price.toLocaleString("ar-SA")} ر.س</span>
                             : <span className="svc-card-price free">استشر مجاناً</span>
                           }
+                        </div>
+                        <div className="svc-card-top" style={{ marginBottom:10 }}>
+                          <span className="svc-card-name">{svc.name}</span>
                         </div>
                         <div className="svc-card-meta">
                           {svc.agency && <div className="svc-card-meta-row"><Building2 size={11} />{svc.agency}</div>}
@@ -316,7 +319,6 @@ export default function AdminServicesPage() {
                           {svc.documents > 0 && <div className="svc-card-meta-row"><FileText size={11} />{svc.documents} مستندات مطلوبة</div>}
                         </div>
                       </div>
-                      <span className={`svc-card-status ${svc.active ? "on" : "off"}`}>{svc.active ? "نشطة" : "متوقفة"}</span>
                       <div className="svc-card-footer">
                         <button className="svc-act-btn edit" onClick={() => { setEditing(svc); setShowForm(true); }}><Pencil size={11} /> تعديل</button>
                         <button className={`svc-act-btn toggle ${svc.active ? "on" : ""}`} onClick={() => void toggleActive(svc)}>
