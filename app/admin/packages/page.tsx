@@ -282,8 +282,9 @@ export default function AdminPackagesPage() {
         .apkg-form-grid .full { grid-column: 1 / -1; }
         .apkg-field { display: flex; flex-direction: column; gap: 4px; }
         .apkg-field label { font-size: .63rem; font-weight: 700; color: #425c76; display: flex; align-items: center; gap: 4px; }
-        .apkg-field input, .apkg-field select, .apkg-field textarea { width: 100%; height: 40px; border: 1px solid #e5eaf0; border-radius: 8px; padding: 0 28px 0 12px; font: inherit; font-size: .7rem; color: #1a2d40; background: #fff; box-sizing: border-box; outline: none; transition: border-color .15s; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b9dad' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: left 12px center; }
-        .apkg-field input:focus, .apkg-field select:focus, .apkg-field textarea:focus { border-color: #0875dc; }
+        .apkg-field input:not([type="checkbox"]), .apkg-field select, .apkg-field textarea { width: 100%; height: 40px; border: 1px solid #e5eaf0; border-radius: 8px; padding: 0 12px; font: inherit; font-size: .7rem; color: #1a2d40; background: #fff; box-sizing: border-box; outline: none; transition: border-color .15s; }
+        .apkg-field select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b9dad' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: left 12px center; padding-left: 28px; }
+        .apkg-field input:not([type="checkbox"]):focus, .apkg-field select:focus, .apkg-field textarea:focus { border-color: #0875dc; }
         .apkg-field textarea { height: auto; padding: 10px 12px; resize: vertical; line-height: 1.5; }
         .apkg-field .checkbox-row { display: flex; align-items: center; gap: 8px; height: 40px; }
         .apkg-field .checkbox-row input[type="checkbox"] { width: 18px; height: 18px; }
