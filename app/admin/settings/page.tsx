@@ -292,8 +292,8 @@ export default function SettingsPage() {
     ));
   } else if (tab === "الأمان وسجل الدخول") {
     panel = databaseMode ? (
-      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-        {auditLogs.map((log) => {
+      <div style={{ border:"1px solid #e5eaf0", borderRadius:12, overflow:"hidden", background:"#fff" }}>
+        {auditLogs.map((log, idx) => {
           const cfg = resolveAuditConfig(log);
           const details = buildAuditDetails(log);
           const actor = log.profiles?.full_name ?? "النظام";
@@ -301,31 +301,23 @@ export default function SettingsPage() {
           const dateStr = dt.toLocaleDateString("ar-SA", { calendar:"gregory", day:"numeric", month:"short", year:"numeric" });
           const timeStr = dt.toLocaleTimeString("ar-SA", { hour:"2-digit", minute:"2-digit" });
           return (
-            <div key={log.id} style={{ background:"#fff", border:"1.5px solid #f0f4f8", borderRadius:12, padding:"12px 16px", display:"flex", alignItems:"flex-start", gap:12, transition:"box-shadow .15s" }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow="0 2px 12px rgba(7,55,102,.07)"}
-              onMouseLeave={e => e.currentTarget.style.boxShadow="none"}>
-              <div style={{ width:36, height:36, borderRadius:10, background:cfg.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <cfg.Icon size={16} color={cfg.color} />
+            <div key={log.id} style={{ display:"grid", gridTemplateColumns:"28px 1fr auto auto", gap:"0 12px", alignItems:"center", padding:"9px 14px", borderBottom: idx < auditLogs.length - 1 ? "1px solid #f0f4f8" : "none", transition:"background .1s" }}
+              onMouseEnter={e => e.currentTarget.style.background="#fafbfd"}
+              onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+              <div style={{ width:28, height:28, borderRadius:8, background:cfg.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <cfg.Icon size={13} color={cfg.color} />
               </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
-                  <span style={{ fontSize:".75rem", fontWeight:800, color:"#0b1e36" }}>{cfg.label}</span>
-                  <span style={{ fontSize:".58rem", fontWeight:700, padding:"2px 8px", borderRadius:20, background:cfg.bg, color:cfg.color }}>{cfg.label}</span>
+              <div style={{ minWidth:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                  <span style={{ fontSize:".62rem", fontWeight:700, color:"#0b1e36" }}>{cfg.label}</span>
+                  {details.map((d, i) => <span key={i} style={{ fontSize:".55rem", color:"#8b9dad" }}>· {d}</span>)}
                 </div>
-                {details.length > 0 && (
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 14px", marginBottom:4 }}>
-                    {details.map((d, i) => (
-                      <span key={i} style={{ fontSize:".65rem", color:"#526983" }}>· {d}</span>
-                    ))}
-                  </div>
-                )}
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:2 }}>
-                  <span style={{ fontSize:".6rem", color:"#8b9dad", display:"flex", alignItems:"center", gap:4 }}>
-                    <ShieldCheck size={11} /> بواسطة: <strong style={{ color:"#344d69" }}>{actor}</strong>
-                  </span>
-                  <span style={{ fontSize:".58rem", color:"#aab5c3" }}>{dateStr} · {timeStr}</span>
-                </div>
+                <span style={{ fontSize:".55rem", color:"#aab5c3", display:"flex", alignItems:"center", gap:4 }}>
+                  <ShieldCheck size={10} color="#c7d8f0" /> بواسطة: <strong style={{ color:"#6b829b", fontWeight:600 }}>{actor}</strong>
+                </span>
               </div>
+              <span style={{ fontSize:".52rem", color:"#aab5c3", whiteSpace:"nowrap" }}>{dateStr}</span>
+              <span style={{ fontSize:".52rem", color:"#c7d8f0", whiteSpace:"nowrap" }}>{timeStr}</span>
             </div>
           );
         })}
