@@ -274,10 +274,12 @@ export default function SettingsPage() {
           {(Object.keys(roleLabels) as Role[]).map((r) => <option value={r} key={r}>{roleLabels[r]}</option>)}
         </select>
         <span>{member.active ? "نشط" : "موقوف"}</span>
-        <button onClick={() => void deleteMember(member)} title="حذف العضو"
-          style={{ background: "none", border: "1px solid #fecaca", borderRadius: 7, padding: "4px 8px", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center" }}>
-          <Trash2 size={13} />
-        </button>
+        {member.role !== "admin" && (
+          <button onClick={() => void deleteMember(member)} title="حذف العضو"
+            style={{ background: "none", border: "1px solid #fecaca", borderRadius: 7, padding: "4px 8px", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center" }}>
+            <Trash2 size={13} />
+          </button>
+        )}
       </div>
     ));
   } else if (tab === "الأمان وسجل الدخول") {
