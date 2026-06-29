@@ -547,7 +547,7 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (data:
           <small className="modal-field-hint">{roleDescriptions[form.role]}</small>
         </label>
         <div className="modal-actions">
-          <button type="submit" className="ops-new" disabled={submitting}>{submitting ? "جاري..." : "إضافة العضو"}</button>
+          <button type="submit" className="ops-new" disabled={submitting}><UserPlus size={14} />{submitting ? "جاري..." : "إضافة العضو"}</button>
           <button type="button" className="ops-cancel" onClick={onClose}>إلغاء</button>
         </div>
       </form>
@@ -580,7 +580,7 @@ function EditMemberModal({ member, currentUserId, onClose, onEdit }: { member: T
           <small className="modal-field-hint" style={{ marginTop: -8 }}>عند إيقاف العضو، لن يتمكن من تسجيل الدخول إلى النظام.</small>
         </>}
         <div className="modal-actions">
-          <button type="submit" className="ops-new" disabled={submitting}>{submitting ? "جاري..." : "حفظ التغييرات"}</button>
+          <button type="submit" className="ops-new" disabled={submitting}><CheckCircle size={14} />{submitting ? "جاري..." : "حفظ التغييرات"}</button>
           <button type="button" className="ops-cancel" onClick={onClose}>إلغاء</button>
         </div>
       </form>
@@ -616,7 +616,7 @@ function InviteModal({ onClose, onInvite }: { onClose: () => void; onInvite: (em
             {(Object.keys(roleLabels) as Role[]).map((r) => <option value={r} key={r}>{roleLabels[r]}</option>)}
           </select>
         </label>
-        <div className="modal-actions"><button type="submit" className="ops-new" disabled={submitting}>{submitting ? "جاري..." : "إرسال الدعوة"}</button><button type="button" className="ops-cancel" onClick={onClose}>إلغاء</button></div>
+        <div className="modal-actions"><button type="submit" className="ops-new" disabled={submitting}><Mail size={14} />{submitting ? "جاري الإرسال..." : "إرسال الدعوة"}</button><button type="button" className="ops-cancel" onClick={onClose}>إلغاء</button></div>
       </form>
     </div>
   </div>;
@@ -628,7 +628,7 @@ function DeleteModal({ member, onClose, onDelete }: { member: TeamMember; onClos
     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
       <div className="modal-header"><h3>حذف العضو</h3><button className="modal-close" onClick={onClose}><X size={16} /></button></div>
       <p className="modal-desc">هل أنت متأكد من حذف <strong>{member.full_name}</strong>؟ هذا الإجراء لا يمكن التراجع عنه.</p>
-      <div className="modal-actions"><button className="ops-new" style={{ background: "#dc3545" }} onClick={async () => { setSubmitting(true); await onDelete(); setSubmitting(false); }} disabled={submitting}>{submitting ? "جاري..." : "تأكيد الحذف"}</button><button className="ops-cancel" onClick={onClose}>إلغاء</button></div>
+      <div className="modal-actions"><button className="ops-new danger" onClick={async () => { setSubmitting(true); await onDelete(); setSubmitting(false); }} disabled={submitting}><Trash2 size={14} />{submitting ? "جاري الحذف..." : "تأكيد الحذف"}</button><button className="ops-cancel" onClick={onClose}>إلغاء</button></div>
     </div>
   </div>;
 }

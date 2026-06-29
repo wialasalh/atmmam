@@ -527,24 +527,52 @@
 .modal-actions button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  transition: all .2s;
+  justify-content: center;
+  gap: 7px;
+  transition: all .18s;
+  height: 42px;
+  padding: 0 22px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: .74rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+/* Primary action button — used in all modals */
+.ops-new {
+  border: 0;
+  background: #073766;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(7,55,102,.2);
+}
+.ops-new:hover:not(:disabled) {
+  background: #0a4a8a;
+  box-shadow: 0 4px 14px rgba(7,55,102,.28);
+  transform: translateY(-1px);
+}
+.ops-new:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+/* Danger variant */
+.ops-new.danger, .ops-danger {
+  background: #dc2626;
+  box-shadow: 0 2px 8px rgba(220,38,38,.2);
+}
+.ops-new.danger:hover:not(:disabled), .ops-danger:hover:not(:disabled) {
+  background: #b91c1c;
+  box-shadow: 0 4px 14px rgba(220,38,38,.3);
 }
 .ops-cancel {
-  height: 43px;
-  border: 1px solid #dfe7ef;
-  border-radius: 10px;
-  background: transparent;
-  color: #5e7489;
-  padding: 0 20px;
-  font: inherit;
-  font-size: .72rem;
-  font-weight: 600;
-  cursor: pointer;
+  border: 1.5px solid #e2eaf3;
+  background: #fff;
+  color: #526983;
 }
 .ops-cancel:hover {
-  background: #f0f5fc;
-  border-color: #d0dae5;
+  background: #f5f8fc;
+  border-color: #c8d8e8;
+  color: #344d69;
 }
 
 /* ── Permissions Modal ── */
