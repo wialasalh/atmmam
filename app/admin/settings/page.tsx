@@ -76,19 +76,24 @@ export default function SettingsPage() {
   if (currentUserRole === "admin") tabs.push("الفريق والصلاحيات");
 
   async function loadTeam() {
-    const response = await fetch("/api/admin/team");
-    if (!response.ok) return false;
-    const payload = await response.json();
+    const [teamRes, meRes] = await Promise.all([
+      fetch("/api/admin/team"),
+      fetch("/api/auth/me"),
+    ]);
+    if (!teamRes.ok) return false;
+    const payload = await teamRes.json();
+    const meData = meRes.ok ? (await meRes.json())?.data : null;
     const list: any[] = Array.isArray(payload?.members) ? payload.members : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
     if (!list.length) return false;
     const uid: string | null = payload?.currentUserId ?? null;
     const me = list.find((m) => m.id === uid) ?? list[0];
+    const email = meData?.email || me?.email || "";
     if (me) {
-      setCurrentUser({ id: me.id, full_name: me.full_name || "", email: me.email || "", phone: me.phone || "", role: me.role || "admin", avatar_url: me.avatar_url || "" });
+      setCurrentUser({ id: me.id, full_name: me.full_name || "", email, phone: me.phone || "", role: me.role || "admin", avatar_url: me.avatar_url || "" });
       setProfileForm({ full_name: me.full_name || "", phone: me.phone || "" });
       setCurrentUserRole(me.role || "");
     }
-    setTeam(list.map((member) => ({ id: member.id, full_name: member.full_name || "admin", contact: member.email || member.phone || "admin@atmmam.com.sa", role: member.role || "admin", active: member.active !== false, avatar_url: member.avatar_url })));
+    setTeam(list.map((member) => ({ id: member.id, full_name: member.full_name || "admin", contact: member.email || member.phone || "", role: member.role || "admin", active: member.active !== false, avatar_url: member.avatar_url })));
     setDatabaseMode(true);
     return true;
   }
