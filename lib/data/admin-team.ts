@@ -37,7 +37,7 @@ export async function listAdminTeam(currentUserId?: string) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id,full_name,role,phone,avatar_url,active,super_admin,created_at,updated_at")
+    .select("id,full_name,email,role,phone,avatar_url,active,super_admin,created_at,updated_at")
     .neq("role", "client")
     .order("full_name");
   if (error) throw new Error(`Unable to list team: ${error.message}`);
