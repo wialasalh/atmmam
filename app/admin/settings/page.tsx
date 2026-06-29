@@ -219,7 +219,7 @@ export default function SettingsPage() {
           <ShieldCheck size={18} color="#073766" strokeWidth={2} style={{flexShrink:0}} />
           <div style={{flex:1}}>
             <div style={{fontSize:".75rem",fontWeight:700,color:"#073766",marginBottom:2}}>تغيير كلمة المرور</div>
-            <div style={{fontSize:".65rem",color:"#8b9dad"}}>يمكنك تغيير كلمة المرور من الملف الشخصي في صفحة فريق العمل.</div>
+            <div style={{fontSize:".65rem",color:"#8b9dad"}}>لتغيير كلمة المرور انتقل إلى صفحة فريق العمل واضغط على ملفك الشخصي.</div>
           </div>
           <a href="/admin/team" style={{display:"flex",alignItems:"center",gap:5,height:34,padding:"0 14px",border:"1px solid #e5eaf0",borderRadius:8,background:"#fff",color:"#073766",fontSize:".68rem",fontWeight:700,textDecoration:"none",whiteSpace:"nowrap",transition:"all .15s"}}
             onMouseOver={e=>(e.currentTarget.style.background="#f0f6ff")} onMouseOut={e=>(e.currentTarget.style.background="#fff")}>
