@@ -244,24 +244,24 @@ export default function AdminServicesPage() {
         .svc-group-icon{font-size:1.2rem}
         .svc-group-name{font-size:.88rem;font-weight:800;color:#0b1e36}
         .svc-group-count{font-size:.58rem;font-weight:800;padding:3px 10px;border-radius:20px;background:#f0f4f8;color:#6b829b}
-        .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-        .svc-card{background:#fff;border:1.5px solid #e5eaf0;border-radius:14px;overflow:hidden;transition:all .2s;position:relative;display:flex;flex-direction:column}
-        .svc-card:hover{box-shadow:0 6px 24px rgba(7,55,102,.09);transform:translateY(-2px);border-color:#c7d8f0}
+        .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+        .svc-card{background:#fff;border:1.5px solid #e5eaf0;border-radius:10px;overflow:hidden;transition:all .2s;position:relative;display:flex;flex-direction:column}
+        .svc-card:hover{box-shadow:0 4px 16px rgba(7,55,102,.08);transform:translateY(-1px);border-color:#c7d8f0}
         .svc-card.inactive{opacity:.6}
-        .svc-card-accent{height:4px}
-        .svc-card-body{padding:16px 16px 12px;flex:1}
-        .svc-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px}
-        .svc-card-name{font-size:.82rem;font-weight:800;color:#0b1e36;line-height:1.35;flex:1}
-        .svc-card-price{font-size:.72rem;font-weight:900;color:#073766;background:#eff6ff;padding:4px 11px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+        .svc-card-accent{height:3px}
+        .svc-card-body{padding:10px 12px 8px;flex:1}
+        .svc-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:7px}
+        .svc-card-name{font-size:.73rem;font-weight:800;color:#0b1e36;line-height:1.35;flex:1}
+        .svc-card-price{font-size:.62rem;font-weight:900;color:#073766;background:#eff6ff;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0}
         .svc-card-price.free{background:#f0fdf4;color:#15803d}
-        .svc-card-meta{display:flex;flex-direction:column;gap:5px}
-        .svc-card-meta-row{display:flex;align-items:center;gap:6px;font-size:.62rem;color:#6b829b}
+        .svc-card-meta{display:flex;flex-direction:column;gap:3px}
+        .svc-card-meta-row{display:flex;align-items:center;gap:5px;font-size:.58rem;color:#6b829b}
         .svc-card-meta-row svg{flex-shrink:0;opacity:.7}
-        .svc-card-status{font-size:.5rem;font-weight:800;padding:2px 8px;border-radius:20px;flex-shrink:0}
+        .svc-card-status{font-size:.48rem;font-weight:800;padding:2px 7px;border-radius:20px;flex-shrink:0}
         .svc-card-status.on{background:#f0fdf4;color:#15803d}
         .svc-card-status.off{background:#fef2f2;color:#dc2626}
-        .svc-card-footer{padding:10px 14px;background:#fafbfd;border-top:1px solid #f0f4f8;display:flex;gap:6px}
-        .svc-act-btn{flex:1;height:32px;border:1px solid #e5eaf0;border-radius:8px;background:#fff;font:inherit;font-size:.6rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;transition:all .15s;color:#526983}
+        .svc-card-footer{padding:7px 10px;background:#fafbfd;border-top:1px solid #f0f4f8;display:flex;gap:5px}
+        .svc-act-btn{flex:1;height:28px;border:1px solid #e5eaf0;border-radius:7px;background:#fff;font:inherit;font-size:.58rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;transition:all .15s;color:#526983}
         .svc-act-btn:hover{background:#f0f4f8}
         .svc-act-btn.edit:hover{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
         .svc-act-btn.toggle:hover{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}
