@@ -281,7 +281,6 @@ export default function AdminServicesPage() {
         <div className="svc-cats" style={{ marginBottom: 22 }}>
           {categories.map(cat => (
             <button key={cat} className={`svc-cat-btn ${catFilter === cat ? "active" : ""}`} onClick={() => setCatFilter(cat)}>
-              {cat !== "الكل" && <CatIcon cat={cat} size={13} />}
               {cat}
             </button>
           ))}
