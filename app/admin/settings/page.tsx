@@ -176,6 +176,29 @@ export default function SettingsPage() {
   }
 
 
+  const [pwForm, setPwForm] = useState({ new: "", confirm: "" });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState("");
+
+  async function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault();
+    setPwError("");
+    if (pwForm.new !== pwForm.confirm) { setPwError("كلمتا المرور غير متطابقتين"); return; }
+    if (pwForm.new.length < 6) { setPwError("كلمة المرور يجب أن تكون 6 أحرف على الأقل"); return; }
+    setPwSaving(true);
+    try {
+      const supabase = (await import("@/lib/supabase/client")).createSupabaseBrowserClient();
+      const { error } = await supabase.auth.updateUser({ password: pwForm.new });
+      if (error) throw new Error(error.message);
+      setNotice("تم تغيير كلمة المرور بنجاح");
+      setPwForm({ new: "", confirm: "" });
+    } catch (err: any) {
+      setPwError(err.message || "فشل تغيير كلمة المرور");
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
   let panel: React.ReactNode;
   if (tab === "الملف الشخصي") {
     panel = currentUser ? (
@@ -215,16 +238,30 @@ export default function SettingsPage() {
             {savingProfile ? "جارٍ الحفظ..." : "حفظ التغييرات"}
           </button>
         </form>
-        <div style={{background:"#f8fafc",border:"1px solid #e5ecf3",borderRadius:12,padding:"14px 18px",marginTop:20,display:"flex",alignItems:"center",gap:12}}>
-          <ShieldCheck size={18} color="#073766" strokeWidth={2} style={{flexShrink:0}} />
-          <div style={{flex:1}}>
-            <div style={{fontSize:".75rem",fontWeight:700,color:"#073766",marginBottom:2}}>تغيير كلمة المرور</div>
-            <div style={{fontSize:".65rem",color:"#8b9dad"}}>لتغيير كلمة المرور انتقل إلى صفحة فريق العمل واضغط على ملفك الشخصي.</div>
-          </div>
-          <a href="/admin/team" style={{display:"flex",alignItems:"center",gap:5,height:34,padding:"0 14px",border:"1px solid #e5eaf0",borderRadius:8,background:"#fff",color:"#073766",fontSize:".68rem",fontWeight:700,textDecoration:"none",whiteSpace:"nowrap",transition:"all .15s"}}
-            onMouseOver={e=>(e.currentTarget.style.background="#f0f6ff")} onMouseOut={e=>(e.currentTarget.style.background="#fff")}>
-            <Lock size={12} /> الانتقال
-          </a>
+        <div style={{background:"#fff",border:"1px solid #e5ecf3",borderRadius:16,padding:"20px",boxShadow:"0 1px 3px rgba(0,0,0,.04)",marginTop:24}}>
+          <h3 style={{margin:"0 0 16px",fontSize:".82rem",color:"#073766",display:"flex",alignItems:"center",gap:8}}><ShieldCheck size={15} strokeWidth={2.2} /> تغيير كلمة المرور</h3>
+          <form onSubmit={handlePasswordChange}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+              <div>
+                <label style={{fontSize:".68rem",color:"#8b9dad",fontWeight:600,display:"block",marginBottom:4}}>كلمة المرور الجديدة</label>
+                <input type="password" value={pwForm.new} onChange={e=>setPwForm(f=>({...f,new:e.target.value}))} required minLength={6}
+                  style={{width:"100%",border:"1px solid #e5eaf0",borderRadius:10,padding:"10px 14px",font:"inherit",fontSize:".75rem",color:"#344d69",boxSizing:"border-box",outline:"none"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:".68rem",color:"#8b9dad",fontWeight:600,display:"block",marginBottom:4}}>تأكيد كلمة المرور</label>
+                <input type="password" value={pwForm.confirm} onChange={e=>setPwForm(f=>({...f,confirm:e.target.value}))} required minLength={6}
+                  style={{width:"100%",border:"1px solid #e5eaf0",borderRadius:10,padding:"10px 14px",font:"inherit",fontSize:".75rem",color:"#344d69",boxSizing:"border-box",outline:"none"}}/>
+              </div>
+            </div>
+            <div style={{fontSize:".6rem",color:"#aab5c3",marginTop:8}}>يجب أن تحتوي كلمة المرور على 6 أحرف على الأقل.</div>
+            {pwError && <div style={{marginTop:10,padding:"10px 14px",borderRadius:8,background:"#fef2f2",color:"#dc2626",fontSize:".72rem",fontWeight:600}}>{pwError}</div>}
+            <div style={{marginTop:16}}>
+              <button type="submit" disabled={pwSaving}
+                style={{display:"flex",alignItems:"center",gap:6,height:40,padding:"0 18px",border:0,borderRadius:10,background:pwSaving||!pwForm.new||!pwForm.confirm?"#e5eaf0":"#073766",color:pwSaving||!pwForm.new||!pwForm.confirm?"#aab5c3":"#fff",cursor:pwSaving||!pwForm.new||!pwForm.confirm?"not-allowed":"pointer",font:"inherit",fontSize:".7rem",fontWeight:700,transition:"all .15s"}}>
+                <Lock size={13} strokeWidth={2.5}/> {pwSaving?"جاري التغيير...":"تغيير كلمة المرور"}
+              </button>
+            </div>
+          </form>
         </div>
       </>
     ) : <div className="follow-empty">جارٍ تحميل بيانات الحساب...</div>;
