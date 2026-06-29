@@ -2,7 +2,11 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
-import { Search, Plus, Pencil, Power, Trash2, CheckCircle, Clock, FileText, Building2, Tag, LayoutGrid, List } from "lucide-react";
+import {
+  Search, Plus, Pencil, Power, Trash2, CheckCircle, Clock, FileText,
+  Building2, LayoutGrid, List, Store, Landmark, BarChart3, Lightbulb,
+  Users, ShieldCheck, TrendingUp, MessageSquare, Pin, SlidersHorizontal,
+} from "lucide-react";
 
 type ServiceItem = {
   id?: string; agencyId?: string; name: string; category: string;
@@ -28,11 +32,21 @@ const CAT_COLORS: Record<string, { bg: string; color: string; dot: string }> = {
   "الاستثمار":       { bg: "#fefce8", color: "#a16207", dot: "#eab308" },
   "الاستشارات":      { bg: "#f8fafc", color: "#334155", dot: "#64748b" },
 };
-const CAT_ICONS: Record<string, string> = {
-  "السجل التجاري":"🏪","تأسيس الشركات":"🏢","الزكاة والضريبة":"📊",
-  "الملكية الفكرية":"💡","الموارد البشرية":"👥","التراخيص":"📋",
-  "الاستثمار":"📈","الاستشارات":"🎯",
+type LucideIcon = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+const CAT_ICONS: Record<string, LucideIcon> = {
+  "السجل التجاري":    Store,
+  "تأسيس الشركات":   Landmark,
+  "الزكاة والضريبة":  BarChart3,
+  "الملكية الفكرية":  Lightbulb,
+  "الموارد البشرية":   Users,
+  "التراخيص":         ShieldCheck,
+  "الاستثمار":        TrendingUp,
+  "الاستشارات":       MessageSquare,
 };
+function CatIcon({ cat, size = 16, color }: { cat: string; size?: number; color?: string }) {
+  const Icon = CAT_ICONS[cat] ?? Pin;
+  return <Icon size={size} color={color} strokeWidth={1.8} />;
+}
 function getCat(category: string) {
   return CAT_COLORS[category] || { bg: "#f8fafc", color: "#526983", dot: "#94a3b8" };
 }
@@ -234,7 +248,7 @@ export default function AdminServicesPage() {
             <button className="svc-add-btn" onClick={() => { setEditing(null); setShowForm(true); }}>
               <Plus size={15} /> خدمة جديدة
             </button>
-            <a href="/admin/packages" className="svc-link-btn">إدارة الباقات</a>
+            <a href="/admin/packages" className="svc-link-btn"><LayoutGrid size={14} /> إدارة الباقات</a>
           </div>
         </div>
 
@@ -267,7 +281,8 @@ export default function AdminServicesPage() {
         <div className="svc-cats" style={{ marginBottom: 22 }}>
           {categories.map(cat => (
             <button key={cat} className={`svc-cat-btn ${catFilter === cat ? "active" : ""}`} onClick={() => setCatFilter(cat)}>
-              {cat !== "الكل" ? (CAT_ICONS[cat] || "") + " " : ""}{cat}
+              {cat !== "الكل" && <CatIcon cat={cat} size={13} />}
+              {cat}
             </button>
           ))}
         </div>
@@ -279,7 +294,7 @@ export default function AdminServicesPage() {
             return (
               <div key={cat} className="svc-group">
                 <div className="svc-group-header">
-                  <span className="svc-group-icon">{CAT_ICONS[cat] || "📌"}</span>
+                  <span className="svc-group-icon"><CatIcon cat={cat} size={17} color={cs.dot} /></span>
                   <span className="svc-group-name">{cat}</span>
                   <span className="svc-group-count">{items.length} خدمة</span>
                 </div>
@@ -319,7 +334,7 @@ export default function AdminServicesPage() {
           Object.entries(grouped).map(([cat, items]) => (
             <div key={cat} className="svc-table-wrap">
               <div className="svc-table-head">
-                <span className="svc-table-head-icon">{CAT_ICONS[cat] || "📌"}</span>
+                <span className="svc-table-head-icon" style={{ display:"flex", alignItems:"center" }}><CatIcon cat={cat} size={16} color="#073766" /></span>
                 <span className="svc-table-head-name">{cat}</span>
                 <span className="svc-table-head-count">{items.length}</span>
               </div>
@@ -366,8 +381,8 @@ export default function AdminServicesPage() {
 
         {visible.length === 0 && (
           <div style={{ textAlign: "center", padding: 60, color: "#8b9dad" }}>
-            <div style={{ fontSize: "3rem", marginBottom: 12 }}>🔍</div>
-            <p style={{ fontWeight: 700, marginBottom: 4 }}>لا توجد خدمات مطابقة</p>
+            <div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}><SlidersHorizontal size={40} strokeWidth={1.2} color="#c7d8f0" /></div>
+            <p style={{ fontWeight: 700, marginBottom: 4, color: "#526983" }}>لا توجد خدمات مطابقة</p>
             <p style={{ fontSize: ".72rem" }}>جرب تغيير التصنيف أو كلمة البحث</p>
           </div>
         )}
