@@ -3,54 +3,62 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
-import { CheckCircle, Lock, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  CheckCircle, Lock, ShieldCheck, Trash2,
+  UserPlus, UserMinus, KeyRound, UserCog, Mail,
+  ShieldAlert, RefreshCw, LogIn, LogOut, Eye,
+} from "lucide-react";
 
 
 type Role = "admin" | "manager" | "operator" | "viewer";
 type TeamMember = { id?: string; full_name: string; contact: string; role: Role; active: boolean; avatar_url?: string | null };
 type AuditLog = { id: number; entity_type: string; entity_id: string; action: string; created_at: string; metadata?: Record<string, unknown> | null; profiles?: { full_name?: string } | null };
 
-function formatAuditLog(log: AuditLog): { title: string; detail: string } {
-  const descriptions: Record<string, string> = {
-    user_created: "إنشاء مستخدم جديد",
-    user_invited: "دعوة مستخدم",
-    password_changed: "تغيير كلمة المرور",
-    profile_updated: "تحديث بيانات المستخدم",
-    user_deleted: "حذف مستخدم",
-    invitation_cancelled: "إلغاء دعوة",
-  };
-  const entityNames: Record<string, string> = {
-    profile: "ملف مستخدم",
-    team_invitation: "دعوة فريق",
-  };
-  const action = descriptions[log.action] ?? log.action;
-  const entity = entityNames[log.entity_type] ?? log.entity_type;
+type AuditConfig = { label: string; color: string; bg: string; Icon: React.ComponentType<{size?:number;color?:string}> };
+const AUDIT_CONFIG: Record<string, AuditConfig> = {
+  user_created:         { label: "إنشاء حساب جديد",       color: "#15803d", bg: "#f0fdf4", Icon: UserPlus },
+  user_invited:         { label: "إرسال دعوة",             color: "#0875dc", bg: "#eff6ff", Icon: Mail },
+  invitation_cancelled: { label: "إلغاء دعوة",             color: "#d97706", bg: "#fffbeb", Icon: Mail },
+  password_changed:     { label: "تغيير كلمة المرور",      color: "#7c3aed", bg: "#f5f3ff", Icon: KeyRound },
+  profile_updated:      { label: "تعديل بيانات العضو",     color: "#0875dc", bg: "#eff6ff", Icon: UserCog },
+  user_deleted:         { label: "حذف حساب",               color: "#dc2626", bg: "#fef2f2", Icon: UserMinus },
+  role_changed:         { label: "تغيير الصلاحية",         color: "#d97706", bg: "#fffbeb", Icon: ShieldAlert },
+  account_suspended:    { label: "إيقاف الحساب",           color: "#dc2626", bg: "#fef2f2", Icon: UserMinus },
+  account_activated:    { label: "تفعيل الحساب",           color: "#15803d", bg: "#f0fdf4", Icon: UserPlus },
+  login:                { label: "تسجيل دخول",             color: "#0875dc", bg: "#eff6ff", Icon: LogIn },
+  logout:               { label: "تسجيل خروج",             color: "#526983", bg: "#f8fafc", Icon: LogOut },
+};
+const AUDIT_DEFAULT: AuditConfig = { label: "حدث في النظام", color: "#526983", bg: "#f8fafc", Icon: Eye };
 
+function buildAuditDetails(log: AuditLog): string[] {
   const meta = log.metadata;
-  let detail = "";
-  if (meta) {
-    if (meta.full_name) {
-      detail = `الاسم: ${meta.full_name}`;
-      if (meta.email) detail += ` - ${meta.email}`;
-      if (meta.role) detail += ` · ${roleLabels[meta.role as Role] ?? meta.role}`;
-    } else if (meta.email) {
-      detail = `${meta.email}`;
-      if (meta.role) detail += ` · ${roleLabels[meta.role as Role] ?? meta.role}`;
-    } else if (meta.fullName) {
-      detail = `الاسم: ${meta.fullName}`;
-      if (meta.phone) detail += ` - جوال: ${meta.phone}`;
-      if (meta.role) detail += ` · ${roleLabels[meta.role as Role] ?? meta.role}`;
-    } else if (meta.phone) {
-      detail = `تحديث الجوال إلى ${meta.phone}`;
-    } else if (meta.avatar_url) {
-      detail = "تحديث الصورة الشخصية";
-    } else if (meta.role) {
-      detail = `تغيير الصلاحية إلى ${roleLabels[meta.role as Role] ?? meta.role}`;
-    } else if (meta.active !== undefined) {
-      detail = meta.active ? "تفعيل الحساب" : "إيقاف الحساب";
-    }
+  const details: string[] = [];
+  if (!meta) return details;
+
+  const name = (meta.full_name || meta.fullName) as string | undefined;
+  const email = meta.email as string | undefined;
+  const role = meta.role as Role | undefined;
+  const phone = meta.phone as string | undefined;
+
+  if (name)  details.push(`العضو: ${name}`);
+  if (email) details.push(`البريد: ${email}`);
+  if (role)  details.push(`الصلاحية: ${roleLabels[role] ?? role}`);
+  if (phone) details.push(`الجوال: ${phone}`);
+  if (meta.avatar_url) details.push("تم تحديث الصورة الشخصية");
+  if (meta.active === true  && !details.length) details.push("الحالة: نشط");
+  if (meta.active === false && !details.length) details.push("الحالة: موقوف");
+  return details;
+}
+
+function resolveAuditConfig(log: AuditLog): AuditConfig {
+  if (AUDIT_CONFIG[log.action]) return AUDIT_CONFIG[log.action];
+  const meta = log.metadata;
+  if (log.action === "profile_updated" && meta) {
+    if (meta.active === false) return AUDIT_CONFIG.account_suspended;
+    if (meta.active === true)  return AUDIT_CONFIG.account_activated;
+    if (meta.role)             return AUDIT_CONFIG.role_changed;
   }
-  return { title: `${action} - ${entity}`, detail };
+  return AUDIT_DEFAULT;
 }
 type CurrentUser = { id: string; full_name: string; email: string; phone: string; role: string; avatar_url?: string };
 
@@ -284,9 +292,44 @@ export default function SettingsPage() {
     ));
   } else if (tab === "الأمان وسجل الدخول") {
     panel = databaseMode ? (
-      <div className="audit-list">
-        {auditLogs.map((log) => { const fmt = formatAuditLog(log); return <article key={log.id}><div><strong>{fmt.title}</strong>{fmt.detail ? <small>{fmt.detail}</small> : <small>{log.entity_type === "profile" ? `${log.entity_id.slice(0, 8)}…` : log.entity_id}</small>}</div><span>{log.profiles?.full_name ?? "النظام"}</span><time>{new Date(log.created_at).toLocaleString("ar-SA")}</time></article>; })}
-        {!auditLogs.length ? <div className="follow-empty">لا توجد أحداث مسجلة بعد.</div> : null}
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        {auditLogs.map((log) => {
+          const cfg = resolveAuditConfig(log);
+          const details = buildAuditDetails(log);
+          const actor = log.profiles?.full_name ?? "النظام";
+          const dt = new Date(log.created_at);
+          const dateStr = dt.toLocaleDateString("ar-SA", { calendar:"gregory", day:"numeric", month:"short", year:"numeric" });
+          const timeStr = dt.toLocaleTimeString("ar-SA", { hour:"2-digit", minute:"2-digit" });
+          return (
+            <div key={log.id} style={{ background:"#fff", border:"1.5px solid #f0f4f8", borderRadius:12, padding:"12px 16px", display:"flex", alignItems:"flex-start", gap:12, transition:"box-shadow .15s" }}
+              onMouseEnter={e => e.currentTarget.style.boxShadow="0 2px 12px rgba(7,55,102,.07)"}
+              onMouseLeave={e => e.currentTarget.style.boxShadow="none"}>
+              <div style={{ width:36, height:36, borderRadius:10, background:cfg.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <cfg.Icon size={16} color={cfg.color} />
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:".75rem", fontWeight:800, color:"#0b1e36" }}>{cfg.label}</span>
+                  <span style={{ fontSize:".58rem", fontWeight:700, padding:"2px 8px", borderRadius:20, background:cfg.bg, color:cfg.color }}>{cfg.label}</span>
+                </div>
+                {details.length > 0 && (
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 14px", marginBottom:4 }}>
+                    {details.map((d, i) => (
+                      <span key={i} style={{ fontSize:".65rem", color:"#526983" }}>· {d}</span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:2 }}>
+                  <span style={{ fontSize:".6rem", color:"#8b9dad", display:"flex", alignItems:"center", gap:4 }}>
+                    <ShieldCheck size={11} /> بواسطة: <strong style={{ color:"#344d69" }}>{actor}</strong>
+                  </span>
+                  <span style={{ fontSize:".58rem", color:"#aab5c3" }}>{dateStr} · {timeStr}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {!auditLogs.length && <div className="follow-empty">لا توجد أحداث مسجلة بعد.</div>}
       </div>
     ) : <div className="follow-empty">سيظهر سجل التدقيق بعد ربط Supabase.</div>;
   } else {
