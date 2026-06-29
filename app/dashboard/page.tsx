@@ -77,7 +77,7 @@ export default function DashboardHome() {
       {/* Welcome */}
       <div style={{ marginBottom: 20 }}>
         <p style={{ fontSize: ".7rem", color: "#8b9dad", margin: "0 0 4px" }}>
-          {new Date().toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          {new Date().toLocaleDateString("ar-SA", {calendar:"gregory",  weekday: "long", year: "numeric", month: "long", day: "numeric" })}
         </p>
         <h2 style={{ margin: "0 0 4px", fontSize: "1.3rem", color: "#073766", fontWeight: 800 }}>
           {getGreeting()}{name ? `، ${name}` : ""}
@@ -203,7 +203,7 @@ export default function DashboardHome() {
                   {order.service_name || order.reference_no}
                 </div>
                 <div style={{ fontSize: ".58rem", color: "#8b9dad", marginTop: 2 }}>
-                  {new Date(order.created_at).toLocaleDateString("ar-SA")}
+                  {new Date(order.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}
                 </div>
               </div>
               <span style={{ fontSize: ".58rem", padding: "3px 8px", borderRadius: 20, color: s.color, background: s.bg, fontWeight: 700, flexShrink: 0 }}>
@@ -246,7 +246,7 @@ export default function DashboardHome() {
                     {isUrgent && <span style={{ fontSize: ".55rem", background: "#fef2f2", color: "#dc2626", borderRadius: 10, padding: "1px 6px", marginRight: 6, fontWeight: 700 }}>عاجل</span>}
                   </div>
                   <div style={{ fontSize: ".58rem", color: "#8b9dad", marginTop: 3, display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>{new Date(ticket.updated_at).toLocaleDateString("ar-SA")}</span>
+                    <span>{new Date(ticket.updated_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}</span>
                     {ticket.client?.name && (
                       <><span style={{ color: "#d1d9e0" }}>·</span><span>{ticket.client.name}</span></>
                     )}

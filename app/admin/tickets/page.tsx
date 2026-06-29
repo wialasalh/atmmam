@@ -114,7 +114,7 @@ function formatDateLabel(d: string) {
   yesterday.setDate(yesterday.getDate()-1);
   if(date.toDateString()===today.toDateString()) return "اليوم";
   if(date.toDateString()===yesterday.toDateString()) return "أمس";
-  return date.toLocaleDateString("ar-SA",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+  return date.toLocaleDateString("ar-SA", {calendar:"gregory", weekday:"long",year:"numeric",month:"long",day:"numeric"});
 }
 
 function isStaffRoleCheck(role?: string) { return ["admin","manager","operator"].includes(role||""); }
@@ -743,8 +743,8 @@ export default function AdminTicketsPage() {
                       const isInt=!!msg.is_internal;
                       const roleLabel: Record<string,string>={admin:"مدير النظام",manager:"مدير عمليات",operator:"موظف دعم",viewer:"مشاهد"};
                       const name=isAdmin?`${msg.sender?.full_name||"فريق الدعم"}${msg.sender?.role?` · ${roleLabel[msg.sender.role]||""}`:""}`:(msg.sender?.full_name||"العميل");
-                      const msgDate=new Date(msg.created_at).toLocaleDateString("ar-SA");
-                      const prevDate=idx>0?new Date(visibleMsgs[idx-1].created_at).toLocaleDateString("ar-SA"):null;
+                      const msgDate=new Date(msg.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"});
+                      const prevDate=idx>0?new Date(visibleMsgs[idx-1].created_at).toLocaleDateString("ar-SA", {calendar:"gregory"}):null;
                       return (
                         <React.Fragment key={msg.id}>
                           {(idx===0||msgDate!==prevDate)&&<div className="tc-date-sep"><span>{formatDateLabel(msg.created_at)}</span></div>}

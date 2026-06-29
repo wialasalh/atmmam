@@ -40,7 +40,7 @@ export default function OrdersPage() {
     (!filter || o.status === filter)
   );
 
-  function fmt(d:string){return new Date(d).toLocaleDateString("ar-SA",{year:"numeric",month:"short",day:"numeric"});}
+  function fmt(d:string){return new Date(d).toLocaleDateString("ar-SA", {calendar:"gregory", year:"numeric",month:"short",day:"numeric"});}
 
   return (
     <div className="client-dash-page">

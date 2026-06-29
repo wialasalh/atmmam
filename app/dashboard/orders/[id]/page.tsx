@@ -56,7 +56,7 @@ export default function OrderDetailPage() {
   }, [orderId]);
 
   function fmt(d: string) {
-    return new Date(d).toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" });
+    return new Date(d).toLocaleDateString("ar-SA", {calendar:"gregory",  year: "numeric", month: "long", day: "numeric" });
   }
   function fmtTime(d: string) {
     return new Date(d).toLocaleString("ar-SA", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });

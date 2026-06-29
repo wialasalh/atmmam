@@ -127,7 +127,7 @@ export default function ClientSubscriptionsPage() {
                       <CalendarDays size={16} />
                       <div>
                         <small>تاريخ البداية</small>
-                        <strong>{new Date(sub.start_date).toLocaleDateString("ar-SA")}</strong>
+                        <strong>{new Date(sub.start_date).toLocaleDateString("ar-SA", {calendar:"gregory"})}</strong>
                       </div>
                     </div>
                     <div className="subs-info-item">
@@ -136,7 +136,7 @@ export default function ClientSubscriptionsPage() {
                         <small>تاريخ النهاية</small>
                         <strong>
                           {sub.end_date
-                            ? new Date(sub.end_date).toLocaleDateString("ar-SA")
+                            ? new Date(sub.end_date).toLocaleDateString("ar-SA", {calendar:"gregory"})
                             : "غير محدد"}
                         </strong>
                       </div>

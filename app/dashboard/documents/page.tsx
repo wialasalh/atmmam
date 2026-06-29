@@ -258,7 +258,7 @@ export default function DocumentsPage() {
                   <div style={{ fontSize: ".58rem", color: "#aab5c3", marginTop: 2 }}>
                     {doc.original_name}
                     {doc.size_bytes ? ` · ${(doc.size_bytes / 1024).toFixed(0)} KB` : ""}
-                    {" · " + new Date(doc.created_at).toLocaleDateString("ar-SA")}
+                    {" · " + new Date(doc.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>

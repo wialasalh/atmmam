@@ -570,7 +570,7 @@ export default function AdminClientsPage() {
                     <FileText size={13} style={{ color: "#6b7d93", flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <strong style={{ fontSize: ".62rem", color: "#1a2d40", display: "block" }}>{doc.filename}</strong>
-                      <span style={{ fontSize: ".55rem", color: "#8b9dad" }}>{doc.original_name} · {new Date(doc.created_at).toLocaleDateString("ar-SA")}</span>
+                      <span style={{ fontSize: ".55rem", color: "#8b9dad" }}>{doc.original_name} · {new Date(doc.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}</span>
                     </div>
                     {doc.signedUrl && (
                       <a href={doc.signedUrl} target="_blank" rel="noopener"

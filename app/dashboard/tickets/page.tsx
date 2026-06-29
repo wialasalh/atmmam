@@ -173,7 +173,7 @@ export default function TicketsPage() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: ".6rem", color: "#8b9dad", background: "#f5f8fc", padding: "2px 8px", borderRadius: 10 }}>{ticket.category}</span>
-                      <span style={{ fontSize: ".58rem", color: "#aab5c3" }}>{new Date(ticket.created_at).toLocaleDateString("ar-SA")}</span>
+                      <span style={{ fontSize: ".58rem", color: "#aab5c3" }}>{new Date(ticket.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}</span>
                     </div>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".6rem", padding: "3px 8px", borderRadius: 20, border: `1px solid ${ss.border}`, color: ss.color, background: ss.bg, fontWeight: 700 }}>
                       {ss.icon} {ticket.status}

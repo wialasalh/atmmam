@@ -232,10 +232,10 @@ export default function AdminSubscriptionsPage() {
                       {sub.updated_at !== sub.created_at ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
                           <RefreshCw size={10} color="#d97706" />
-                          <span>{new Date(sub.updated_at).toLocaleDateString("ar-SA", { day: "numeric", month: "short", year: "numeric" })}</span>
+                          <span>{new Date(sub.updated_at).toLocaleDateString("ar-SA", {calendar:"gregory",  day: "numeric", month: "short", year: "numeric" })}</span>
                         </div>
                       ) : (
-                        <span style={{ color: "#aab5c3" }}>{new Date(sub.created_at).toLocaleDateString("ar-SA", { day: "numeric", month: "short", year: "numeric" })}</span>
+                        <span style={{ color: "#aab5c3" }}>{new Date(sub.created_at).toLocaleDateString("ar-SA", {calendar:"gregory",  day: "numeric", month: "short", year: "numeric" })}</span>
                       )}
                     </td>
                     <td style={{ padding: "10px 14px", textAlign: "center", whiteSpace: "nowrap" }}>
@@ -345,7 +345,7 @@ export default function AdminSubscriptionsPage() {
                                 )}
                               </div>
                               <span style={{ fontSize: ".55rem", color: "#94a3b8", whiteSpace: "nowrap" }}>
-                                {new Date(ev.created_at).toLocaleDateString("ar-SA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                {new Date(ev.created_at).toLocaleDateString("ar-SA", {calendar:"gregory",  day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                               </span>
                             </div>
                             {ev.notes && <div style={{ fontSize: ".6rem", color: "#64748b", marginTop: 4 }}>{ev.notes}</div>}

@@ -263,7 +263,7 @@ export default function TeamPage() {
                     )}
                   </td>
                   <td><span className={`team-status ${member.active ? "active" : "inactive"}`}>{member.active ? "نشط" : "موقوف"}</span></td>
-                  <td><time>{member.created_at ? new Date(member.created_at).toLocaleDateString("ar-SA") : "—"}</time></td>
+                  <td><time>{member.created_at ? new Date(member.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"}) : "—"}</time></td>
                     <td>
                     <div className="team-row-actions">
                       {!member.super_admin && <button className="team-action-btn" title="الصلاحيات" onClick={() => { setPermMember(member); setPermValues((member.permissions || defaultPermissions(member.role)) as PermissionKey[]); setPermError(""); }}><SlidersHorizontal size={15} /></button>}
@@ -301,8 +301,8 @@ export default function TeamPage() {
                       <td><span className={`team-status ${inv.status === "accepted" ? "active" : inv.status === "pending" ? "pending" : "inactive"}`}>
                         {inv.status === "pending" ? "بانتظار القبول" : inv.status === "accepted" ? "مقبولة" : inv.status === "expired" ? "منتهية" : "ملغية"}
                       </span></td>
-                      <td><time>{new Date(inv.created_at).toLocaleDateString("ar-SA")}</time></td>
-                      <td><time>{new Date(inv.expires_at).toLocaleDateString("ar-SA")}</time></td>
+                      <td><time>{new Date(inv.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}</time></td>
+                      <td><time>{new Date(inv.expires_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}</time></td>
                       <td>{inv.status === "pending" && <button className="team-action-btn" title="إلغاء" onClick={() => void handleCancelInvitation(inv.id)}>❌</button>}</td>
                     </tr>
                   ))}
@@ -511,7 +511,7 @@ export default function TeamPage() {
                         </div>
                         {r.comment && <p style={{ margin: "4px 0 0", fontSize: ".62rem", color: "#6f869b", lineHeight: 1.5 }}>"{r.comment}"</p>}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                          <div style={{ fontSize: ".5rem", color: "#aab5c3" }}>{new Date(r.date).toLocaleDateString("ar-SA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                          <div style={{ fontSize: ".5rem", color: "#aab5c3" }}>{new Date(r.date).toLocaleDateString("ar-SA", {calendar:"gregory",  year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
                           {r.ticket_id && <a href={`/admin/tickets?selected=${r.ticket_id}`} style={{ fontSize: ".5rem", color: "#0875dc", textDecoration: "none" }}>عرض التذكرة ←</a>}
                         </div>
                       </div>

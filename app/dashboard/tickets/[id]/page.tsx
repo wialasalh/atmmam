@@ -57,7 +57,7 @@ function formatTime(dateStr: string) {
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" });
+  return new Date(dateStr).toLocaleDateString("ar-SA", {calendar:"gregory",  year: "numeric", month: "long", day: "numeric" });
 }
 
 export default function TicketDetailPage() {
