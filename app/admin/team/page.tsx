@@ -268,7 +268,7 @@ export default function TeamPage() {
                     <div className="team-row-actions">
                       {!member.super_admin && <button className="team-action-btn" title="الصلاحيات" onClick={() => { setPermMember(member); setPermValues((member.permissions || defaultPermissions(member.role)) as PermissionKey[]); setPermError(""); }}><SlidersHorizontal size={15} /></button>}
                       <button className="team-action-btn" title="تعديل" onClick={() => { setSelected(member); setModal("edit"); }}><Pencil size={15} /></button>
-                      {(!member.super_admin || member.id === currentUserId) && <button className="team-action-btn" title="تغيير كلمة المرور" onClick={() => { setSelected(member); setModal("password"); }}><KeyRound size={15} /></button>}
+                      {member.role !== "admin" && member.id !== currentUserId && <button className="team-action-btn" title="تغيير كلمة المرور" onClick={() => { setSelected(member); setModal("password"); }}><KeyRound size={15} /></button>}
                       {member.id !== currentUserId && member.role !== "admin" && <button className="team-action-btn" title={member.active ? "إيقاف" : "تفعيل"} onClick={async () => {
                         if (member.active && !confirm("هل أنت متأكد من إيقاف هذا العضو؟")) return;
                         await handleEdit({ profileId: member.id, active: !member.active });
