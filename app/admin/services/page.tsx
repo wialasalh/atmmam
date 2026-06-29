@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
 import {
   Search, Plus, Pencil, Power, Trash2, CheckCircle, Clock, FileText,
   Building2, LayoutGrid, List, Store, Landmark, BarChart3, Lightbulb,
   Users, ShieldCheck, TrendingUp, MessageSquare, Pin, SlidersHorizontal,
+  ChevronDown, X as XIcon,
 } from "lucide-react";
 
 type ServiceItem = {
@@ -47,6 +48,72 @@ function CatIcon({ cat, size = 16, color }: { cat: string; size?: number; color?
   const Icon = CAT_ICONS[cat] ?? Pin;
   return <Icon size={size} color={color} strokeWidth={1.8} />;
 }
+function CustomSelect({
+  options, value, onChange, placeholder, allowCustom = false, icon,
+}: {
+  options: { value: string; label: string; sub?: string }[];
+  value: string; onChange: (v: string) => void;
+  placeholder?: string; allowCustom?: boolean;
+  icon?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
+  }, []);
+  const filtered = options.filter(o => !q || o.label.includes(q) || o.value.includes(q));
+  const selected = options.find(o => o.value === value);
+  const label = selected?.label || (allowCustom && value ? value : "");
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button type="button" onClick={() => { setOpen(v => !v); setQ(""); }}
+        style={{ width:"100%", minHeight:42, border:"1.5px solid", borderColor: open?"#073766":"#e5eaf0", borderRadius:10, padding:"0 14px", display:"flex", alignItems:"center", gap:8, background:"#fff", cursor:"pointer", font:"inherit", fontSize:".75rem", color: label?"#1a2d40":"#aab5c3", textAlign:"right", transition:"border-color .15s" }}>
+        {icon && <span style={{ color:"#8b9dad", flexShrink:0 }}>{icon}</span>}
+        <span style={{ flex:1 }}>{label || placeholder}</span>
+        {value && <button type="button" onClick={e => { e.stopPropagation(); onChange(""); setQ(""); }}
+          style={{ border:0, background:"none", padding:2, cursor:"pointer", color:"#aab5c3", display:"flex", flexShrink:0 }}><XIcon size={12} /></button>}
+        <ChevronDown size={14} color="#8b9dad" style={{ flexShrink:0, transition:"transform .15s", transform: open?"rotate(180deg)":"none" }} />
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", right:0, left:0, background:"#fff", border:"1.5px solid #e5eaf0", borderRadius:12, boxShadow:"0 8px 32px rgba(7,55,102,.12)", zIndex:999, overflow:"hidden" }}>
+          <div style={{ padding:"8px 10px", borderBottom:"1px solid #f0f4f8" }}>
+            <div style={{ position:"relative" }}>
+              <Search size={13} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", color:"#8b9dad" }} />
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث..." autoFocus
+                style={{ width:"100%", border:"1px solid #e5eaf0", borderRadius:8, padding:"6px 30px 6px 10px", font:"inherit", fontSize:".72rem", outline:"none", boxSizing:"border-box", background:"#f8fafc" }} />
+            </div>
+          </div>
+          <div style={{ maxHeight:200, overflowY:"auto" }}>
+            {allowCustom && q && !options.find(o => o.label === q) && (
+              <button type="button" onClick={() => { onChange(q); setOpen(false); setQ(""); }}
+                style={{ width:"100%", padding:"9px 14px", border:0, background:"#f0f7ff", cursor:"pointer", font:"inherit", fontSize:".72rem", color:"#073766", fontWeight:700, textAlign:"right", display:"flex", alignItems:"center", gap:8 }}>
+                <Plus size={12} /> إضافة "{q}"
+              </button>
+            )}
+            {filtered.length === 0 && !allowCustom && (
+              <div style={{ padding:"14px", textAlign:"center", fontSize:".7rem", color:"#aab5c3" }}>لا توجد نتائج</div>
+            )}
+            {filtered.map(o => (
+              <button key={o.value} type="button" onClick={() => { onChange(o.value); setOpen(false); setQ(""); }}
+                style={{ width:"100%", padding:"9px 14px", border:0, background: o.value===value?"#eff6ff":"transparent", cursor:"pointer", font:"inherit", fontSize:".72rem", color: o.value===value?"#073766":"#344d69", fontWeight: o.value===value?700:400, textAlign:"right", display:"flex", alignItems:"center", gap:8, transition:"background .1s" }}
+                onMouseOver={e => { if(o.value!==value) e.currentTarget.style.background="#f8fafc"; }}
+                onMouseOut={e => { if(o.value!==value) e.currentTarget.style.background="transparent"; }}>
+                {o.value===value && <CheckCircle size={12} color="#073766" style={{ flexShrink:0 }} />}
+                <div style={{ flex:1 }}>
+                  <div>{o.label}</div>
+                  {o.sub && <div style={{ fontSize:".6rem", color:"#8b9dad", marginTop:1 }}>{o.sub}</div>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getCat(category: string) {
   return CAT_COLORS[category] || { bg: "#f8fafc", color: "#526983", dot: "#94a3b8" };
 }
@@ -60,6 +127,8 @@ export default function AdminServicesPage() {
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [editing, setEditing] = useState<ServiceItem | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [formCategory, setFormCategory] = useState("");
+  const [formAgencyId, setFormAgencyId] = useState("");
   const [notice, setNotice] = useState("");
   const { loading } = useRoleGuard("manager");
 
@@ -101,10 +170,11 @@ export default function AdminServicesPage() {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     const docsRaw = String(data.get("documentsText") || "").split("\n").map(s => s.trim()).filter(Boolean);
+    if (!formCategory) return;
     const payload = {
       serviceId: editing?.id, name: String(data.get("name")),
-      category: String(data.get("category")),
-      agencyId: String(data.get("agencyId")) || undefined,
+      category: formCategory,
+      agencyId: formAgencyId || undefined,
       defaultDurationDays: Number(data.get("durationDays")) || null,
       price: data.get("price") ? Number(data.get("price")) : null,
       requiredDocuments: docsRaw, active: editing?.active ?? true,
@@ -245,7 +315,7 @@ export default function AdminServicesPage() {
             <span>إدارة شاملة لجميع خدمات المنصة — الأسعار والمتطلبات والتصنيفات.</span>
           </div>
           <div className="svc-head-right">
-            <button className="svc-add-btn" onClick={() => { setEditing(null); setShowForm(true); }}>
+            <button className="svc-add-btn" onClick={() => { setEditing(null); setFormCategory(""); setFormAgencyId(""); setShowForm(true); }}>
               <Plus size={15} /> خدمة جديدة
             </button>
             <a href="/admin/packages" className="svc-link-btn"><LayoutGrid size={14} /> إدارة الباقات</a>
@@ -319,7 +389,7 @@ export default function AdminServicesPage() {
                         </div>
                       </div>
                       <div className="svc-card-footer">
-                        <button className="svc-act-btn edit" onClick={() => { setEditing(svc); setShowForm(true); }}><Pencil size={11} /> تعديل</button>
+                        <button className="svc-act-btn edit" onClick={() => { setEditing(svc); setFormCategory(svc.category); setFormAgencyId(svc.agencyId ?? ""); setShowForm(true); }}><Pencil size={11} /> تعديل</button>
                         <button className={`svc-act-btn toggle ${svc.active ? "on" : ""}`} onClick={() => void toggleActive(svc)}>
                           <Power size={11} /> {svc.active ? "إيقاف" : "تفعيل"}
                         </button>
@@ -367,7 +437,7 @@ export default function AdminServicesPage() {
                       </td>
                       <td>
                         <div style={{ display: "flex", gap: 5 }}>
-                          <button className="svc-act-btn edit" onClick={() => { setEditing(svc); setShowForm(true); }} style={{ flex: "none", padding: "0 10px" }}><Pencil size={11} /></button>
+                          <button className="svc-act-btn edit" onClick={() => { setEditing(svc); setFormCategory(svc.category); setFormAgencyId(svc.agencyId ?? ""); setShowForm(true); }} style={{ flex: "none", padding: "0 10px" }}><Pencil size={11} /></button>
                           <button className={`svc-act-btn toggle ${svc.active ? "on" : ""}`} onClick={() => void toggleActive(svc)} style={{ flex: "none", padding: "0 10px" }}><Power size={11} /></button>
                           <button className="svc-act-btn del" onClick={() => void deleteService(svc)} style={{ flex: "none", padding: "0 10px" }}><Trash2 size={11} /></button>
                         </div>
@@ -401,6 +471,8 @@ export default function AdminServicesPage() {
               <button className="svc-modal-close" onClick={() => setShowForm(false)}>×</button>
             </div>
             <form className="svc-form" onSubmit={saveService}>
+              <input type="hidden" name="category" value={formCategory} />
+              <input type="hidden" name="agencyId" value={formAgencyId} />
               <div className="svc-form-grid">
                 <div className="svc-field wide">
                   <label>اسم الخدمة *</label>
@@ -408,17 +480,25 @@ export default function AdminServicesPage() {
                 </div>
                 <div className="svc-field">
                   <label>التصنيف *</label>
-                  <input name="category" defaultValue={editing?.category} required placeholder="مثال: السجل التجاري" list="cats-dl" />
-                  <datalist id="cats-dl">
-                    {Array.from(new Set(services.map(s => s.category))).map(c => <option key={c} value={c} />)}
-                  </datalist>
+                  <CustomSelect
+                    allowCustom
+                    placeholder="اختر أو اكتب تصنيفاً..."
+                    value={formCategory}
+                    onChange={setFormCategory}
+                    icon={<LayoutGrid size={13} />}
+                    options={Array.from(new Set(services.map(s => s.category))).map(c => ({ value: c, label: c }))}
+                  />
+                  {!formCategory && <span style={{ fontSize:".6rem", color:"#ef4444" }}>التصنيف مطلوب</span>}
                 </div>
                 <div className="svc-field">
                   <label>الجهة الحكومية</label>
-                  <select name="agencyId" defaultValue={editing?.agencyId ?? ""} style={{ appearance: "none", WebkitAppearance: "none" }}>
-                    <option value="">بدون جهة</option>
-                    {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
+                  <CustomSelect
+                    placeholder="بدون جهة"
+                    value={formAgencyId}
+                    onChange={setFormAgencyId}
+                    icon={<Building2 size={13} />}
+                    options={agencies.map(a => ({ value: a.id, label: a.name }))}
+                  />
                 </div>
                 <div className="svc-field">
                   <label>السعر (ر.س)</label>
