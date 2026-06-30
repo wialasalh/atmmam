@@ -1,3 +1,4 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -5,7 +6,7 @@ import {
   Building2, Plus, Save, Upload, MapPin, Hash, Briefcase,
   FileText, Users, Globe, Clock, Calendar, X, Check,
   AlertCircle, ChevronDown, ExternalLink, Trash2, CheckCircle2, Phone,
-  User, CheckCircle, XCircle
+  User, CheckCircle, XCircle, UserPlus, Download, Search
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -136,14 +137,41 @@ export default function CompaniesPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [uploading, setUploading] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newCompany, setNewCompany] = useState({ name: "", tax_number: "", company_activity: "", client_type: "company" as "company" | "person" });
+  const [newCompany, setNewCompany] = useState({
+    name: "", tax_number: "", company_activity: "", client_type: "company" as "company" | "person",
+    commercial_number: "", commercial_register_expiry: "", commercial_register_date: "",
+    city: "", phone: "", national_id: "", unified_register_number: "",
+  });
   const [addError, setAddError] = useState("");
   const [docUrls, setDocUrls] = useState<Record<string, string>>({});
   const [openSection, setOpenSection] = useState<string>("basic");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [cityFilter, setCityFilter] = useState("");
+  const [companySearch, setCompanySearch] = useState("");
 
   const selected = companies.find(c => c.id === selectedId) || null;
   const progress = calcProgress(form, selected);
+
+  const filteredCompanies = companies.filter(c => {
+    const matchCity = !cityFilter || c.city === cityFilter;
+    const matchSearch = !companySearch || c.name.toLowerCase().includes(companySearch.toLowerCase());
+    return matchCity && matchSearch;
+  });
+
+  const uniqueCities = [...new Set(companies.map(c => c.city).filter(Boolean))] as string[];
+
+  function exportCSV() {
+    const headers = ["الاسم", "المدينة", "الرقم الضريبي", "رقم السجل", "النشاط", "الهاتف", "البريد"];
+    const rows = companies.map(c => [
+      c.name, c.city || "", c.tax_number || "", c.commercial_number || "",
+      c.company_activity || "", c.phone || "", c.email || "",
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "منشآتي.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
 
   useEffect(() => { loadCompanies(); }, []);
   useEffect(() => { if (selected) { populateForm(selected); loadDocUrls(selected); } }, [selected]);
@@ -192,15 +220,20 @@ export default function CompaniesPage() {
 
   async function handleSave() {
     if (!selected) return;
-    // Validate fields before save
+    const FIELD_LABELS: Record<string, string> = {
+      name: "اسم المنشأة", phone: "الجوال", tax_number: "الرقم الضريبي",
+      city: "المدينة", commercial_number: "السجل التجاري",
+    };
     const errors: Record<string, string> = {};
-    const phoneErr = validatePhone(form.phone);
-    if (phoneErr) errors.phone = phoneErr;
+    if (!form.name.trim()) errors.name = "اسم المنشأة مطلوب";
+    if (!form.phone.trim()) errors.phone = "الجوال مطلوب";
+    else { const phoneErr = validatePhone(form.phone); if (phoneErr) errors.phone = phoneErr; }
     const taxErr = validateTaxNumber(form.tax_number);
     if (taxErr) errors.tax_number = taxErr;
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      setMessage({ text: "يوجد أخطاء في البيانات — تحقق من الحقول المحددة", type: "error" });
+      const msgs = Object.keys(errors).map(k => FIELD_LABELS[k] || k);
+      setMessage({ text: `${msgs.join(" و")} ${msgs.length === 1 ? "يحتوي على خطأ أو مطلوب" : "تحتوي على أخطاء أو مطلوبة"}`, type: "error" });
       return;
     }
     setFieldErrors({});
@@ -229,15 +262,24 @@ export default function CompaniesPage() {
 
   async function handleAddCompany() {
     if (!newCompany.name.trim()) { setAddError("اسم المنشأة مطلوب"); return; }
+    if (!newCompany.phone.trim()) { setAddError("رقم الجوال مطلوب"); return; }
+    const phoneErr = validatePhone(newCompany.phone);
+    if (phoneErr) { setAddError(phoneErr); return; }
     setSaving(true); setAddError("");
     const supabase = createSupabaseBrowserClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
     const { data, error } = await supabase.from("clients").insert({
       name: newCompany.name.trim(),
-      phone: "0000000000",
+      phone: newCompany.phone.trim(),
       tax_number: newCompany.tax_number.trim() || null,
       company_activity: newCompany.company_activity.trim() || null,
+      commercial_number: newCompany.commercial_number.trim() || null,
+      commercial_register_expiry: newCompany.commercial_register_expiry || null,
+      commercial_register_date: newCompany.commercial_register_date || null,
+      city: newCompany.city || null,
+      national_id: newCompany.national_id.trim() || null,
+      unified_register_number: newCompany.unified_register_number.trim() || null,
       client_type: newCompany.client_type,
       user_id: user.id,
       company_status: "active",
@@ -246,7 +288,7 @@ export default function CompaniesPage() {
     setCompanies(prev => [...prev, data as Company]);
     setSelectedId(data.id);
     setShowAddModal(false);
-    setNewCompany({ name: "", tax_number: "", company_activity: "", client_type: "company" });
+    setNewCompany({ name: "", tax_number: "", company_activity: "", client_type: "company", commercial_number: "", commercial_register_expiry: "", commercial_register_date: "", city: "", phone: "", national_id: "", unified_register_number: "" });
     setSaving(false);
   }
 
@@ -267,11 +309,7 @@ export default function CompaniesPage() {
   }
 
 
-  if (loading) return (
-    <div className="client-dash-page">
-      <div className="client-dash-empty"><p>جاري التحميل...</p></div>
-    </div>
-  );
+  if (loading) return <PageLoader text="جاري تحميل بيانات المنشأة..." />;
 
   return (
     <div className="client-dash-page" dir="rtl">
@@ -281,92 +319,172 @@ export default function CompaniesPage() {
       `}</style>
 
       {/* ── Header ── */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, marginBottom:4 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, marginBottom: companies.length > 1 ? 14 : 4 }}>
         <div>
           <h2 className="client-dash-page-title" style={{ margin:0 }}>بيانات المنشآت</h2>
           <p className="client-dash-page-desc" style={{ margin:"4px 0 0" }}>أدر بيانات منشآتك النظامية ومستنداتها</p>
         </div>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          {/* Company switcher */}
-          {companies.length > 1 && (
-            <select value={selectedId || ""} onChange={e => setSelectedId(e.target.value)}
-              className="client-dash-select" style={{ minWidth:180, height:38 }}>
-              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          )}
-          <button onClick={() => setShowAddModal(true)} className="client-dash-primary-btn" style={{ height:42, padding:"0 20px", gap:8, fontSize:".75rem", fontWeight:700, borderRadius:10, whiteSpace:"nowrap" }}>
-            <Plus size={15} /> إضافة منشأة
+          <button onClick={() => setShowAddModal(true)} className="client-dash-primary-btn" style={{ height:38, padding:"0 16px", gap:6, fontSize:".72rem", fontWeight:700, borderRadius:9, whiteSpace:"nowrap" }}>
+            <Plus size={14} /> إضافة منشأة
           </button>
         </div>
       </div>
 
+      {/* ── Filter bar (only when 2+ companies) ── */}
+      {companies.length > 1 && (
+        <div style={{ background:"#fff", border:"1px solid #e5eaf0", borderRadius:12, padding:"12px 16px", marginBottom:14, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+          {/* Search */}
+          <div style={{ flex:1, minWidth:160, display:"flex", alignItems:"center", gap:8, background:"#f5f8fc", border:"1px solid #e5eaf0", borderRadius:8, padding:"0 12px", height:36 }}>
+            <Search size={13} color="#8b9dad" />
+            <input value={companySearch} onChange={e => setCompanySearch(e.target.value)} placeholder="ابحث باسم المنشأة..."
+              style={{ border:0, outline:0, background:"transparent", font:"inherit", fontSize:".7rem", color:"#344d69", flex:1 }} />
+          </div>
+          {/* City filter */}
+          <CityDropdown
+            value={cityFilter}
+            onChange={v => {
+              setCityFilter(v);
+              if (v && filteredCompanies.length > 0 && !filteredCompanies.find(c => c.id === selectedId)) setSelectedId(filteredCompanies[0].id);
+            }}
+            placeholder="كل المدن"
+            emptyLabel="كل المدن"
+          />
+          {/* Export */}
+          <button onClick={exportCSV} style={{ display:"inline-flex", alignItems:"center", gap:6, height:36, padding:"0 14px", border:"1px solid #e5eaf0", borderRadius:8, background:"#fff", color:"#526983", font:"inherit", fontSize:".7rem", fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>
+            <Download size={13} /> تصدير
+          </button>
+          {/* Company pills */}
+          <div style={{ width:"100%", display:"flex", gap:6, flexWrap:"wrap" }}>
+            {filteredCompanies.map(c => (
+              <button key={c.id} onClick={() => setSelectedId(c.id)}
+                style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"5px 12px", borderRadius:20, border:`1.5px solid ${selectedId===c.id?"#0875dc":"#e5eaf0"}`, background:selectedId===c.id?"#eaf4ff":"#fff", color:selectedId===c.id?"#0875dc":"#526983", font:"inherit", fontSize:".65rem", fontWeight:selectedId===c.id?700:500, cursor:"pointer", transition:"all .12s" }}>
+                <Building2 size={11} />
+                {c.name}
+                {c.city && <span style={{ fontSize:".55rem", color:selectedId===c.id?"#0875dc":"#aab5c3" }}>· {c.city}</span>}
+              </button>
+            ))}
+            {filteredCompanies.length === 0 && (
+              <span style={{ fontSize:".65rem", color:"#aab5c3" }}>لا توجد منشآت مطابقة</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Add Modal ── */}
       {showAddModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}
           onClick={() => setShowAddModal(false)}>
-          <div style={{ background:"#fff", borderRadius:18, padding:28, width:"min(460px,100%)", boxShadow:"0 12px 40px rgba(0,0,0,.15)" }}
+          <div style={{ background:"#fff", borderRadius:20, width:"min(600px,100%)", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}
             onClick={e => e.stopPropagation()}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <div style={{ width:38, height:38, borderRadius:10, background:"#eaf4ff", display:"grid", placeItems:"center" }}>
-                  <Building2 size={18} color="#0875dc" />
-                </div>
-                <div>
-                  <h3 style={{ margin:0, fontSize:".9rem", color:"#073766", fontWeight:800 }}>إضافة منشأة جديدة</h3>
-                  <p style={{ margin:0, fontSize:".62rem", color:"#8b9dad" }}>أدخل البيانات الأساسية للمنشأة</p>
-                </div>
+
+            {/* Header */}
+            <div style={{ padding:"22px 26px 18px", borderBottom:"1px solid #f0f4f8", display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ width:40, height:40, borderRadius:11, background:"#eaf4ff", display:"grid", placeItems:"center", flexShrink:0 }}>
+                <Building2 size={19} color="#0875dc" />
               </div>
-              <button onClick={() => setShowAddModal(false)} style={{ border:0, background:"#f5f8fc", color:"#526983", cursor:"pointer", borderRadius:8, width:32, height:32, display:"grid", placeItems:"center" }}>
-                <X size={16} />
+              <div style={{ flex:1 }}>
+                <h3 style={{ margin:0, fontSize:".9rem", color:"#073766", fontWeight:800 }}>إضافة منشأة جديدة</h3>
+                <p style={{ margin:"2px 0 0", fontSize:".62rem", color:"#8b9dad" }}>أدخل بيانات المنشأة لتبدأ الخدمات فوراً</p>
+              </div>
+              <button onClick={() => setShowAddModal(false)} style={{ border:0, background:"#f5f8fc", color:"#526983", cursor:"pointer", borderRadius:8, width:32, height:32, display:"grid", placeItems:"center", flexShrink:0 }}>
+                <X size={15} />
               </button>
             </div>
 
-            {/* نوع المنشأة */}
-            <div style={{ display:"flex", gap:8, marginBottom:16 }}>
-              {[{ v:"company", l:"مؤسسة / شركة", icon:<Building2 size={14} /> }, { v:"person", l:"فرد", icon:<User size={14} /> }].map(t => (
-                <button key={t.v} type="button" onClick={() => setNewCompany({...newCompany, client_type: t.v as "company"|"person"})}
-                  style={{ flex:1, padding:"10px 8px", border:`1.5px solid ${newCompany.client_type===t.v?"#0875dc":"#e5eaf0"}`, borderRadius:10, background:newCompany.client_type===t.v?"#eaf4ff":"#fff", cursor:"pointer", font:"inherit", fontSize:".72rem", fontWeight:700, color:newCompany.client_type===t.v?"#0875dc":"#526983" }}>
-                  {t.icon} {t.l}
+            <div style={{ padding:"20px 26px", display:"flex", flexDirection:"column", gap:18 }}>
+
+              {/* نوع المنشأة */}
+              <div style={{ display:"flex", gap:8 }}>
+                {[{ v:"company", l:"مؤسسة / شركة", icon:<Building2 size={15} /> }, { v:"person", l:"فرد", icon:<User size={15} /> }].map(t => (
+                  <button key={t.v} type="button" onClick={() => setNewCompany({...newCompany, client_type: t.v as "company"|"person"})}
+                    style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"11px 8px", border:`2px solid ${newCompany.client_type===t.v?"#0875dc":"#e5eaf0"}`, borderRadius:11, background:newCompany.client_type===t.v?"#eaf4ff":"#fafbfc", cursor:"pointer", font:"inherit", fontSize:".73rem", fontWeight:700, color:newCompany.client_type===t.v?"#0875dc":"#526983", transition:"all .12s" }}>
+                    {t.icon} {t.l}
+                  </button>
+                ))}
+              </div>
+
+              {/* القسم الأول: البيانات الأساسية */}
+              <div>
+                <div style={{ fontSize:".6rem", fontWeight:800, color:"#8b9dad", letterSpacing:".06em", marginBottom:10, display:"flex", alignItems:"center", gap:6 }}>
+                  <div style={{ height:1, flex:1, background:"#e8edf5" }} />
+                  البيانات الأساسية
+                  <div style={{ height:1, flex:1, background:"#e8edf5" }} />
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div style={{ gridColumn:"1/-1" }}>
+                    <AddLabel text="اسم المنشأة *" />
+                    <AddInput value={newCompany.name} onChange={v => setNewCompany({...newCompany, name:v})} placeholder={newCompany.client_type==="company" ? "مثال: مؤسسة النهضة للتجارة" : "الاسم الكامل"} />
+                  </div>
+                  <div>
+                    <AddLabel text="رقم الجوال *" />
+                    <AddInput value={newCompany.phone} onChange={v => setNewCompany({...newCompany, phone:toWesternNums(v)})} placeholder="05XXXXXXXX" />
+                  </div>
+                  <div>
+                    <AddLabel text="المدينة" />
+                    <CityDropdown value={newCompany.city} onChange={v => setNewCompany({...newCompany, city:v})} placeholder="اختر المدينة" emptyLabel="اختر" />
+                  </div>
+                  <div>
+                    <AddLabel text="النشاط التجاري" />
+                    <AddInput value={newCompany.company_activity} onChange={v => setNewCompany({...newCompany, company_activity:v})} placeholder="مثال: تجارة الجملة والتجزئة" />
+                  </div>
+                  <div>
+                    <AddLabel text="الرقم الضريبي" />
+                    <AddInput value={newCompany.tax_number} onChange={v => setNewCompany({...newCompany, tax_number:toWesternNums(v)})} placeholder="15 رقماً يبدأ بـ 3" />
+                  </div>
+                </div>
+              </div>
+
+              {/* القسم الثاني: السجل التجاري */}
+              <div>
+                <div style={{ fontSize:".6rem", fontWeight:800, color:"#8b9dad", letterSpacing:".06em", marginBottom:10, display:"flex", alignItems:"center", gap:6 }}>
+                  <div style={{ height:1, flex:1, background:"#e8edf5" }} />
+                  السجل التجاري
+                  <div style={{ height:1, flex:1, background:"#e8edf5" }} />
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div>
+                    <AddLabel text="رقم السجل التجاري" />
+                    <AddInput value={newCompany.commercial_number} onChange={v => setNewCompany({...newCompany, commercial_number:toWesternNums(v)})} placeholder="10 أرقام" />
+                  </div>
+                  <div>
+                    <AddLabel text="رقم الهوية الوطنية" />
+                    <AddInput value={newCompany.national_id} onChange={v => setNewCompany({...newCompany, national_id:toWesternNums(v)})} placeholder="10 أرقام" />
+                  </div>
+                  <div>
+                    <AddLabel text="تاريخ الإصدار" />
+                    <DatePickerField value={newCompany.commercial_register_date} onChange={v => setNewCompany({...newCompany, commercial_register_date:v})} placeholder="اختر تاريخ الإصدار" />
+                  </div>
+                  <div>
+                    <AddLabel text="تاريخ الانتهاء" required />
+                    <DatePickerField value={newCompany.commercial_register_expiry} onChange={v => setNewCompany({...newCompany, commercial_register_expiry:v})} placeholder="اختر تاريخ الانتهاء" />
+                    {newCompany.commercial_register_expiry && (() => {
+                      const diff = Math.ceil((new Date(newCompany.commercial_register_expiry).getTime() - Date.now()) / 86400000);
+                      if (diff < 0) return <p style={{ margin:"4px 0 0", fontSize:".58rem", color:"#dc2626", fontWeight:600 }}>⚠ السجل منتهي</p>;
+                      if (diff <= 30) return <p style={{ margin:"4px 0 0", fontSize:".58rem", color:"#d97706", fontWeight:600 }}>⚠ سينتهي السجل التجاري خلال {diff} يوم</p>;
+                      return <p style={{ margin:"4px 0 0", fontSize:".58rem", color:"#15803d" }}>✓ ساري لـ {diff} يوم</p>;
+                    })()}
+                  </div>
+                  <div>
+                    <AddLabel text="رقم السجل الموحد" />
+                    <AddInput value={newCompany.unified_register_number} onChange={v => setNewCompany({...newCompany, unified_register_number:toWesternNums(v)})} placeholder="رقم السجل الموحد" />
+                  </div>
+                </div>
+              </div>
+
+              {addError && (
+                <div style={{ background:"#fef2f2", border:"1px solid #fecaca", borderRadius:9, padding:"10px 14px", display:"flex", alignItems:"center", gap:8 }}>
+                  <AlertCircle size={14} color="#dc2626" />
+                  <span style={{ fontSize:".67rem", color:"#dc2626", fontWeight:600 }}>{addError}</span>
+                </div>
+              )}
+
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={handleAddCompany} disabled={saving || !newCompany.name.trim() || !newCompany.phone.trim()} className="client-dash-primary-btn" style={{ flex:1, height:44, fontSize:".75rem" }}>
+                  {saving ? "جاري الإضافة..." : "إضافة المنشأة"}
                 </button>
-              ))}
-            </div>
-
-            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-              <div>
-                <label style={{ display:"block", fontSize:".63rem", fontWeight:700, color:"#425c76", marginBottom:5 }}>اسم المنشأة *</label>
-                <input value={newCompany.name} onChange={e => setNewCompany({...newCompany, name:e.target.value})}
-                  placeholder="مثال: مؤسسة النهضة للتجارة"
-                  style={{ width:"100%", height:42, border:"1px solid #dfe7ef", borderRadius:10, padding:"0 14px", font:"inherit", fontSize:".75rem", boxSizing:"border-box", outline:"none" }}
-                  onFocus={e => e.target.style.borderColor="#0875dc"} onBlur={e => e.target.style.borderColor="#dfe7ef"} />
+                <button onClick={() => setShowAddModal(false)} className="client-dash-secondary-btn" style={{ height:44, padding:"0 20px" }}>إلغاء</button>
               </div>
-              <div>
-                <label style={{ display:"block", fontSize:".63rem", fontWeight:700, color:"#425c76", marginBottom:5 }}>الرقم الضريبي</label>
-                <input value={newCompany.tax_number} onChange={e => setNewCompany({...newCompany, tax_number:toWesternNums(e.target.value)})}
-                  placeholder="15 رقماً"
-                  style={{ width:"100%", height:42, border:"1px solid #dfe7ef", borderRadius:10, padding:"0 14px", font:"inherit", fontSize:".75rem", boxSizing:"border-box", outline:"none" }}
-                  onFocus={e => e.target.style.borderColor="#0875dc"} onBlur={e => e.target.style.borderColor="#dfe7ef"} />
-              </div>
-              <div>
-                <label style={{ display:"block", fontSize:".63rem", fontWeight:700, color:"#425c76", marginBottom:5 }}>النشاط التجاري</label>
-                <input value={newCompany.company_activity} onChange={e => setNewCompany({...newCompany, company_activity:e.target.value})}
-                  placeholder="مثال: تجارة الجملة والتجزئة"
-                  style={{ width:"100%", height:42, border:"1px solid #dfe7ef", borderRadius:10, padding:"0 14px", font:"inherit", fontSize:".75rem", boxSizing:"border-box", outline:"none" }}
-                  onFocus={e => e.target.style.borderColor="#0875dc"} onBlur={e => e.target.style.borderColor="#dfe7ef"} />
-              </div>
-            </div>
-
-            {addError && (
-              <div style={{ background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginTop:12, display:"flex", alignItems:"center", gap:8 }}>
-                <AlertCircle size={13} color="#dc2626" />
-                <span style={{ fontSize:".65rem", color:"#dc2626" }}>{addError}</span>
-              </div>
-            )}
-
-            <div style={{ display:"flex", gap:8, marginTop:20 }}>
-              <button onClick={handleAddCompany} disabled={saving || !newCompany.name.trim()} className="client-dash-primary-btn" style={{ flex:1, height:42 }}>
-                {saving ? "جاري الإضافة..." : "إضافة المنشأة"}
-              </button>
-              <button onClick={() => setShowAddModal(false)} className="client-dash-secondary-btn" style={{ height:42, padding:"0 16px" }}>إلغاء</button>
             </div>
           </div>
         </div>
@@ -440,7 +558,9 @@ export default function CompaniesPage() {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
                 <div style={{ gridColumn:"1/-1" }}>
                   <FieldLabel icon={Building2} label="اسم المنشأة *" />
-                  <input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="الاسم التجاري الرسمي" className="form-input" />
+                  <input value={form.name} onChange={e => { setForm({...form,name:e.target.value}); setFieldErrors(prev => ({...prev, name: ""})); }} placeholder="الاسم التجاري الرسمي" className="form-input"
+                    style={{ borderColor: fieldErrors.name ? "#dc2626" : undefined }} />
+                  {fieldErrors.name && <p style={{ margin:"4px 0 0", fontSize:".6rem", color:"#dc2626" }}>{fieldErrors.name}</p>}
                 </div>
                 <div>
                   <FieldLabel icon={Hash} label="الرقم الضريبي" />
@@ -500,7 +620,7 @@ export default function CompaniesPage() {
                 </div>
                 <div style={{ position:"relative" }}>
                   <FieldLabel icon={MapPin} label="المدينة" />
-                  <CityDropdown value={form.city} onChange={v => setForm({...form, city:v})} />
+                  <CityDropdown value={form.city} onChange={v => setForm({...form, city:v})} inputClass="form-input" placeholder="اختر المدينة" emptyLabel="الكل" />
                 </div>
                 <div>
                   <FieldLabel icon={Phone} label="جوال المنشأة" />
@@ -579,8 +699,8 @@ export default function CompaniesPage() {
           <div style={{ background:"#fff", border:"1px solid #e5ecf3", borderRadius:16, marginBottom:16, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
             <button onClick={() => setOpenSection(openSection === "docs" ? "" : "docs")}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"16px 20px", border:0, background: openSection === "docs" ? "#f8fafc" : "#fff", cursor:"pointer", borderBottom: openSection === "docs" ? "1px solid #f0f4f8" : "none", borderRadius: openSection === "docs" ? "16px 16px 0 0" : 16 }}>
-              <div style={{ width:34, height:34, borderRadius:9, background:"#f5f3ff", display:"grid", placeItems:"center", flexShrink:0 }}>
-                <FileText size={16} color="#7c3aed" />
+              <div style={{ width:34, height:34, borderRadius:9, background:"#f0fdfa", display:"grid", placeItems:"center", flexShrink:0 }}>
+                <FileText size={16} color="#0f766e" />
               </div>
               <div style={{ flex:1, textAlign:"right" }}>
                 <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>الوثائق والمستندات الرسمية</h3>
@@ -655,11 +775,11 @@ export default function CompaniesPage() {
             <button onClick={() => setOpenSection(openSection === "invitations" ? "" : "invitations")}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"16px 20px", border:0, background: openSection === "invitations" ? "#f8fafc" : "#fff", cursor:"pointer", borderBottom: openSection === "invitations" ? "1px solid #f0f4f8" : "none", borderRadius: openSection === "invitations" ? "16px 16px 0 0" : 16 }}>
               <div style={{ width:36, height:36, borderRadius:10, background:"#f0f7ff", display:"grid", placeItems:"center", flexShrink:0 }}>
-                <Users size={18} color="#0875dc" />
+                <UserPlus size={18} color="#0875dc" />
               </div>
               <div style={{ flex:1, textAlign:"right" }}>
-                <div style={{ fontSize:".78rem", fontWeight:800, color:"#0b1e36" }}>دعوة موظف / ممثل</div>
-                <div style={{ fontSize:".65rem", color:"#9aafbf", marginTop:2 }}>أرسل رابط دعوة لمنح وصول محدود</div>
+                <h3 style={{ margin:0, fontSize:".8rem", color:"#073766", fontWeight:800 }}>دعوة موظف / ممثل</h3>
+                <p style={{ margin:0, fontSize:".6rem", color:"#8b9dad" }}>أرسل رابط دعوة لمنح وصول محدود</p>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2" style={{ transform: openSection === "invitations" ? "rotate(180deg)" : "none", transition:"transform .2s", flexShrink:0 }}>
                 <polyline points="6 9 12 15 18 9"/>
@@ -670,7 +790,7 @@ export default function CompaniesPage() {
 
           {/* ── Save Button ── */}
           <button onClick={handleSave} disabled={saving} className="client-dash-primary-btn"
-            style={{ width:"100%", height:48, fontSize:".8rem", gap:8 }}>
+            style={{ height:40, fontSize:".75rem", gap:6, padding:"0 20px", alignSelf:"flex-start", marginTop:8 }}>
             <Save size={16} /> {saving ? "جاري الحفظ..." : "حفظ جميع التغييرات"}
           </button>
         </>
@@ -1189,7 +1309,7 @@ function CustomDropdown({ value, onChange, options, placeholder }: {
 }
 
 
-function CityDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function CityDropdown({ value, onChange, placeholder = "اختر المدينة", emptyLabel = "الكل", inputClass }: { value: string; onChange: (v: string) => void; placeholder?: string; emptyLabel?: string; inputClass?: string }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
@@ -1206,16 +1326,19 @@ function CityDropdown({ value, onChange }: { value: string; onChange: (v: string
 
   return (
     <div ref={ref} style={{ position:"relative" }}>
-      <div onClick={() => setOpen(!open)} className="form-input"
-        style={{ display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none" }}>
-        <span style={{ color: value ? "#2a4a6a" : "#b0bcc9", fontSize:".72rem" }}>{value || "اختر المدينة"}</span>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8b9dad" strokeWidth="2">
+      <div onClick={() => setOpen(!open)} className={inputClass}
+        style={{ display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", userSelect:"none", ...(inputClass ? {} : { height:36, border:"1px solid #e5eaf0", borderRadius:8, background: value ? "#eaf4ff" : "#f5f8fc", padding:"0 12px", minWidth:150, fontSize:".7rem" }) }}>
+        <span style={{ color: value ? "#073766" : "#8b9dad", fontSize:".7rem", fontWeight: value ? 700 : 400, display:"flex", alignItems:"center", gap:5 }}>
+          {value ? <><MapPin size={12} color="#0875dc" />{value}</> : placeholder}
+        </span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={value ? "#0875dc" : "#8b9dad"} strokeWidth="2" style={{ marginRight:4, flexShrink:0 }}>
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </div>
       {open && (
         <div style={{
-          position:"absolute", top:"calc(100% + 4px)", right:0, left:0,
+          position:"absolute", top:"calc(100% + 4px)", right:0,
+          width: 220,
           zIndex:9999, background:"#fff", border:"1px solid #dfe7ef",
           borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,.12)", overflow:"hidden"
         }}>
@@ -1226,8 +1349,8 @@ function CityDropdown({ value, onChange }: { value: string; onChange: (v: string
           </div>
           <div style={{ maxHeight:220, overflowY:"auto", background:"#fff" }}>
             <div onClick={() => { onChange(""); setOpen(false); setQuery(""); }}
-              style={{ padding:"8px 14px", fontSize:".7rem", cursor:"pointer", color:"#8b9dad", borderBottom:"1px solid #f5f5f5" }}>
-              الكل
+              style={{ padding:"8px 14px", fontSize:".7rem", cursor:"pointer", color: value ? "#8b9dad" : "#0875dc", fontWeight: value ? 400 : 700, borderBottom:"1px solid #f5f5f5" }}>
+              {emptyLabel}
             </div>
             {filtered.map(c => (
               <div key={c} onClick={() => { onChange(c); setOpen(false); setQuery(""); }}
@@ -1236,10 +1359,15 @@ function CityDropdown({ value, onChange }: { value: string; onChange: (v: string
                   background: value === c ? "#eaf4ff" : "#fff",
                   color: value === c ? "#0875dc" : "#2a4a6a",
                   fontWeight: value === c ? 700 : 400,
+                  display:"flex", alignItems:"center", gap:6,
                 }}>
+                {value === c && <MapPin size={11} color="#0875dc" />}
                 {c}
               </div>
             ))}
+            {filtered.length === 0 && (
+              <div style={{ padding:"12px 14px", fontSize:".68rem", color:"#aab5c3", textAlign:"center" }}>لا نتائج</div>
+            )}
           </div>
         </div>
       )}
@@ -1254,5 +1382,32 @@ function FieldLabel({ icon: Icon, label }: { icon: React.ComponentType<{ size?: 
       <Icon size={12} color="#8b9dad" />
       <span style={{ fontSize:".63rem", fontWeight:700, color:"#425c76" }}>{label}</span>
     </div>
+  );
+}
+
+function AddLabel({ text, required }: { text: string; required?: boolean }) {
+  return (
+    <label style={{ display:"block", fontSize:".63rem", fontWeight:700, color:"#425c76", marginBottom:5 }}>
+      {text}{required && <span style={{ color:"#dc2626", marginRight:3 }}>*</span>}
+    </label>
+  );
+}
+
+function AddInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <input
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        width: "100%", height: 42, border: `1.5px solid ${focused ? "#0875dc" : "#e5eaf0"}`,
+        borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".75rem",
+        boxSizing: "border-box", outline: "none", background: "#fff", color: "#1a2d40",
+        transition: "border-color .15s",
+      }}
+    />
   );
 }

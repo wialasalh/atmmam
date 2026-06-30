@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createTicketId, decodeTicket, findTicket, saveTicket, Ticket } from "@/lib/tickets";
 import { CheckCircle } from "lucide-react";
+import { formatAppDateTime } from "@/lib/date-format";
 
 export function TicketDetail({ ticketId }: { ticketId?: string }) {
   const searchParams = useSearchParams();
@@ -86,15 +87,15 @@ export function TicketDetail({ ticketId }: { ticketId?: string }) {
         {ticket.priority ? <p>الأولوية: {ticket.priority}</p> : null}
         {ticket.requesterName ? <p>صاحب الطلب: {ticket.requesterName}</p> : null}
         {ticket.contact ? <p>التواصل: {ticket.contact}</p> : null}
-        <p>تاريخ الإنشاء: {new Date(ticket.createdAt).toLocaleString("ar-SA")}</p>
-        {ticket.updatedAt ? <p>آخر تحديث: {new Date(ticket.updatedAt).toLocaleString("ar-SA")}</p> : null}
+        <p>تاريخ الإنشاء: {formatAppDateTime(ticket.createdAt)}</p>
+        {ticket.updatedAt ? <p>آخر تحديث: {formatAppDateTime(ticket.updatedAt)}</p> : null}
       </article>
       <div className="faq-list">
         {ticket.messages.map((message) => (
           <article className="service-card" key={`${message.createdAt}-${message.author}`}>
             <p className="eyebrow">{message.author === "customer" ? "رسالة العميل" : "رد الفريق"}</p>
             <p>{message.body}</p>
-            <small>{new Date(message.createdAt).toLocaleString("ar-SA")}</small>
+            <small>{formatAppDateTime(message.createdAt)}</small>
           </article>
         ))}
       </div>

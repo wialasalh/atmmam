@@ -1,3 +1,4 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
@@ -210,16 +211,12 @@ export default function AdminPackagesPage() {
     return cycleOptions.find((c) => c.value === cycle)?.label || cycle;
   }
 
-  if (loading || authLoading) return (
-    <div className="loading-spinner" style={{ display: "grid", placeItems: "center", height: "calc(100vh - 76px)" }}>
-      <div style={{ width: 28, height: 28, border: "3px solid #e5ecf3", borderTopColor: "#073766", borderRadius: "50%", animation: "spin .6s linear infinite" }} />
-    </div>
-  );
+  if (loading || authLoading) return <PageLoader text="جاري تحميل الباقات..." />;
 
   return (
     <>
       <style>{`
-        .apkg-page { width: min(1500px, calc(100% - 48px)); margin: auto; padding: 32px 0 50px; direction: rtl; }
+        .apkg-page { width: 100%; padding: 32px 24px 50px; direction: rtl; }
         .apkg-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; flex-wrap: wrap; gap: 12px; }
         .apkg-heading p { margin: 0 0 3px; color: #168d80; font-size: .67rem; font-weight: 900; }
         .apkg-heading h1 { font-size: 1.65rem; margin: 0 0 5px; color: #073766; }
@@ -270,37 +267,37 @@ export default function AdminPackagesPage() {
         .apkg-empty { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #8b9dad; }
         .apkg-empty svg { margin-bottom: 12px; opacity: .3; }
         .apkg-empty p { font-size: .8rem; }
-        .apkg-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 999; display: flex; align-items: center; justify-content: center; padding: 20px; }
-        .apkg-modal { background: #fff; border-radius: 18px; width: min(800px, 100%); max-height: 90vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.15); }
-        .apkg-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 0; }
-        .apkg-modal-header h2 { font-size: 1rem; margin: 0 0 4px; color: #073766; }
-        .apkg-modal-header p { font-size: .65rem; color: #8b9dad; margin: 0; }
-        .apkg-modal-close { width: 32px; height: 32px; border: 0; background: #f5f8fc; border-radius: 8px; cursor: pointer; display: grid; place-items: center; color: #526983; transition: background .15s; flex-shrink: 0; }
+        .apkg-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 999; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .apkg-modal { background: #fff; border-radius: 16px; width: min(560px, 100%); max-height: 92vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.15); }
+        .apkg-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 0; }
+        .apkg-modal-header h2 { font-size: .88rem; margin: 0 0 2px; color: #073766; }
+        .apkg-modal-header p { font-size: .6rem; color: #8b9dad; margin: 0; }
+        .apkg-modal-close { width: 28px; height: 28px; border: 0; background: #f5f8fc; border-radius: 7px; cursor: pointer; display: grid; place-items: center; color: #526983; transition: background .15s; flex-shrink: 0; }
         .apkg-modal-close:hover { background: #e5eaf0; }
-        .apkg-form { padding: 16px 24px 24px; }
-        .apkg-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .apkg-form { padding: 12px 20px 20px; }
+        .apkg-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .apkg-form-grid .full { grid-column: 1 / -1; }
-        .apkg-field { display: flex; flex-direction: column; gap: 4px; }
-        .apkg-field label { font-size: .63rem; font-weight: 700; color: #425c76; display: flex; align-items: center; gap: 4px; }
-        .apkg-field input:not([type="checkbox"]), .apkg-field select, .apkg-field textarea { width: 100%; height: 40px; border: 1px solid #e5eaf0; border-radius: 8px; padding: 0 12px; font: inherit; font-size: .7rem; color: #1a2d40; background: #fff; box-sizing: border-box; outline: none; transition: border-color .15s; }
-        .apkg-field select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b9dad' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: left 12px center; padding-left: 28px; }
+        .apkg-field { display: flex; flex-direction: column; gap: 3px; }
+        .apkg-field label { font-size: .6rem; font-weight: 700; color: #425c76; display: flex; align-items: center; gap: 4px; }
+        .apkg-field input:not([type="checkbox"]), .apkg-field select, .apkg-field textarea { width: 100%; height: 34px; border: 1px solid #e5eaf0; border-radius: 7px; padding: 0 10px; font: inherit; font-size: .68rem; color: #1a2d40; background: #fff; box-sizing: border-box; outline: none; transition: border-color .15s; }
+        .apkg-field select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b9dad' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: left 10px center; padding-left: 26px; }
         .apkg-field input:not([type="checkbox"]):focus, .apkg-field select:focus, .apkg-field textarea:focus { border-color: #0875dc; }
-        .apkg-field textarea { height: auto; padding: 10px 12px; resize: vertical; line-height: 1.5; }
-        .apkg-field .checkbox-row { display: flex; align-items: center; gap: 8px; height: 40px; }
-        .apkg-field .checkbox-row input[type="checkbox"] { width: 18px; height: 18px; }
-        .apkg-form-section { padding: 16px 0; border-top: 1px solid #e5ecf3; margin-top: 8px; }
-        .apkg-form-section h3 { font-size: .75rem; margin: 0 0 8px; color: #073766; display: flex; align-items: center; gap: 6px; }
+        .apkg-field textarea { height: auto; padding: 8px 10px; resize: vertical; line-height: 1.5; }
+        .apkg-field .checkbox-row { display: flex; align-items: center; gap: 7px; height: 34px; }
+        .apkg-field .checkbox-row input[type="checkbox"] { width: 15px; height: 15px; }
+        .apkg-form-section { padding: 10px 0; border-top: 1px solid #e5ecf3; margin-top: 6px; }
+        .apkg-form-section h3 { font-size: .68rem; margin: 0 0 7px; color: #073766; display: flex; align-items: center; gap: 6px; }
         .apkg-feature-input-row { display: flex; gap: 6px; align-items: center; }
-        .apkg-feature-input-row input { flex: 1; height: 36px; border: 1px solid #e5eaf0; border-radius: 8px; padding: 0 12px; font: inherit; font-size: .7rem; color: #344d69; background: #fafbfc; outline: none; }
+        .apkg-feature-input-row input { flex: 1; height: 32px; border: 1px solid #e5eaf0; border-radius: 7px; padding: 0 10px; font: inherit; font-size: .67rem; color: #344d69; background: #fafbfc; outline: none; }
         .apkg-feature-input-row input:focus { border-color: #0875dc; }
-        .apkg-feature-input-row button { height: 36px; padding: 0 14px; border: 1px solid #0875dc; border-radius: 8px; background: #0875dc; color: #fff; font: inherit; font-size: .62rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
-        .apkg-feature-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-        .apkg-feature-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #f8fafc; border: 1px solid #e5eaf0; border-radius: 8px; font-size: .68rem; color: #344d69; }
+        .apkg-feature-input-row button { height: 32px; padding: 0 12px; border: 1px solid #0875dc; border-radius: 7px; background: #0875dc; color: #fff; font: inherit; font-size: .6rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+        .apkg-feature-list { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+        .apkg-feature-item { display: flex; align-items: center; gap: 7px; padding: 5px 9px; background: #f8fafc; border: 1px solid #e5eaf0; border-radius: 7px; font-size: .65rem; color: #344d69; }
         .apkg-feature-item span { flex: 1; }
-        .apkg-feature-item button { width: 24px; height: 24px; border: 0; background: transparent; color: #aab5c3; cursor: pointer; display: grid; place-items: center; border-radius: 6px; transition: all .15s; flex-shrink: 0; }
+        .apkg-feature-item button { width: 22px; height: 22px; border: 0; background: transparent; color: #aab5c3; cursor: pointer; display: grid; place-items: center; border-radius: 5px; transition: all .15s; flex-shrink: 0; }
         .apkg-feature-item button:hover { background: #fef2f2; color: #dc2626; }
-        .apkg-form-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5ecf3; }
-        .apkg-form-footer button { height: 40px; padding: 0 20px; border-radius: 8px; font: inherit; font-size: .7rem; font-weight: 700; cursor: pointer; transition: all .15s; }
+        .apkg-form-footer { display: flex; gap: 7px; justify-content: flex-end; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5ecf3; }
+        .apkg-form-footer button { height: 36px; padding: 0 18px; border-radius: 8px; font: inherit; font-size: .67rem; font-weight: 700; cursor: pointer; transition: all .15s; }
         .apkg-form-footer .apkg-btn-cancel { border: 1px solid #e5eaf0; background: #fff; color: #526983; }
         .apkg-form-footer .apkg-btn-cancel:hover { background: #f8fafc; }
         .apkg-form-footer .apkg-btn-save { border: 0; background: #073766; color: #fff; display: flex; align-items: center; gap: 6px; }

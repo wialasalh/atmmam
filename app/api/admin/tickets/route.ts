@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     const serviceClient = makeServiceClient();
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
+    const clientId = searchParams.get("client_id");
 
     let query = serviceClient
       .from("tickets")
@@ -43,6 +44,7 @@ export async function GET(req: Request) {
     if (status && status !== "الكل") {
       query = query.eq("status", status);
     }
+    if (clientId) query = query.eq("client_id", clientId);
 
     const { data: tickets, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -69,9 +71,27 @@ export async function GET(req: Request) {
       }
     }
 
+    // Fetch ratings from ticket_messages
+    const ticketIds = (tickets || []).map(t => t.id);
+    let ratingMap: Record<string, number> = {};
+    if (ticketIds.length) {
+      const { data: ratingMsgs } = await serviceClient
+        .from("ticket_messages")
+        .select("ticket_id, body")
+        .in("ticket_id", ticketIds)
+        .eq("message_type", "rating");
+      for (const m of ratingMsgs || []) {
+        try {
+          const parsed = JSON.parse(m.body);
+          if (parsed.rating) ratingMap[m.ticket_id] = parsed.rating;
+        } catch {}
+      }
+    }
+
     const data = (tickets || []).map(t => ({
       ...t,
       profiles: userMap[t.user_id] || { full_name: "مستخدم", email: "" },
+      rating: ratingMap[t.id] || null,
     }));
 
     return NextResponse.json({ data });

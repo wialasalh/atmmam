@@ -57,7 +57,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const enriched = (data || []).map(m => {
-    const sender = profileMap[m.user_id] || { full_name: "مستخدم", role: "client" };
+    const sender = profileMap[m.user_id] || (m.message_type === "admin_reply" ? { full_name: "فريق الدعم", role: "operator" } : { full_name: "مستخدم", role: "client" });
     return { ...m, sender };
   });
 
@@ -105,19 +105,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const statusUpdates: Record<string, string> = { updated_at: new Date().toISOString() };
 
   if (isStaff) {
-    // Staff replied → set to "قيد المراجعة" unless it's already resolved/closed
+    // Staff replied → waiting for client now
     const { data: t } = await client
       .from("tickets")
       .select("status")
       .eq("id", id)
       .single();
 
-    if (t && !["تم الحل", "مغلقة", "قيد المراجعة"].includes(t.status)) {
-      statusUpdates.status = "قيد المراجعة";
+    if (t && !["تم الحل", "مغلقة"].includes(t.status)) {
+      statusUpdates.status = "بانتظار العميل";
     }
   } else {
-    // Client replied → set to "بانتظار العميل"
-    statusUpdates.status = "بانتظار العميل";
+    // Client replied → under review by team
+    statusUpdates.status = "قيد المراجعة";
   }
 
   await client.from("tickets").update(statusUpdates).eq("id", id);

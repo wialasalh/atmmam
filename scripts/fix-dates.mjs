@@ -18,16 +18,10 @@ const dirs = ["app", "components", "lib"].filter(d => { try { return statSync(d)
 const files = dirs.flatMap(d => walk(d));
 
 function fixCalendar(str) {
-  // Fix toLocaleDateString only (always date-related)
-  str = str.replace(
+  return str.replace(
     /(\.toLocaleDateString\("ar-SA")(\))/g,
     '$1, {calendar:"gregory"}$2'
   );
-  str = str.replace(
-    /\.toLocaleDateString\("ar-SA",\s*\{/g,
-    '.toLocaleDateString("ar-SA", {calendar:"gregory", '
-  );
-  return str;
 }
 
 let count = 0;

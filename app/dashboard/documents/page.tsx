@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileText, Upload, Download, Trash2, Loader2 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { formatAppDate } from "@/lib/date-format";
 
 const ALLOWED_TYPES = [
   "application/pdf",
@@ -22,7 +23,7 @@ const ALLOWED_EXTENSIONS = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpe
 const CATEGORIES = [
   { value: "general", label: "عام", color: "#526983" },
   { value: "contract", label: "عقود", color: "#0875dc" },
-  { value: "report", label: "تقارير", color: "#7c3aed" },
+  { value: "report", label: "تقارير", color: "#0f766e" },
   { value: "certificate", label: "شهادات", color: "#15803d" },
   { value: "legal", label: "قانوني", color: "#b45309" },
   { value: "financial", label: "مالي", color: "#d97706" },
@@ -61,27 +62,11 @@ export default function DocumentsPage() {
     setLoading(true);
     setError("");
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
-      const { data: client, error: clientErr } = await supabase.from("clients").select("id").eq("user_id", user.id).maybeSingle();
-      if (clientErr) { setError("تعذّر تحميل بيانات المنشأة"); setLoading(false); return; }
-      if (!client) { setLoading(false); return; }
-      setClientId(client.id);
-
-      const { data: records, error: docsErr } = await supabase
-        .from("client_documents")
-        .select("*")
-        .eq("client_id", client.id)
-        .order("created_at", { ascending: false });
-      if (docsErr) { setError("تعذّر تحميل المستندات"); setLoading(false); return; }
-      if (records) {
-        const withUrls = await Promise.all(records.map(async (r) => {
-          const { data } = await supabase.storage.from("client-documents").createSignedUrl(r.storage_path, 3600);
-          return { ...r, signedUrl: data?.signedUrl };
-        }));
-        setDocs(withUrls);
-      }
+      const res = await fetch("/api/client/documents");
+      if (!res.ok) { const j = await res.json().catch(()=>({})); setError(j.error || "تعذّر تحميل المستندات"); setLoading(false); return; }
+      const { data, clientId: cid } = await res.json();
+      setClientId(cid);
+      setDocs(data || []);
     } catch {
       setError("تعذّر الاتصال بالخادم");
     } finally {
@@ -92,50 +77,39 @@ export default function DocumentsPage() {
   async function handleUpload() {
     if (!fileName.trim()) { alert("الرجاء إدخال اسم للملف"); return; }
     if (!file) { alert("الرجاء اختيار ملف"); return; }
-    if (!clientId) return;
 
     setUploading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setUploading(false); return; }
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("fileName", fileName.trim());
+      form.append("category", fileCategory);
+      if (fileDesc.trim()) form.append("description", fileDesc.trim());
 
-    const ext = file.name.split(".").pop();
-    const storagePath = `${user.id}/${crypto.randomUUID()}/${file.name}`;
+      const res = await fetch("/api/client/documents", { method: "POST", body: form });
+      const json = await res.json();
+      if (!res.ok) { alert(json.error || "فشل الرفع"); setUploading(false); return; }
 
-    const { error: uploadError } = await supabase.storage.from("client-documents").upload(storagePath, file);
-    if (uploadError) { alert("فشل الرفع: " + uploadError.message); setUploading(false); return; }
-
-    const { error: insertError } = await supabase.from("client_documents").insert({
-      client_id: clientId,
-      filename: fileName.trim(),
-      original_name: file.name,
-      mime_type: file.type,
-      size_bytes: file.size,
-      storage_path: storagePath,
-      uploaded_by: user.id,
-      category: fileCategory,
-      description: fileDesc.trim() || null,
-    });
-
-    if (insertError) {
-      await supabase.storage.from("client-documents").remove([storagePath]);
-      alert("فشل الحفظ: " + insertError.message);
+      setShowUpload(false);
+      setFileName("");
+      setFileDesc("");
+      setFileCategory("general");
+      setFile(null);
       setUploading(false);
-      return;
+      load();
+    } catch {
+      alert("حدث خطأ غير متوقع");
+      setUploading(false);
     }
-
-    setShowUpload(false);
-    setFileName("");
-    setFileDesc("");
-    setFileCategory("general");
-    setFile(null);
-    setUploading(false);
-    load();
   }
 
   async function handleDelete(doc: DocRecord) {
     if (!confirm(`حذف "${doc.filename}"؟`)) return;
-    await supabase.storage.from("client-documents").remove([doc.storage_path]);
-    await supabase.from("client_documents").delete().eq("id", doc.id);
+    await fetch("/api/client/documents", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: doc.id }),
+    });
     load();
   }
 
@@ -258,7 +232,7 @@ export default function DocumentsPage() {
                   <div style={{ fontSize: ".58rem", color: "#aab5c3", marginTop: 2 }}>
                     {doc.original_name}
                     {doc.size_bytes ? ` · ${(doc.size_bytes / 1024).toFixed(0)} KB` : ""}
-                    {" · " + new Date(doc.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}
+                    {" · " + formatAppDate(doc.created_at)}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>

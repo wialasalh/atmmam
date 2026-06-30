@@ -39,7 +39,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: fullTicket, error } = await client
     .from("tickets")
-    .select("id, title, body, status, priority, category, created_at, updated_at, client_id, assigned_to, clients(id, name, phone, email, commercial_number, company_activity, city, company_status, entity_size, employee_count)")
+    .select("id, title, body, status, priority, category, type, created_at, updated_at, client_id, assigned_to, files, consultation_method, consultation_phone, consultation_scheduled_at, consultation_price, consultation_status, clients(id, name, phone, email, commercial_number, company_activity, city, company_status, entity_size, employee_count)")
     .eq("id", id)
     .single();
 
@@ -77,35 +77,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
   }
 
-  // Handle cancellation (client closing their own ticket)
-  if (body.status === "مغلقة") {
-    const updates: Record<string, unknown> = {
-      status: "مغلقة",
-      updated_at: new Date().toISOString(),
-    };
+  // Handle file attachments from client upload
+  if (body.attachments && Array.isArray(body.attachments) && body.attachments.length > 0) {
+    const { data: current } = await client.from("tickets").select("files").eq("id", id).single();
+    const existing: string[] = (current as any)?.files || [];
+    const merged = [...new Set([...existing, ...body.attachments])];
+    await client.from("tickets").update({ files: merged, updated_at: new Date().toISOString() }).eq("id", id);
+    return NextResponse.json({ data: { id, files: merged } });
+  }
 
-    const { error: closeErr } = await client.from("tickets").update(updates).eq("id", id);
+  // Handle client closing their ticket
+  if (body.status === "مغلقة من العميل" || body.status === "مغلقة") {
+    const now = new Date().toISOString();
+    const { error: closeErr } = await client.from("tickets").update({
+      status: "مغلقة من العميل",
+      archived_at: now,
+      updated_at: now,
+    }).eq("id", id);
     if (closeErr) return NextResponse.json({ error: closeErr.message }, { status: 500 });
 
-    // Log to ticket_status_history
     await client.from("ticket_status_history").insert({
       ticket_id: id,
       from_status: ticket.status,
-      to_status: "مغلقة",
+      to_status: "مغلقة من العميل",
       changed_by: user.id,
-      note: body.note || "إلغاء من قبل العميل",
+      note: body.note || "تم إغلاق المحادثة من قبل العميل",
     });
 
-    // Add closure message
     await client.from("ticket_messages").insert({
       ticket_id: id,
       user_id: user.id,
-      body: `🔒 تم إغلاق التذكرة من قبل العميل${body.note ? `: ${body.note.trim()}` : ""}`,
+      body: `🔒 تم إغلاق المحادثة من قبل العميل${body.note ? `: ${body.note.trim()}` : ""}`,
       is_internal: false,
       message_type: "status_change",
     });
 
-    return NextResponse.json({ data: { id, status: "مغلقة" } });
+    return NextResponse.json({ data: { id, status: "مغلقة من العميل" } });
   }
 
   // Build updates for editing title/body

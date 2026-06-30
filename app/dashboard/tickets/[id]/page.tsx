@@ -1,732 +1,641 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { Send, ChevronRight, Loader, CheckCircle, Clock, RefreshCw, AlertTriangle, XCircle, Shield, Paperclip, X, FileText, Download, ExternalLink, Hash, Building2, Users, FileCheck, Star } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ChevronRight, Loader, CheckCircle2, Clock, RefreshCw, AlertTriangle, XCircle, FileText, Hash, Shield, Star, CalendarClock, X, Send, MapPin, Video, Phone, PenLine, BadgeCheck, Ban } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { parseTicketDetails, getTicketRef } from "@/lib/ticket-details";
+import { formatAppDate, formatAppDateTime } from "@/lib/date-format";
 
 type TicketDetail = {
-  id: string;
-  title: string;
-  body: string;
-  category: string;
-  priority: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  files?: string[];
-  profiles?: { full_name: string; email: string };
+  id: string; title: string; body: string;
+  category: string; priority: string; status: string; type?: string;
+  created_at: string; updated_at: string; files?: string[];
+  consultation_method?: string | null;
+  consultation_phone?: string | null;
+  consultation_scheduled_at?: string | null;
+  consultation_price?: number | null;
+  consultation_status?: string | null;
 };
 
-type Message = {
-  id: string;
-  ticket_id: string;
-  user_id: string;
-  body: string;
-  created_at: string;
-  message_type?: string;
-  is_internal?: boolean;
+type Reply = {
+  id: string; user_id: string; body: string; created_at: string;
+  is_internal?: boolean; message_type?: string;
   sender?: { full_name: string; role: string; avatar_url?: string };
 };
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: "مدير النظام",
-  manager: "مدير عمليات",
-  operator: "مشرف",
-  client: "عميل",
+const STATUS_CFG: Record<string, { color: string; bg: string; border: string; icon: React.ReactNode; label: string }> = {
+  "جديدة":          { color: "#0875dc", bg: "#eaf4ff", border: "#bddcff", icon: <Clock size={11} />,         label: "جديدة" },
+  "قيد المراجعة":   { color: "#b45309", bg: "#fef9ee", border: "#fde68a", icon: <RefreshCw size={11} />,     label: "قيد المراجعة" },
+  "بانتظار العميل": { color: "#0875dc", bg: "#eaf4ff", border: "#bddcff", icon: <AlertTriangle size={11} />, label: "بانتظار توضيحك" },
+  "تم الحل":        { color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0", icon: <CheckCircle2 size={11} />,  label: "تم الحل" },
+  "مغلقة":              { color: "#6b7280", bg: "#f3f4f6", border: "#d1d5db", icon: <XCircle size={11} />,   label: "مغلقة" },
+  "مغلقة من العميل":   { color: "#6b7280", bg: "#f3f4f6", border: "#d1d5db", icon: <XCircle size={11} />,   label: "مغلقة" },
 };
 
-const STATUS_STYLE: Record<string, { color: string; bg: string; border: string; icon: React.ReactNode; label: string }> = {
-  "جديدة":          { color: "#0875dc", bg: "#eaf4ff", border: "#bddcff", icon: <Clock size={11} />, label: "جديدة" },
-  "قيد المراجعة":   { color: "#b45309", bg: "#fef9ee", border: "#fde68a", icon: <RefreshCw size={11} />, label: "قيد المراجعة" },
-  "بانتظار العميل": { color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe", icon: <AlertTriangle size={11} />, label: "بانتظار ردك" },
-  "تم الحل":        { color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0", icon: <CheckCircle size={11} />, label: "تم الحل" },
-  "مغلقة":          { color: "#6b7280", bg: "#f3f4f6", border: "#d1d5db", icon: <XCircle size={11} />, label: "مغلقة" },
+const METHOD_ICON: Record<string, React.ReactNode> = {
+  "مكالمة هاتفية": <Phone size={14} />,
+  "اتصال مرئي":    <Video size={14} />,
+  "حضوري":         <MapPin size={14} />,
+  "كتابياً":        <PenLine size={14} />,
 };
 
-const PRIORITY_STYLE: Record<string, { color: string; bg: string }> = {
-  "عاجلة":  { color: "#dc2626", bg: "#fef2f2" },
-  "مرتفعة": { color: "#ea580c", bg: "#fff7ed" },
-  "عادية":  { color: "#6b7280", bg: "#f9fafb" },
-};
-
-function formatTime(dateStr: string) {
-  return new Date(dateStr).toLocaleString("ar-SA", { hour: "2-digit", minute: "2-digit", hour12: true });
+function parseConsultationReply(body: string) {
+  const lines = body.split("\n").map(l => l.trim()).filter(Boolean);
+  const result: { status?: string; date?: string; method?: string; price?: string; link?: string; note?: string[] } = { note: [] };
+  for (const line of lines) {
+    if (line.startsWith("تم جدولة") || line.startsWith("تمت الاستشارة") || line.startsWith("تم إلغاء")) { result.status = line; }
+    else if (line.startsWith("الموعد:")) { result.date = line.replace("الموعد:", "").trim(); }
+    else if (line.startsWith("طريقة التواصل:")) { result.method = line.replace("طريقة التواصل:", "").trim(); }
+    else if (line.startsWith("رسوم الاستشارة:")) { result.price = line.replace("رسوم الاستشارة:", "").trim(); }
+    else if (line.startsWith("رابط الاجتماع:")) { result.link = line.replace("رابط الاجتماع:", "").trim(); }
+    else { result.note!.push(line); }
+  }
+  return result;
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("ar-SA", {calendar:"gregory",  year: "numeric", month: "long", day: "numeric" });
+function isConsultationReply(body: string) {
+  return body.includes("تم جدولة الاستشارة") || body.includes("تمت الاستشارة") || body.includes("تم إلغاء الاستشارة");
+}
+
+function formatDate(d: string) {
+  return formatAppDate(d);
+}
+function formatTime(d: string) {
+  return formatAppDateTime(d);
+}
+
+function AttachmentsCard({ files, ticketId }: { files: string[]; ticketId: string }) {
+  const [urls, setUrls] = useState<{ name: string; url: string }[]>([]);
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    Promise.all(files.map(async path => {
+      const name = path.split("/").pop() || path;
+      const { data } = await supabase.storage.from("ticket-attachments").createSignedUrl(path, 3600);
+      return data?.signedUrl ? { name, url: data.signedUrl } : null;
+    })).then(results => setUrls(results.filter(Boolean) as { name: string; url: string }[]));
+  }, [files]);
+  if (!urls.length) return null;
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e5eaf0", borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid #f0f4f8", display: "flex", alignItems: "center", gap: 7 }}>
+        <FileText size={13} color="#526983" />
+        <span style={{ fontSize: ".68rem", fontWeight: 700, color: "#344d69" }}>المرفقات</span>
+        <span style={{ marginRight: "auto", fontSize: ".58rem", color: "#8b9dad" }}>{urls.length} ملف</span>
+      </div>
+      <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+        {urls.map((f, i) => (
+          <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "#f8fafc", border: "1px solid #e5eaf0", borderRadius: 9, textDecoration: "none" }}>
+            <FileText size={14} color="#0875dc" style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: ".68rem", color: "#344d69", fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+            <span style={{ fontSize: ".58rem", color: "#0875dc", fontWeight: 700, flexShrink: 0 }}>فتح ↗</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function TicketDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-  const ticketId = params.id as string;
-  const [ticket, setTicket] = useState<TicketDetail | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [profile, setProfile] = useState<{ full_name: string; role: string } | null>(null);
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [ticketFiles, setTicketFiles] = useState<{ path: string; name: string; url?: string }[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editTitle, setEditTitle] = useState("");
-  const [editBody, setEditBody] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [ratings, setRatings] = useState<Record<string, { rating: number; comment: string; submitted: boolean }>>({});
-  const [submittingRating, setSubmittingRating] = useState(false);
-  const [selectedStaff, setSelectedStaff] = useState("");
-  const [localRating, setLocalRating] = useState(0);
-  const [localComment, setLocalComment] = useState("");
-  const [ratingError, setRatingError] = useState("");
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  const [cancelling, setCancelling] = useState(false);
+  const params     = useParams();
+  const router     = useRouter();
+  const searchParams = useSearchParams();
+  const ticketId   = params.id as string;
+  const isNewConsultation = searchParams.get("consultation") === "1";
 
-  // Initial load + auth
+  const [ticket,   setTicket]   = useState<TicketDetail | null>(null);
+  const [replies,  setReplies]  = useState<Reply[]>([]);
+  const [userId,   setUserId]   = useState<string | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [clarify,  setClarify]  = useState("");
+  const [sending,  setSending]  = useState(false);
+  const [showClose, setShowClose] = useState(false);
+  const [closeNote, setCloseNote] = useState("");
+  const [closing,   setClosing]  = useState(false);
+  const [localRating, setLocalRating] = useState(0);
+  const [ratingNote,  setRatingNote]  = useState("");
+  const [ratingDone,  setRatingDone]  = useState(false);
+  const [submittingRating, setSubmittingRating] = useState(false);
+
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUserId(user.id);
-        supabase.from("profiles").select("full_name, role").eq("id", user.id).single().then(({ data }) => {
-          if (data) setProfile(data);
-        });
-      }
+      if (user) setUserId(user.id);
     });
-    loadTicket();
-    loadMessages();
+    load();
   }, []);
 
-  // Poll messages every 5s
-  useEffect(() => {
-    const iv = setInterval(loadMessages, 5000);
-    return () => clearInterval(iv);
-  }, []);
-
-  // Poll ticket data every 15s
-  useEffect(() => {
-    const iv = setInterval(loadTicket, 15000);
-    return () => clearInterval(iv);
-  }, []);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  async function loadTicket() {
+  async function load() {
     try {
-      const res = await fetch(`/api/tickets/${ticketId}`);
-      if (!res.ok) {
-        if (res.status === 404) router.replace("/dashboard/tickets");
-        setLoading(false);
-        return;
-      }
-      const { data } = await res.json();
+      const [tr, mr] = await Promise.all([
+        fetch(`/api/tickets/${ticketId}`),
+        fetch(`/api/tickets/${ticketId}/messages`),
+      ]);
+      if (!tr.ok) { if (tr.status === 404) router.replace("/dashboard/tickets"); return; }
+      const { data } = await tr.json();
       setTicket(data);
-      if (data?.files?.length) {
-        const supabase = createSupabaseBrowserClient();
-        const files = await Promise.all(data.files.map(async (fp: string) => {
-          const { data: signed } = await supabase.storage.from("ticket-attachments").createSignedUrl(fp, 3600);
-          return { path: fp, name: fp.split("/").pop() || fp, url: signed?.signedUrl };
-        }));
-        setTicketFiles(files.filter((f): f is typeof f & { url: string } => !!f.url));
-      } else {
-        setTicketFiles([]);
+      if (mr.ok) {
+        const { data: msgs } = await mr.json();
+        const visible = (msgs || []).filter((m: Reply) =>
+          !m.is_internal &&
+          m.message_type !== "status_change" &&
+          m.message_type !== "revision" &&
+          m.message_type !== "rating"
+        );
+        setReplies(visible);
       }
-    } catch { /* network error — keep previous state */ }
-    setLoading(false);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function loadMessages() {
-    try {
-      const res = await fetch(`/api/tickets/${ticketId}/messages`);
-      if (res.ok) { const { data } = await res.json(); setMessages(data || []); }
-    } catch {}
-  }
-
-  async function handleSendMessage(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newMessage.trim() && pendingFiles.length === 0) return;
+  async function sendClarification() {
+    if (!clarify.trim()) return;
     setSending(true);
-    const supabase = createSupabaseBrowserClient();
-    const uploadedPaths: string[] = [];
     try {
-      // Upload pending files
-      if (pendingFiles.length) {
-        setUploading(true);
-        for (const file of pendingFiles) {
-          const ext = file.name.split(".").pop();
-          const path = `tickets/${ticketId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-          const { error: uploadErr } = await supabase.storage.from("ticket-attachments").upload(path, file);
-          if (!uploadErr) uploadedPaths.push(path);
-        }
-        setUploading(false);
-      }
-
-      // Send message
       const res = await fetch(`/api/tickets/${ticketId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, body: newMessage.trim() }),
+        body: JSON.stringify({ user_id: userId, body: clarify.trim() }),
       });
-      if (res.ok) {
-        setNewMessage("");
-        setPendingFiles([]);
-        // Add file paths to ticket
-        if (uploadedPaths.length && ticket) {
-          await supabase.from("tickets").update({ files: [...(ticket.files || []), ...uploadedPaths] }).eq("id", ticketId);
-        }
-        await loadMessages();
-        await loadTicket();
-      }
-    } catch {}
-    setSending(false);
-    setUploading(false);
+      if (res.ok) { setClarify(""); await load(); }
+    } finally { setSending(false); }
   }
 
-  if (loading) {
-    return (
-      <div className="client-dash-page">
-        <div className="client-dash-empty"><Loader size={32} className="spin" /><p>جاري التحميل...</p></div>
-      </div>
-    );
+  async function closeTicket() {
+    setClosing(true);
+    try {
+      const res = await fetch(`/api/tickets/${ticketId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "مغلقة من العميل", note: closeNote.trim() }),
+      });
+      if (res.ok) { setShowClose(false); await load(); }
+    } finally { setClosing(false); }
   }
+
+  async function submitRating() {
+    const staffReply = replies.find(r => r.sender?.role !== "client" && r.sender?.role !== "viewer");
+    if (!staffReply || !localRating) return;
+    setSubmittingRating(true);
+    try {
+      await fetch(`/api/tickets/${ticketId}/rating`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staff_id: staffReply.user_id, rating: localRating, comment: ratingNote }),
+      });
+      setRatingDone(true);
+    } finally { setSubmittingRating(false); }
+  }
+
+  if (loading) return (
+    <div style={{ display: "grid", placeItems: "center", minHeight: 300 }}>
+      <Loader size={28} color="#0875dc" style={{ animation: "spin .7s linear infinite" }} />
+    </div>
+  );
   if (!ticket) return null;
 
-  const parsed = parseTicketDetails(ticket.body);
+  const ss = STATUS_CFG[ticket.status] || STATUS_CFG["جديدة"];
   const ticketRef = getTicketRef(ticket.id);
-  const ss = STATUS_STYLE[ticket.status] || STATUS_STYLE["جديدة"];
-  const ps = PRIORITY_STYLE[ticket.priority] || PRIORITY_STYLE["عادية"];
-  const isClosed = ticket.status === "مغلقة";
+  const parsed = parseTicketDetails(ticket.body);
+  const isConsultation = ticket.type === "consultation";
+  const isClosed = ["مغلقة","مغلقة من العميل"].includes(ticket.status);
   const isResolved = ticket.status === "تم الحل";
-  const canRate = isClosed || isResolved;
-  const isWaitingClient = ticket.status === "بانتظار العميل";
+  const isWaiting = ticket.status === "بانتظار العميل";
+  const PRIORITY_MAP: Record<string,string> = { normal:"عادية", urgent:"عاجلة", high:"مرتفعة" };
+  const priority = PRIORITY_MAP[ticket.priority] ?? ticket.priority;
 
-  // Group messages by date
-  const grouped: { date: string; msgs: Message[] }[] = [];
-  messages.filter(m => !m.is_internal && (!m.message_type || (m.message_type !== "rating" && m.message_type !== "status_change"))).forEach(msg => {
-    const d = formatDate(msg.created_at);
-    const last = grouped[grouped.length - 1];
-    if (last && last.date === d) last.msgs.push(msg);
-    else grouped.push({ date: d, msgs: [msg] });
-  });
+  // Staff replies only
+  const staffReplies = replies.filter(r =>
+    r.message_type === "admin_reply" ||
+    (r.sender && !["client", "viewer"].includes(r.sender.role))
+  );
+  const clientReplies = replies.filter(r =>
+    r.message_type !== "admin_reply" &&
+    (!r.sender || r.sender.role === "client")
+  );
+  const hasStaffReplied = staffReplies.length > 0;
 
   return (
-    <div className="client-dash-page" style={{ paddingBottom: 0 }}>
+    <div style={{ direction: "rtl" }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* Back */}
-      <Link href="/dashboard/tickets" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".68rem", color: "#526983", textDecoration: "none", marginBottom: 12 }}>
-        <ChevronRight size={13} /> العودة لتذاكر الدعم
+      <Link href="/dashboard/tickets" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".65rem", color: "#8b9dad", textDecoration: "none", marginBottom: 16 }}>
+        <ChevronRight size={13} /> العودة لمركز الدعم
       </Link>
 
-      {/* Ticket header */}
-      <div style={{ background: "#fff", border: "1px solid #e5eaf0", borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
-
-        {/* Top bar: ref + status */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px 0", flexWrap: "wrap" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".75rem", fontWeight: 800, color: "#0875dc", fontFamily: "monospace", direction: "ltr" }}>
-            <Hash size={13} /> {ticketRef}
-          </span>
-          <span style={{ marginRight: "auto" }} />
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".6rem", padding: "3px 9px", borderRadius: 20, border: `1px solid ${ss.border}`, color: ss.color, background: ss.bg, fontWeight: 700 }}>
-            {ss.icon} {ss.label}
-          </span>
+      {/* New consultation banner */}
+      {isNewConsultation && !hasStaffReplied && (
+        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: "16px 18px", marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 14 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: "#15803d", display: "grid", placeItems: "center", flexShrink: 0 }}>
+            <CalendarClock size={19} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: ".78rem", fontWeight: 800, color: "#14532d", marginBottom: 4 }}>تم استلام طلب استشارتك</div>
+            <div style={{ fontSize: ".67rem", color: "#166534", lineHeight: 1.7 }}>سيتواصل معك فريق أتمم خلال ٢٤ ساعة لتأكيد الموعد والرسوم.</div>
+          </div>
         </div>
+      )}
 
-        {/* Title */}
-        <h2 style={{ margin: "8px 18px 0", fontSize: ".92rem", color: "#073766", fontWeight: 700, lineHeight: 1.4 }}>{ticket.title}</h2>
+      {/* ── Ticket Card ── */}
+      <div style={{ background: "#fff", border: "1px solid #e5eaf0", borderRadius: 16, marginBottom: 12, overflow: "hidden" }}>
+        <div style={{ height: 3, background: ss.color }} />
+        <div style={{ padding: "18px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: ".6rem", fontFamily: "monospace", color: "#8b9dad", fontWeight: 700, background: "#f5f8fc", padding: "3px 9px", borderRadius: 6, border: "1px solid #e5eaf0", display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <Hash size={10} /> {ticketRef}
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".6rem", padding: "3px 10px", borderRadius: 20, border: `1px solid ${ss.border}`, color: ss.color, background: ss.bg, fontWeight: 700 }}>
+              {ss.icon} {ss.label}
+            </span>
+            {priority !== "عادية" && (
+              <span style={{ fontSize: ".58rem", padding: "3px 9px", borderRadius: 20, color: priority === "عاجلة" ? "#dc2626" : "#ea580c", background: priority === "عاجلة" ? "#fef2f2" : "#fff7ed", fontWeight: 700 }}>
+                {priority}
+              </span>
+            )}
+            <span style={{ marginRight: "auto", fontSize: ".57rem", color: "#b0bcc9" }}>
+              {formatDate(ticket.created_at)}
+            </span>
+          </div>
 
-        {/* Meta badges */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "10px 18px 0" }}>
-          <span style={{ fontSize: ".6rem", color: "#8b9dad", background: "#f5f8fc", padding: "2px 8px", borderRadius: 10 }}>{ticket.category}</span>
-          <span style={{ fontSize: ".6rem", padding: "2px 8px", borderRadius: 10, color: ps.color, background: ps.bg, fontWeight: 700 }}>{ticket.priority}</span>
-          <span style={{ fontSize: ".58rem", color: "#aab5c3" }}>· {formatDate(ticket.created_at)}</span>
-        </div>
+          <h2 style={{ margin: "0 0 10px", fontSize: ".95rem", fontWeight: 800, color: "#073766" }}>{ticket.title}</h2>
 
-        {/* Description */}
-        <p style={{ margin: "10px 18px 0", fontSize: ".72rem", color: "#425c76", lineHeight: 1.7, background: "#f8fafc", borderRadius: 10, padding: "10px 14px", whiteSpace: "pre-wrap", borderRight: "3px solid #e5eaf0" }}>
-          {parsed.mainDescription}
-        </p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
+            <span style={{ fontSize: ".6rem", color: "#526983", background: "#f0f4f9", padding: "3px 9px", borderRadius: 7, border: "1px solid #e5eaf0", fontWeight: 600 }}>{ticket.category}</span>
+            {isConsultation && (
+              <span style={{ fontSize: ".58rem", color: "#0875dc", background: "#eaf4ff", padding: "3px 9px", borderRadius: 7, fontWeight: 700 }}>استشارة</span>
+            )}
+          </div>
 
-        {/* Last edited indicator */}
-        {new Date(ticket.updated_at).getTime() > new Date(ticket.created_at).getTime() + 60000 && (
-          <div style={{ padding: "0px 18px 10px" }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "5px 10px", fontSize: ".6rem", color: "#92400e", fontWeight: 600 }}>
-              <FileText size={12} style={{ color: "#d97706" }} />
-              آخر تعديل: {new Date(ticket.updated_at).toLocaleString("ar-SA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          {/* ── Quick Actions ── */}
+          <div style={{ paddingTop: 12, borderTop: "1px solid #f0f4f8" }}>
+            <div style={{ fontSize: ".58rem", fontWeight: 700, color: "#8b9dad", marginBottom: 8, letterSpacing: ".04em" }}>إجراءات سريعة</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {!isClosed && isConsultation && (
+                <a href="/dashboard/tickets/new?type=consultation"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#eaf4ff", color: "#0875dc", border: "1px solid #bddcff", borderRadius: 8, padding: "6px 12px", font: "inherit", fontSize: ".62rem", fontWeight: 700, cursor: "pointer", textDecoration: "none" }}>
+                  <CalendarClock size={12} /> جدولة استشارة جديدة
+                </a>
+              )}
+              {!isClosed && !isConsultation && (
+                <a href="/dashboard/tickets/new?type=consultation"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#eaf4ff", color: "#0875dc", border: "1px solid #bddcff", borderRadius: 8, padding: "6px 12px", font: "inherit", fontSize: ".62rem", fontWeight: 700, cursor: "pointer", textDecoration: "none" }}>
+                  <CalendarClock size={12} /> طلب استشارة
+                </a>
+              )}
+              {!isClosed && (
+                <button onClick={() => { setCloseNote(""); setShowClose(true); }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 8, padding: "6px 12px", font: "inherit", fontSize: ".62rem", fontWeight: 700, cursor: "pointer" }}>
+                  <XCircle size={12} /> {isConsultation ? "إلغاء الاستشارة" : "إغلاق التذكرة"}
+                </button>
+              )}
             </div>
           </div>
-        )}
+        </div>
+      </div>
 
-        {/* Extra fields */}
-        {parsed.extraFields.length > 0 && (
-          <div style={{ padding: "12px 18px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: ".62rem", fontWeight: 700, color: "#073766", display: "flex", alignItems: "center", gap: 5 }}>
-              <FileCheck size={13} /> تفاصيل الطلب
+      {/* ── Request Details ── */}
+      {isConsultation ? (
+        <div style={{ background: "#fff", border: "1px solid #bddcff", borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
+          {/* Header */}
+          <div style={{ background: "linear-gradient(135deg,#eaf4ff,#e8f1fb)", padding: "12px 18px", borderBottom: "1px solid #bddcff", display: "flex", alignItems: "center", gap: 8 }}>
+            <CalendarClock size={15} color="#0875dc" />
+            <span style={{ fontSize: ".72rem", fontWeight: 800, color: "#073766" }}>تفاصيل طلب الاستشارة</span>
+          </div>
+          <div style={{ padding: "16px 18px", display: "grid", gap: 12 }}>
+            {/* Description — strip the preferred time line */}
+            {(parsed.mainDescription || ticket.body) && (
+              <div style={{ background: "#f0f6ff", borderRadius: 10, padding: "12px 14px", borderRight: "3px solid #0875dc" }}>
+                <div style={{ fontSize: ".57rem", color: "#0875dc", fontWeight: 700, marginBottom: 5 }}>موضوع الاستشارة</div>
+                <p style={{ margin: 0, fontSize: ".73rem", color: "#344d69", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
+                  {(parsed.mainDescription || ticket.body).replace(/\n?الوقت المفضل للاستشارة:[^\n]*/g, "").trim()}
+                </p>
+              </div>
+            )}
+            {/* Info grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {ticket.consultation_method && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#f5f8fc", borderRadius: 10, padding: "10px 12px", border: "1px solid #e5eaf0" }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: "#e8f1fb", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                    {METHOD_ICON[{ phone: "مكالمة هاتفية", zoom: "اتصال مرئي", in_person: "حضوري", written: "كتابياً" }[ticket.consultation_method] || ""] || <Phone size={14} color="#0875dc" />}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: ".55rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>طريقة التواصل</div>
+                    <div style={{ fontSize: ".7rem", fontWeight: 700, color: "#073766" }}>
+                      {{ phone: "مكالمة هاتفية", zoom: "اتصال مرئي", in_person: "حضوري", written: "كتابياً" }[ticket.consultation_method] || ticket.consultation_method}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {ticket.consultation_phone && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#f5f8fc", borderRadius: 10, padding: "10px 12px", border: "1px solid #e5eaf0" }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: "#e8f1fb", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                    <Phone size={14} color="#0875dc" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: ".55rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>رقم الجوال</div>
+                    <div style={{ fontSize: ".7rem", fontWeight: 700, color: "#073766", direction: "ltr", textAlign: "right" }}>{ticket.consultation_phone}</div>
+                  </div>
+                </div>
+              )}
+              {(() => {
+                const match = ticket.body?.match(/الوقت المفضل للاستشارة:\s*([^\n·]+)(?:\s*·\s*([^\n]+))?/);
+                if (!match) return null;
+                const date = match[1]?.trim() || "";
+                const time = match[2]?.trim() || "";
+                return (
+                  <>
+                    {date && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#f5f8fc", borderRadius: 10, padding: "10px 12px", border: "1px solid #e5eaf0" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: "#fef9ee", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                          <CalendarClock size={14} color="#b45309" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: ".55rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>التاريخ المفضل</div>
+                          <div style={{ fontSize: ".7rem", fontWeight: 700, color: "#92400e" }}>{date}</div>
+                        </div>
+                      </div>
+                    )}
+                    {time && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#f5f8fc", borderRadius: 10, padding: "10px 12px", border: "1px solid #e5eaf0" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: "#fef9ee", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                          <Clock size={14} color="#b45309" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: ".55rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>الوقت المفضل</div>
+                          <div style={{ fontSize: ".7rem", fontWeight: 700, color: "#92400e" }}>{time}</div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+            {/* Other extra fields */}
+            {parsed.extraFields.filter(f => !f.label.includes("الوقت المفضل")).length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))", gap: 8 }}>
+                {parsed.extraFields.filter(f => !f.label.includes("الوقت المفضل")).map((f, i) => (
+                  <div key={i} style={{ background: "#f7f9fc", borderRadius: 8, padding: "8px 10px", border: "1px solid #e5eaf0" }}>
+                    <div style={{ fontSize: ".54rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>{f.label}</div>
+                    <div style={{ fontSize: ".68rem", color: "#1e3a56", fontWeight: 700 }}>{f.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: "#fff", border: "1px solid #e5eaf0", borderRadius: 14, marginBottom: 12, padding: "16px 18px" }}>
+          <div style={{ fontSize: ".62rem", fontWeight: 700, color: "#48617b", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+            <FileText size={13} /> تفاصيل الطلب
+          </div>
+          <p style={{ margin: 0, fontSize: ".73rem", color: "#344d69", lineHeight: 1.8, whiteSpace: "pre-wrap", borderRight: "3px solid #e5eaf0", paddingRight: 12 }}>
+            {parsed.mainDescription || ticket.body}
+          </p>
+          {parsed.extraFields.length > 0 && (
+            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px,1fr))", gap: 8 }}>
               {parsed.extraFields.map((f, i) => (
-                <div key={i} style={{ background: "#f5f8fc", borderRadius: 8, padding: "8px 10px", border: "1px solid #e5eaf0" }}>
-                  <div style={{ fontSize: ".55rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>{f.label}</div>
+                <div key={i} style={{ background: "#f7f9fc", borderRadius: 8, padding: "8px 10px", border: "1px solid #e5eaf0" }}>
+                  <div style={{ fontSize: ".54rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>{f.label}</div>
                   <div style={{ fontSize: ".68rem", color: "#1e3a56", fontWeight: 700 }}>{f.value}</div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Action buttons */}
-        {!isClosed && (
-          <div style={{ padding: "0px 18px 14px", display: "flex", gap: 8 }}>
-            <button onClick={() => { setEditTitle(ticket.title); setEditBody(ticket.body || ""); setShowEditModal(true); }} className="client-dash-secondary-btn" style={{ fontSize: ".62rem", padding: "6px 12px" }}>
-              <FileText size={13} /> تعديل التذكرة
-            </button>
-            <button onClick={() => { setCancelReason(""); setShowCancelModal(true); }} className="client-dash-secondary-btn" style={{ fontSize: ".62rem", padding: "6px 12px", color: "#dc2626", borderColor: "#fecaca" }}>
-              <XCircle size={13} /> إلغاء التذكرة
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Waiting notice */}
-      {isWaitingClient && (
-        <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 10, padding: "10px 14px", marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
-          <AlertTriangle size={15} color="#7c3aed" />
-          <p style={{ margin: 0, fontSize: ".68rem", color: "#5b21b6", fontWeight: 600 }}>
-            فريق الدعم بانتظار ردك على التذكرة.
-          </p>
+          )}
         </div>
       )}
 
-      {/* Chat area */}
-      <div style={{ background: "#fff", border: "1px solid #e5eaf0", borderRadius: 14, overflow: "hidden", marginBottom: 12 }}>
-
-        <div style={{ padding: "12px 18px", borderBottom: "1px solid #f0f3f8", display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: isClosed ? "#6b7280" : "#22c55e" }} />
-          <h3 style={{ margin: 0, fontSize: ".75rem", color: "#073766" }}>المحادثة</h3>
-          <span style={{ marginRight: "auto", fontSize: ".6rem", color: "#8b9dad", display: "flex", alignItems: "center", gap: 6 }}>
-            <span className="live-pulse" style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "#22c55e" }} />
-            مباشر
-            <span style={{ marginRight: 4 }}>{messages.length} رسالة</span>
-          </span>
-        </div>
-
-        {/* Messages */}
-        <div style={{ minHeight: 200, maxHeight: 420, overflowY: "auto", padding: "16px 18px", display: "flex", flexDirection: "column", gap: 4 }}>
-
-          {messages.length === 0 && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "30px 20px", color: "#8b9dad", gap: 8 }}>
-              <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#f0f8ff", display: "grid", placeItems: "center" }}>
-                <Send size={20} color="#0875dc" />
-              </div>
-              <p style={{ margin: 0, fontSize: ".72rem" }}>لا توجد رسائل بعد. ابدأ المحادثة!</p>
+      {/* ── Waiting notice → clarification box ── */}
+      {isWaiting && !isClosed && (
+        <div style={{ background: "#fff", border: "1.5px solid #bae6fd", borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
+          <div style={{ background: "#eaf4ff", padding: "12px 18px", display: "flex", alignItems: "center", gap: 10 }}>
+            <AlertTriangle size={16} color="#0875dc" />
+            <div>
+              <div style={{ fontSize: ".72rem", fontWeight: 800, color: "#073766" }}>الفريق يطلب توضيحاً</div>
+              <div style={{ fontSize: ".62rem", color: "#073766", marginTop: 2 }}>يرجى الرد على آخر رسالة من الفريق أدناه</div>
             </div>
-          )}
+          </div>
+          <div style={{ padding: "14px 18px" }}>
+            <textarea value={clarify} onChange={e => setClarify(e.target.value)} rows={3} placeholder="اكتب ردك هنا..."
+              style={{ width: "100%", border: "1px solid #e5eaf0", borderRadius: 10, padding: "10px 12px", font: "inherit", fontSize: ".72rem", color: "#344d69", resize: "vertical", boxSizing: "border-box", lineHeight: 1.6, outline: "none" }}
+              onFocus={e => e.target.style.borderColor = "#0f766e"}
+              onBlur={e => e.target.style.borderColor = "#e5eaf0"}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <button onClick={sendClarification} disabled={!clarify.trim() || sending}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: clarify.trim() ? "#0f766e" : "#e5eaf0", color: clarify.trim() ? "#fff" : "#8b9dad", border: 0, borderRadius: 8, padding: "8px 18px", font: "inherit", fontSize: ".65rem", fontWeight: 700, cursor: clarify.trim() ? "pointer" : "not-allowed", transition: "all .15s" }}>
+                {sending ? <Loader size={13} style={{ animation: "spin .7s linear infinite" }} /> : <Send size={13} />}
+                {sending ? "جاري الإرسال..." : "إرسال الرد"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-          {grouped.map(group => (
-            <div key={group.date}>
-              <div style={{ textAlign: "center", margin: "12px 0" }}>
-                <span style={{ fontSize: ".58rem", color: "#aab5c3", background: "#f5f8fc", padding: "3px 10px", borderRadius: 10 }}>{group.date}</span>
-              </div>
-              {group.msgs.map(msg => {
-                const isMe = msg.user_id === userId;
-                const isSupport = !isMe;
-                const senderRole = msg.sender?.role || "client";
-                const roleLabel = ROLE_LABELS[senderRole] || senderRole;
-                return (
-                  <div key={msg.id} style={{ display: "flex", flexDirection: isMe ? "row" : "row-reverse", gap: 8, marginBottom: 10, alignItems: "flex-end" }}>
+      {/* ── Attachments ── */}
+      {ticket.files && ticket.files.length > 0 && (
+        <AttachmentsCard files={ticket.files} ticketId={ticket.id} />
+      )}
 
-                    {/* Avatar */}
-                    <div style={{
-                      width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
-                      background: isSupport ? "#e8f1fb" : "#f0fdf4",
-                      color: isSupport ? "#1758a6" : "#15803d",
-                      display: "grid", placeItems: "center", fontSize: ".6rem", fontWeight: 800, overflow: "hidden",
-                    }}>
-                      {isSupport ? (
-                        msg.sender?.avatar_url ? (
-                          <img src={msg.sender.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        ) : (
-                          <Shield size={14} />
-                        )
-                      ) : (profile?.full_name?.[0] || "أ")}
-                    </div>
-
-                    {/* Bubble */}
-                    <div style={{ maxWidth: "72%", display: "flex", flexDirection: "column", gap: 3, alignItems: isMe ? "flex-start" : "flex-end" }}>
-                      <span style={{ fontSize: ".58rem", color: "#aab5c3", paddingInline: 4 }}>
-                        {isSupport ? (msg.sender?.full_name || "فريق الدعم") : "أنت"}
-                        <span style={{ fontSize: ".55rem", opacity: 0.7 }}> · {roleLabel}</span>
-                        <span> · {formatTime(msg.created_at)}</span>
-                      </span>
-                      <div style={{
-                        background: isMe ? "#0875dc" : "#f5f8fc",
-                        color: isMe ? "#fff" : "#344d69",
-                        borderRadius: isMe ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
-                        padding: "10px 14px",
-                        fontSize: ".72rem",
-                        lineHeight: 1.6,
-                        border: isMe ? "none" : "1px solid #e5eaf0",
-                        whiteSpace: "pre-wrap",
-                      }}>
-                        {msg.body}
-                      </div>
-                      {/* Attachments for this message */}
-                      {ticketFiles.length > 0 && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
-                          {ticketFiles.map((f, i) => (
-                            <a key={i} href={f.url} target="_blank" rel="noopener" style={{
-                              display: "inline-flex", alignItems: "center", gap: 4,
-                              fontSize: ".6rem", color: isMe ? "#93c5fd" : "#0875dc",
-                              textDecoration: "none", padding: "2px 6px",
-                              background: isMe ? "rgba(255,255,255,.1)" : "#eaf4ff",
-                              borderRadius: 6,
-                            }}>
-                              <Download size={10} /> {f.name}
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+      {/* ── Staff replies ── */}
+      {hasStaffReplied ? (
+        <div style={{ background: "#fff", border: "1px solid #e5eaf0", borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
+          <div style={{ padding: "12px 18px", borderBottom: "1px solid #f0f4f8", display: "flex", alignItems: "center", gap: 8 }}>
+            <Shield size={14} color="#0875dc" />
+            <span style={{ fontSize: ".72rem", fontWeight: 700, color: "#073766" }}>ردود الفريق</span>
+            <span style={{ marginRight: "auto", fontSize: ".6rem", color: "#8b9dad" }}>{staffReplies.length} رد</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {staffReplies.map((r, i) => (
+              <div key={r.id} style={{ padding: "16px 18px", borderBottom: i < staffReplies.length - 1 ? "1px solid #f5f8fc" : "none" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#e8f1fb", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                    {r.sender?.avatar_url
+                      ? <img src={r.sender.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                      : <Shield size={14} color="#1758a6" />
+                    }
                   </div>
-                );
-              })}
+                  <div>
+                    <div style={{ fontSize: ".68rem", fontWeight: 700, color: "#073766" }}>{r.sender?.full_name || "فريق الدعم"}</div>
+                    <div style={{ fontSize: ".58rem", color: "#a0aec0" }}>{formatTime(r.created_at)}</div>
+                  </div>
+                </div>
+                {isConsultationReply(r.body) ? (() => {
+                  const c = parseConsultationReply(r.body);
+                  const isCancelled = c.status?.includes("إلغاء");
+                  const isDone = c.status?.includes("تمت");
+                  const accent = isCancelled ? "#dc2626" : isDone ? "#15803d" : "#0875dc";
+                  const accentBg = isCancelled ? "#fef2f2" : isDone ? "#f0fdf4" : "#eaf4ff";
+                  const accentBorder = isCancelled ? "#fecaca" : isDone ? "#bbf7d0" : "#bddcff";
+                  return (
+                    <div style={{ border: `1.5px solid ${accentBorder}`, borderRadius: 12, overflow: "hidden" }}>
+                      {/* Status banner */}
+                      <div style={{ background: accentBg, padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, borderBottom: `1px solid ${accentBorder}` }}>
+                        {isCancelled ? <Ban size={16} color={accent} /> : <BadgeCheck size={16} color={accent} />}
+                        <span style={{ fontSize: ".75rem", fontWeight: 800, color: accent }}>{c.status?.replace(" ✅","").replace(" ❌","")}</span>
+                      </div>
+                      {/* Details grid */}
+                      <div style={{ padding: "14px 16px", background: "#fff", display: "grid", gap: 10 }}>
+                        {c.date && (
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 8, background: accentBg, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                              <CalendarClock size={14} color={accent} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: ".57rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>موعد الاستشارة</div>
+                              <div style={{ fontSize: ".75rem", fontWeight: 800, color: "#073766" }}>{c.date}</div>
+                            </div>
+                          </div>
+                        )}
+                        {c.method && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 8, background: "#f5f8fc", display: "grid", placeItems: "center", flexShrink: 0, color: "#526983" }}>
+                              {METHOD_ICON[c.method] || <Phone size={14} />}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: ".57rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>طريقة التواصل</div>
+                              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "#344d69" }}>{c.method}</div>
+                            </div>
+                          </div>
+                        )}
+                        {c.price && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 8, background: "#f0fdf4", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                              <span style={{ fontSize: ".6rem", fontWeight: 800, color: "#15803d" }}>ر.س</span>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: ".57rem", color: "#8b9dad", fontWeight: 600, marginBottom: 2 }}>رسوم الاستشارة</div>
+                              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "#15803d" }}>{c.price}</div>
+                            </div>
+                          </div>
+                        )}
+                        {c.link && (
+                          <a href={c.link} target="_blank" rel="noopener noreferrer"
+                            style={{ display: "flex", alignItems: "center", gap: 8, background: "#eaf4ff", border: "1px solid #bddcff", borderRadius: 8, padding: "8px 12px", textDecoration: "none" }}>
+                            <Video size={14} color="#0875dc" />
+                            <span style={{ fontSize: ".68rem", fontWeight: 700, color: "#0875dc" }}>انضم للاجتماع</span>
+                          </a>
+                        )}
+                        {c.note && c.note.length > 0 && (
+                          <div style={{ background: "#f8fafc", borderRadius: 8, padding: "10px 12px", fontSize: ".7rem", color: "#526983", lineHeight: 1.7 }}>
+                            {c.note.join("\n")}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })() : (
+                <div style={{ fontSize: ".73rem", color: "#344d69", lineHeight: 1.8, whiteSpace: "pre-wrap", background: "#f8fafc", borderRadius: 10, padding: "12px 14px", border: "1px solid #f0f3f8" }}>
+                  {r.body}
+                </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {/* Client replies after staff */}
+          {clientReplies.filter(r => r.user_id === userId).map(r => (
+            <div key={r.id} style={{ padding: "14px 18px", borderTop: "1px solid #f5f8fc", background: "#fafbfc" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <div style={{ fontSize: ".65rem", fontWeight: 700, color: "#526983" }}>ردك</div>
+                <div style={{ fontSize: ".58rem", color: "#a0aec0" }}>{formatTime(r.created_at)}</div>
+              </div>
+              <div style={{ fontSize: ".72rem", color: "#344d69", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{r.body}</div>
             </div>
           ))}
-          <div ref={messagesEndRef} />
         </div>
+      ) : !isClosed && !isWaiting ? (
+        <div style={{ background: "#f8fafc", border: "1px dashed #d1dde8", borderRadius: 14, padding: "28px 20px", textAlign: "center", marginBottom: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: "#eaf4ff", display: "grid", placeItems: "center", margin: "0 auto 12px" }}>
+            <Clock size={22} color="#0875dc" />
+          </div>
+          <div style={{ fontSize: ".72rem", fontWeight: 700, color: "#344d69", marginBottom: 4 }}>في انتظار رد الفريق</div>
+          <div style={{ fontSize: ".63rem", color: "#8b9dad" }}>سيرد عليك الفريق المختص خلال ٢٤ ساعة عمل</div>
+        </div>
+      ) : null}
 
-        {/* Input */}
-        {!isClosed ? (
-          <form onSubmit={handleSendMessage} style={{ padding: "12px 16px", borderTop: "1px solid #f0f3f8", background: "#fafbfc" }}>
-            {/* Pending file badges */}
-            {pendingFiles.length > 0 && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                {pendingFiles.map((f, i) => (
-                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".6rem", background: "#eaf4ff", color: "#0875dc", borderRadius: 6, padding: "3px 8px", border: "1px solid #bddcff" }}>
-                    <FileText size={11} />
-                    {f.name}
-                    <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} style={{ border: 0, background: "transparent", color: "#0875dc", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}>
-                      <X size={11} />
-                    </button>
-                  </span>
-                ))}
+      {/* ── Rating ── */}
+      {(isClosed || isResolved) && hasStaffReplied && !ratingDone && (
+        <div style={{ background: "linear-gradient(135deg,#fffbeb 0%,#fff 100%)", border: "1.5px solid #fde68a", borderRadius: 16, marginBottom: 12, overflow: "hidden" }}>
+          <div style={{ padding: "16px 18px 14px", textAlign: "center" }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: "#fef3c7", display: "grid", placeItems: "center", margin: "0 auto 12px" }}>
+              <Star size={22} color="#f59e0b" fill="#f59e0b" />
+            </div>
+            <div style={{ fontSize: ".82rem", fontWeight: 800, color: "#073766", marginBottom: 4 }}>كيف كانت تجربتك؟</div>
+            <div style={{ fontSize: ".65rem", color: "#7c8b9b", marginBottom: 18 }}>تقييمك يساعدنا على تحسين خدمتنا</div>
+            {/* Stars */}
+            <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 16 }}>
+              {[1,2,3,4,5].map(s => (
+                <button key={s} onClick={() => setLocalRating(s)}
+                  style={{ border: 0, background: "transparent", cursor: "pointer", padding: 2, transition: "transform .1s" }}
+                  onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"}
+                  onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                  <Star size={32} fill={localRating >= s ? "#f59e0b" : "#f1f5f9"} color={localRating >= s ? "#f59e0b" : "#cbd5e1"} style={{ transition: "all .15s" }} />
+                </button>
+              ))}
+            </div>
+            {/* Label */}
+            {localRating > 0 && (
+              <div style={{ fontSize: ".68rem", fontWeight: 700, color: "#f59e0b", marginBottom: 14 }}>
+                {["", "سيء جداً 😞", "سيء 😕", "مقبول 😐", "جيد 😊", "ممتاز! 🌟"][localRating]}
               </div>
             )}
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-              <div style={{ flex: 1, position: "relative" }}>
-                <textarea
-                  ref={inputRef}
-                  value={newMessage}
-                  onChange={e => setNewMessage(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
-                  placeholder="اكتب ردك هنا... (Enter للإرسال)"
-                  rows={2}
-                  style={{
-                    width: "100%", border: "1px solid #e5eaf0", borderRadius: 10, padding: "10px 14px",
-                    font: "inherit", fontSize: ".72rem", color: "#344d69", resize: "none",
-                    background: "#fff", lineHeight: 1.5, outline: "none", boxSizing: "border-box",
-                  }}
-                  onFocus={e => e.target.style.borderColor = "#0875dc"}
-                  onBlur={e => e.target.style.borderColor = "#e5eaf0"}
-                />
-              </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,.pdf,.doc,.docx,.xlsx,.zip"
-                  style={{ display: "none" }}
-                  onChange={e => {
-                    if (e.target.files?.length) setPendingFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-                    e.target.value = "";
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  style={{
-                    width: 36, height: 36, borderRadius: 8, border: "1px solid #e5eaf0",
-                    background: "#f5f8fc", color: "#526983", cursor: "pointer",
-                    display: "grid", placeItems: "center", flexShrink: 0,
-                  }}
-                >
-                  <Paperclip size={15} />
-                </button>
-                <button
-                  type="submit"
-                  disabled={(!newMessage.trim() && pendingFiles.length === 0) || sending || uploading}
-                  style={{
-                    width: 42, height: 42, borderRadius: 10, border: 0,
-                    background: (!newMessage.trim() && pendingFiles.length === 0) || sending || uploading ? "#e5eaf0" : "#0875dc",
-                    color: (!newMessage.trim() && pendingFiles.length === 0) || sending || uploading ? "#8b9dad" : "#fff",
-                    cursor: (!newMessage.trim() && pendingFiles.length === 0) || sending || uploading ? "not-allowed" : "pointer",
-                    display: "grid", placeItems: "center", flexShrink: 0, transition: "all .15s",
-                  }}
-                >
-                  {uploading ? <Loader size={16} className="spin" /> : sending ? <Loader size={16} className="spin" /> : <Send size={16} />}
-                </button>
-              </div>
-            </div>
-          </form>
-        ) : (
-          <div style={{ padding: "14px 18px", textAlign: "center", color: "#8b9dad", fontSize: ".68rem", background: "#f8fafc", borderTop: "1px solid #f0f3f8" }}>
-            <XCircle size={14} style={{ verticalAlign: "middle", marginLeft: 4 }} />
-            هذه التذكرة مغلقة ولا يمكن إضافة ردود جديدة.
+            {/* Comment */}
+            <textarea value={ratingNote} onChange={e => setRatingNote(e.target.value)} rows={2}
+              placeholder="أضف تعليقاً (اختياري)..."
+              style={{ width: "100%", border: "1.5px solid #e5eaf0", borderRadius: 10, padding: "10px 12px", font: "inherit", fontSize: ".68rem", color: "#344d69", resize: "none", boxSizing: "border-box", outline: "none", marginBottom: 14, background: "#fff", transition: "border-color .15s" }}
+              onFocus={e => e.target.style.borderColor = "#f59e0b"}
+              onBlur={e => e.target.style.borderColor = "#e5eaf0"} />
+            <button onClick={submitRating} disabled={!localRating || submittingRating}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, background: localRating ? "#f59e0b" : "#e5eaf0", color: localRating ? "#fff" : "#8b9dad", border: 0, borderRadius: 10, padding: "10px 28px", font: "inherit", fontSize: ".7rem", fontWeight: 700, cursor: localRating ? "pointer" : "not-allowed", transition: "all .15s" }}>
+              {submittingRating ? <Loader size={13} style={{ animation: "spin .7s linear infinite" }} /> : <Star size={13} fill="currentColor" />}
+              إرسال التقييم
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+      {ratingDone && (
+        <div style={{ background: "linear-gradient(135deg,#f0fdf4 0%,#fff 100%)", border: "1.5px solid #bbf7d0", borderRadius: 16, padding: "24px 18px", marginBottom: 12, textAlign: "center" }}>
+          <div style={{ fontSize: "2rem", marginBottom: 8 }}>🌟</div>
+          <div style={{ fontSize: ".82rem", fontWeight: 800, color: "#073766", marginBottom: 4 }}>شكراً على تقييمك!</div>
+          <div style={{ fontSize: ".65rem", color: "#526983" }}>رأيك يساعدنا على تحسين تجربتك دائماً</div>
+        </div>
+      )}
 
-      {/* Rating section */}
-      {canRate && (() => {
-        const staffMap = new Map<string, { id: string; name: string }>();
-        messages.forEach(msg => {
-          if (msg.sender && msg.sender.role !== "client" && msg.sender.role !== "viewer") {
-            if (!staffMap.has(msg.user_id)) {
-              staffMap.set(msg.user_id, { id: msg.user_id, name: msg.sender.full_name || "موظف" });
-            }
-          }
-        });
-        const staffList = Array.from(staffMap.values());
-
-        if (staffList.length === 0) return null;
-
-        const alreadyRatedStaff = staffList.filter(s => ratings[s.id]?.submitted);
-        const pendingStaff = staffList.filter(s => !ratings[s.id]?.submitted);
-        const currentSel = selectedStaff && pendingStaff.find(s => s.id === selectedStaff) ? selectedStaff : pendingStaff[0]?.id || "";
-
-        return (
-          <div style={{ background: "#fff", border: "1px solid #e5eaf0", borderRadius: 14, overflow: "hidden", marginBottom: 12 }}>
-            <div style={{ padding: "12px 18px", borderBottom: "1px solid #f0f3f8", display: "flex", alignItems: "center", gap: 8 }}>
-              <Star size={14} color="#f59e0b" />
-              <h3 style={{ margin: 0, fontSize: ".75rem", color: "#073766" }}>تقييم الخدمة</h3>
-              {pendingStaff.length === 0 && <span style={{ marginRight: "auto", fontSize: ".6rem", color: "#15803d", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3 }}><CheckCircle size={12} /> تم تقييم الجميع</span>}
+      {/* Close modal */}
+      {showClose && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 999, display: "grid", placeItems: "center", padding: 20 }} onClick={() => setShowClose(false)}>
+          <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 440, overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #f0f3f8" }}>
+              <span style={{ fontSize: ".82rem", fontWeight: 800, color: "#dc2626" }}>
+                {isConsultation ? "إلغاء الاستشارة" : "إغلاق التذكرة"}
+              </span>
+              <button onClick={() => setShowClose(false)} style={{ border: 0, background: "#f5f8fc", borderRadius: 8, width: 30, height: 30, cursor: "pointer", display: "grid", placeItems: "center" }}><X size={14} /></button>
             </div>
-            <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
-
-              {/* Already rated summary */}
-              {alreadyRatedStaff.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {alreadyRatedStaff.map(s => {
-                    const r = ratings[s.id];
-                    return (
-                      <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: ".58rem", background: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 8, padding: "4px 8px", fontWeight: 600 }}>
-                        <Star size={14} strokeWidth={1.5} fill="#f59e0b" color="#f59e0b" />
-                        {s.name} ({r.rating}/5)
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Pending rating */}
-              {pendingStaff.length > 0 && (
-                <>
-                  {/* Select staff */}
-                  <div>
-                    <label style={{ fontSize: ".6rem", fontWeight: 700, color: "#526983", display: "block", marginBottom: 4 }}>اختر الموظف:</label>
-                    <select
-                      value={currentSel}
-                      onChange={e => { setSelectedStaff(e.target.value); setLocalRating(0); setLocalComment(""); }}
-                      style={{ width: "100%", border: "1px solid #e5eaf0", borderRadius: 8, padding: "7px 10px", font: "inherit", fontSize: ".68rem", color: "#344d69", background: "#f8fafc", outline: "none" }}
-                    >
-                      {pendingStaff.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Stars */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ fontSize: ".6rem", color: "#7a8fa6", marginLeft: 8 }}>التقييم:</span>
-                    {[1,2,3,4,5].map(s => (
-                      <button key={s} onClick={() => setLocalRating(s)} style={{ border: 0, background: "transparent", cursor: "pointer", padding: 2, display: "grid", placeItems: "center" }}>
-                        <Star size={22} fill={localRating >= s ? "#f59e0b" : "#e5eaf0"} color={localRating >= s ? "#f59e0b" : "#e5eaf0"} />
-                      </button>
-                    ))}
-                    {localRating > 0 && <span style={{ fontSize: ".6rem", color: "#7a8fa6", marginRight: 4, fontWeight: 700 }}>{localRating}/5</span>}
-                  </div>
-
-                  {/* Comment */}
-                  <textarea
-                    value={localComment}
-                    onChange={e => setLocalComment(e.target.value)}
-                    placeholder="أكتب تعليقك (اختياري)..."
-                    rows={2}
-                    style={{ width: "100%", border: "1px solid #e5eaf0", borderRadius: 8, padding: "7px 10px", font: "inherit", fontSize: ".65rem", color: "#344d69", resize: "vertical", boxSizing: "border-box", lineHeight: 1.5, outline: "none" }}
-                  />
-
-                  {/* Submit */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {ratingError && (
-                      <div style={{ fontSize: ".6rem", color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "6px 10px", fontWeight: 600 }}>
-                        {ratingError}
-                      </div>
-                    )}
-                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                      <button
-                        disabled={!localRating || submittingRating || !currentSel}
-                        onClick={async () => {
-                          setRatingError("");
-                          if (!currentSel) { setRatingError("الرجاء اختيار الموظف"); return; }
-                          setSubmittingRating(true);
-                          try {
-                            const res = await fetch(`/api/tickets/${ticketId}/rating`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ staff_id: currentSel, rating: localRating, comment: localComment || "" }),
-                            });
-                            const json = await res.json().catch(() => ({}));
-                            if (res.ok) {
-                              setRatings(prev => ({ ...prev, [currentSel]: { rating: localRating, comment: localComment, submitted: true } }));
-                              setLocalRating(0);
-                              setLocalComment("");
-                              setRatingError("");
-                              loadMessages();
-                              const next = pendingStaff.find(s => s.id !== currentSel);
-                              if (next) setSelectedStaff(next.id);
-                            } else {
-                              setRatingError(json?.error || "فشل إرسال التقييم، حاول مرة أخرى");
-                            }
-                          } catch (e) {
-                            setRatingError("حدث خطأ في الاتصال، حاول مرة أخرى");
-                          }
-                          setSubmittingRating(false);
-                        }}
-                        style={{
-                          display: "inline-flex", alignItems: "center", gap: 5,
-                          border: 0, background: !localRating || submittingRating || !currentSel ? "#e5eaf0" : "#f59e0b",
-                          color: !localRating || submittingRating || !currentSel ? "#8b9dad" : "#fff",
-                          borderRadius: 8, padding: "7px 16px", font: "inherit", fontSize: ".65rem", fontWeight: 700, cursor: !localRating || !currentSel ? "not-allowed" : "pointer", transition: "all .15s",
-                        }}
-                      >
-                        {submittingRating ? <Loader size={12} className="spin" /> : <Star size={12} fill="#fff" />}
-                        {submittingRating ? "جاري الإرسال..." : "إرسال التقييم"}
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
+            <div style={{ padding: "16px 18px" }}>
+              <p style={{ fontSize: ".7rem", color: "#526983", margin: "0 0 12px", lineHeight: 1.7 }}>
+                {isConsultation
+                  ? "سيتم إلغاء طلب الاستشارة ولن تتمكن من استعادتها."
+                  : "سيتم إغلاق التذكرة نهائياً وحذفها خلال 24 ساعة."}
+              </p>
+              <label style={{ fontSize: ".62rem", fontWeight: 700, color: "#344d69", display: "block", marginBottom: 4 }}>السبب (اختياري)</label>
+              <textarea value={closeNote} onChange={e => setCloseNote(e.target.value)} rows={3}
+                placeholder="مثال: تم حل الموضوع..."
+                style={{ width: "100%", border: "1px solid #e5eaf0", borderRadius: 8, padding: "8px 10px", font: "inherit", fontSize: ".7rem", color: "#344d69", resize: "vertical", boxSizing: "border-box", outline: "none" }} />
             </div>
-          </div>
-        );
-      })()}
-
-      {/* Edit modal */}
-      {showEditModal && (
-        <div className="dash-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="dash-modal" onClick={e => e.stopPropagation()}>
-            <div className="dash-modal-header">
-              <h3>تعديل التذكرة</h3>
-              <button className="dash-modal-close" onClick={() => setShowEditModal(false)}><X size={16} /></button>
-            </div>
-            <div className="dash-modal-body">
-              <label className="dash-label">العنوان</label>
-              <input className="dash-input" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
-              <label className="dash-label" style={{ marginTop: 12 }}>الوصف</label>
-              <textarea className="dash-input dash-textarea" value={editBody} onChange={e => setEditBody(e.target.value)} rows={4} />
-            </div>
-            <div className="dash-modal-footer">
-              <button className="dash-btn dash-btn-ghost" onClick={() => setShowEditModal(false)}>إلغاء</button>
-              <button className="dash-btn dash-btn-primary" disabled={savingEdit || !editTitle.trim()} onClick={async () => {
-                setSavingEdit(true);
-                try {
-                  const res = await fetch(`/api/tickets/${ticketId}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ title: editTitle, body: editBody }),
-                  });
-                  if (res.ok) {
-                    setShowEditModal(false);
-                    await loadTicket();
-                  } else {
-                    const err = await res.json().catch(() => ({}));
-                    alert(err.error || "تعذر حفظ التعديلات");
-                  }
-                } catch { alert("حدث خطأ في الاتصال"); }
-                setSavingEdit(false);
-              }}>{savingEdit ? <Loader size={14} className="spin" /> : "حفظ التعديلات"}</button>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "12px 18px", borderTop: "1px solid #f0f3f8" }}>
+              <button onClick={() => setShowClose(false)} style={{ background: "transparent", color: "#526983", border: "1px solid #e5eaf0", borderRadius: 8, padding: "7px 14px", font: "inherit", fontSize: ".65rem", fontWeight: 700, cursor: "pointer" }}>رجوع</button>
+              <button onClick={closeTicket} disabled={closing}
+                style={{ background: "#dc2626", color: "#fff", border: 0, borderRadius: 8, padding: "7px 16px", font: "inherit", fontSize: ".65rem", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {closing ? <Loader size={12} style={{ animation: "spin .7s linear infinite" }} /> : null}
+                {isConsultation ? "إلغاء الاستشارة" : "إغلاق التذكرة"}
+              </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Cancel modal */}
-      {showCancelModal && (
-        <div className="dash-overlay" onClick={() => setShowCancelModal(false)}>
-          <div className="dash-modal" onClick={e => e.stopPropagation()}>
-            <div className="dash-modal-header">
-              <h3 style={{ color: "#dc2626" }}>إلغاء التذكرة</h3>
-              <button className="dash-modal-close" onClick={() => setShowCancelModal(false)}><X size={16} /></button>
-            </div>
-            <div className="dash-modal-body">
-              <p style={{ fontSize: ".7rem", color: "#6f869b", margin: "0 0 12px" }}>سيتم إغلاق التذكرة ولن تتمكن من إضافة ردود جديدة.</p>
-              <label className="dash-label">سبب الإلغاء (اختياري)</label>
-              <textarea className="dash-input dash-textarea" value={cancelReason} onChange={e => setCancelReason(e.target.value)} rows={3} placeholder="اذكر سبب الإلغاء..." />
-            </div>
-            <div className="dash-modal-footer">
-              <button className="dash-btn dash-btn-ghost" onClick={() => setShowCancelModal(false)}>رجوع</button>
-              <button className="dash-btn dash-btn-danger" disabled={cancelling} onClick={async () => {
-                setCancelling(true);
-                try {
-                  const res = await fetch(`/api/tickets/${ticketId}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ status: "مغلقة", note: cancelReason.trim() || "إلغاء من قبل العميل" }),
-                  });
-                  if (res.ok) {
-                    setShowCancelModal(false);
-                    await loadTicket();
-                    await loadMessages();
-                  } else {
-                    const err = await res.json().catch(() => ({}));
-                    alert(err.error || "تعذر إلغاء التذكرة");
-                  }
-                } catch { alert("حدث خطأ في الاتصال"); }
-                setCancelling(false);
-              }}>{cancelling ? <Loader size={14} className="spin" /> : "تأكيد الإلغاء"}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        .spin { animation: spin .8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .live-pulse { animation: pulse-dot 1.5s ease-in-out infinite; }
-        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-        .dash-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 999; display: grid; place-items: center; padding: 20px; }
-        .dash-modal { background: #fff; border-radius: 16px; box-shadow: 0 12px 32px rgba(0,0,0,.18); width: 100%; max-width: 480px; overflow: hidden; }
-        .dash-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #f0f3f8; }
-        .dash-modal-header h3 { margin: 0; font-size: .82rem; color: #073766; font-weight: 800; }
-        .dash-modal-close { border: 0; background: #f5f8fc; color: #7a8fa6; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; display: grid; place-items: center; transition: all .15s; }
-        .dash-modal-close:hover { background: #fee2e2; color: #dc2626; }
-        .dash-modal-body { padding: 16px 18px; }
-        .dash-modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid #f0f3f8; }
-        .dash-label { display: block; font-size: .62rem; font-weight: 700; color: #344d69; margin-bottom: 4px; }
-        .dash-input { width: 100%; border: 1px solid #e5eaf0; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: .72rem; color: #344d69; background: #fff; outline: none; box-sizing: border-box; }
-        .dash-input:focus { border-color: #0875dc; }
-        .dash-textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
-        .dash-btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: .65rem; font-weight: 700; cursor: pointer; transition: all .15s; }
-        .dash-btn:disabled { opacity: .5; cursor: not-allowed; }
-        .dash-btn-ghost { background: transparent; color: #526983; border: 1px solid #e5eaf0; }
-        .dash-btn-ghost:hover:not(:disabled) { background: #f5f8fc; }
-        .dash-btn-primary { background: #0875dc; color: #fff; border: 0; }
-        .dash-btn-primary:hover:not(:disabled) { background: #065fb8; }
-        .dash-btn-danger { background: #dc2626; color: #fff; border: 0; }
-        .dash-btn-danger:hover:not(:disabled) { background: #b91c1c; }
-      `}</style>
     </div>
   );
 }

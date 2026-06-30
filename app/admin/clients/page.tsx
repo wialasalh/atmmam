@@ -1,10 +1,18 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, FileText, ExternalLink, Eye, Edit2, Trash2, UserCheck, UserX, AlertTriangle, Users, Building2, UserCog, Activity, X, Phone, Mail, CreditCard, User, FileCheck, Clock, Save, Ban, CheckCircle, MoreHorizontal, KeyRound, MapPin, Download } from "lucide-react";
+import {
+  Search, FileText, ExternalLink, Eye, Edit2, Trash2, UserCheck, UserX,
+  AlertTriangle, Users, Building2, UserCog, Activity, X, Phone, Mail,
+  CreditCard, User, FileCheck, Clock, Save, Ban, CheckCircle, KeyRound,
+  MapPin, Download, Receipt, ShoppingBag, Package, MessageSquare, Info,
+  ChevronLeft, MoreHorizontal,
+} from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
+import { formatAppDate } from "@/lib/date-format";
 
 type ClientRecord = {
   id: string;
@@ -29,28 +37,52 @@ type ClientRecord = {
   commercial_register_expiry: string | null;
 };
 
-const typeColors: Record<string, { bg: string; text: string }> = {
-  company: { bg: "#eaf4ff", text: "#073766" },
-  person: { bg: "#f0fdf4", text: "#15803d" },
+const STATUS_ORDER: Record<string, { label: string; color: string; bg: string }> = {
+  new:        { label: "جديد",    color: "#0875dc", bg: "#eaf4ff" },
+  pending:    { label: "انتظار",  color: "#b45309", bg: "#fef9ee" },
+  processing: { label: "قيد التنفيذ", color: "#0f766e", bg: "#f0fdfa" },
+  completed:  { label: "مكتمل",  color: "#15803d", bg: "#f0fdf4" },
+  cancelled:  { label: "ملغي",   color: "#dc2626", bg: "#fef2f2" },
+};
+const STATUS_SUB: Record<string, { label: string; color: string; bg: string }> = {
+  active:    { label: "نشط",    color: "#15803d", bg: "#f0fdf4" },
+  pending:   { label: "انتظار", color: "#b45309", bg: "#fef9ee" },
+  cancelled: { label: "ملغي",   color: "#dc2626", bg: "#fef2f2" },
+  expired:   { label: "منتهي",  color: "#6b7280", bg: "#f3f4f6" },
+};
+const STATUS_INV: Record<string, { label: string; color: string; bg: string }> = {
+  issued:    { label: "صادرة",  color: "#b45309", bg: "#fef9ee" },
+  paid:      { label: "مدفوعة", color: "#15803d", bg: "#f0fdf4" },
+  cancelled: { label: "ملغاة",  color: "#dc2626", bg: "#fef2f2" },
+};
+const STATUS_TKT: Record<string, { label: string; color: string; bg: string }> = {
+  new:     { label: "جديدة",   color: "#0875dc", bg: "#eaf4ff" },
+  open:    { label: "مفتوحة",  color: "#0f766e", bg: "#f0fdfa" },
+  pending: { label: "انتظار",  color: "#b45309", bg: "#fef9ee" },
+  resolved:{ label: "محلولة",  color: "#15803d", bg: "#f0fdf4" },
+  closed:  { label: "مغلقة",   color: "#6b7280", bg: "#f3f4f6" },
 };
 
-const statusColors: Record<string, { bg: string; text: string; dot: string }> = {
-  active: { bg: "#f0fdf4", text: "#15803d", dot: "#22c55e" },
-  inactive: { bg: "#fef2f2", text: "#dc2626", dot: "#ef4444" },
-};
+function fmtDate(d: string) {
+  return formatAppDate(d);
+}
+function fmtMoney(n: number) {
+  return new Intl.NumberFormat("ar-SA", { minimumFractionDigits: 2 }).format(n);
+}
+function Badge({ cfg }: { cfg: { label: string; color: string; bg: string } }) {
+  return (
+    <span style={{ fontSize: ".55rem", fontWeight: 700, color: cfg.color, background: cfg.bg, padding: "2px 8px", borderRadius: 20 }}>
+      {cfg.label}
+    </span>
+  );
+}
 
 const inputStyle = {
-  width: "100%",
-  padding: "8px 12px",
-  border: "1px solid #dce3eb",
-  borderRadius: 8,
-  fontSize: ".75rem",
-  background: "#fff",
-  outline: "none",
-  transition: "border-color .15s",
+  width: "100%", padding: "8px 12px", border: "1px solid #dce3eb",
+  borderRadius: 8, fontSize: ".75rem", background: "#fff", outline: "none",
 } as React.CSSProperties;
 
-const focusStyle = { borderColor: "#0875dc", boxShadow: "0 0 0 2px rgba(8,117,220,.12)" };
+type Tab = "info" | "orders" | "subscriptions" | "invoices" | "tickets" | "docs";
 
 export default function AdminClientsPage() {
   const { loading: authLoading } = useRoleGuard("admin");
@@ -58,24 +90,46 @@ export default function AdminClientsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ClientRecord | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("info");
   const [notice, setNotice] = useState("");
+  const [noticeType, setNoticeType] = useState<"success" | "error">("success");
   const [editing, setEditing] = useState<ClientRecord | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [noticeType, setNoticeType] = useState<"success" | "error">("success");
   const [passModal, setPassModal] = useState<string | null>(null);
   const [newPass, setNewPass] = useState("");
   const [passLoading, setPassLoading] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState("");
+
+  // Per-tab data
   const [clientDocs, setClientDocs] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [tabLoading, setTabLoading] = useState(false);
+
   const router = useRouter();
 
   useEffect(() => { loadClients(); fetchRole(); }, []);
 
   useEffect(() => {
-    if (!selected) { setClientDocs([]); return; }
-    const supabase = createSupabaseBrowserClient();
-    supabase.from("client_documents").select("*").eq("client_id", selected.id).order("created_at", { ascending: false }).then(async ({ data }) => {
+    if (!selected) {
+      setClientDocs([]); setOrders([]); setSubscriptions([]); setInvoices([]); setTickets([]);
+      return;
+    }
+    setActiveTab("info");
+    loadTabData("info", selected.id);
+  }, [selected]);
+
+  useEffect(() => {
+    if (selected) loadTabData(activeTab, selected.id);
+  }, [activeTab]);
+
+  async function loadTabData(tab: Tab, clientId: string) {
+    if (tab === "info") {
+      // docs
+      const supabase = createSupabaseBrowserClient();
+      const { data } = await supabase.from("client_documents").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
       if (data) {
         const withUrls = await Promise.all(data.map(async (d) => {
           const { data: signed } = await supabase.storage.from("client-documents").createSignedUrl(d.storage_path, 3600);
@@ -83,8 +137,41 @@ export default function AdminClientsPage() {
         }));
         setClientDocs(withUrls);
       }
-    });
-  }, [selected]);
+      return;
+    }
+    setTabLoading(true);
+    try {
+      if (tab === "orders") {
+        const r = await fetch(`/api/admin/orders?client_id=${clientId}`);
+        const j = await r.json();
+        setOrders(j.data || []);
+      } else if (tab === "subscriptions") {
+        const r = await fetch(`/api/admin/subscriptions?client_id=${clientId}`);
+        const j = await r.json();
+        setSubscriptions(j.data || []);
+      } else if (tab === "invoices") {
+        const r = await fetch(`/api/admin/invoices?client_id=${clientId}`);
+        const j = await r.json();
+        setInvoices(j.data || []);
+      } else if (tab === "tickets") {
+        const r = await fetch(`/api/admin/tickets?client_id=${clientId}`);
+        const j = await r.json();
+        setTickets(j.data || []);
+      } else if (tab === "docs") {
+        const supabase = createSupabaseBrowserClient();
+        const { data } = await supabase.from("client_documents").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
+        if (data) {
+          const withUrls = await Promise.all(data.map(async (d) => {
+            const { data: signed } = await supabase.storage.from("client-documents").createSignedUrl(d.storage_path, 3600);
+            return { ...d, signedUrl: signed?.signedUrl };
+          }));
+          setClientDocs(withUrls);
+        }
+      }
+    } finally {
+      setTabLoading(false);
+    }
+  }
 
   async function fetchRole() {
     try {
@@ -99,7 +186,7 @@ export default function AdminClientsPage() {
           if (me.role !== "admin") router.replace("/admin");
         }
       }
-    } catch { /* non-critical role check */ }
+    } catch { }
   }
 
   const isAdmin = currentUserRole === "admin";
@@ -111,35 +198,32 @@ export default function AdminClientsPage() {
         const { data } = await res.json();
         if (data) setClients(data as ClientRecord[]);
       }
-    } catch { /* network error */ }
+    } catch { }
     setLoading(false);
   }
 
   function showNotice(msg: string, type: "success" | "error" = "success") {
-    setNotice(msg);
-    setNoticeType(type);
+    setNotice(msg); setNoticeType(type);
     window.setTimeout(() => setNotice(""), 2800);
   }
 
   async function toggleActive(client: ClientRecord) {
     try {
       const res = await fetch(`/api/admin/clients/${client.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
+        method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ toggle_active: true }),
       });
       if (!res.ok) { showNotice("تعذر تغيير الحالة", "error"); return; }
       await loadClients();
       showNotice(client.active ? "تم إيقاف العميل" : "تم تفعيل العميل");
-    } catch { showNotice("حدث خطأ في الاتصال", "error"); }
+    } catch { showNotice("حدث خطأ", "error"); }
   }
 
   async function saveEdit() {
     if (!editing) return;
     try {
       const res = await fetch("/api/admin/clients", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
+        method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: editing.id, name: editing.name, phone: editing.phone, email: editing.email, commercial_number: editing.commercial_number, national_id: editing.national_id, notes: editing.notes }),
       });
       if (!res.ok) { showNotice("تعذر حفظ التعديلات", "error"); return; }
@@ -154,8 +238,7 @@ export default function AdminClientsPage() {
   async function handleDelete(clientId: string) {
     try {
       const res = await fetch("/api/admin/clients", {
-        method: "DELETE",
-        headers: { "content-type": "application/json" },
+        method: "DELETE", headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: clientId, permanent: false }),
       });
       if (!res.ok) { showNotice("تعذر حذف العميل", "error"); return; }
@@ -167,27 +250,17 @@ export default function AdminClientsPage() {
   }
 
   async function changeClientPassword() {
-    if (!passModal || newPass.length < 6) {
-      showNotice("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "error");
-      return;
-    }
+    if (!passModal || newPass.length < 6) { showNotice("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "error"); return; }
     setPassLoading(true);
     try {
       const res = await fetch("/api/admin/clients/password", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
+        method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ userId: passModal, newPassword: newPass }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        showNotice(err.error || "تعذر تغيير كلمة المرور", "error");
-      } else {
-        showNotice("تم تغيير كلمة المرور بنجاح");
-      }
-    } catch { showNotice("حدث خطأ في الاتصال", "error"); }
-    setPassLoading(false);
-    setPassModal(null);
-    setNewPass("");
+      if (!res.ok) { const err = await res.json(); showNotice(err.error || "تعذر تغيير كلمة المرور", "error"); }
+      else showNotice("تم تغيير كلمة المرور بنجاح");
+    } catch { showNotice("حدث خطأ", "error"); }
+    setPassLoading(false); setPassModal(null); setNewPass("");
   }
 
   const userGroupMap = useMemo(() => {
@@ -204,17 +277,11 @@ export default function AdminClientsPage() {
     const q = search.trim().toLocaleLowerCase("ar");
     const rows: { key: string; profile: ClientRecord["profiles"]; clients: ClientRecord[] }[] = [];
     for (const [key, group] of userGroupMap) {
-      if (q && !`${group.profile?.full_name || ""} ${group.clients.map(c => c.name).join(" ")} ${group.clients.map(c => c.phone).join(" ")}`
-        .toLocaleLowerCase("ar").includes(q)) continue;
+      if (q && !`${group.profile?.full_name || ""} ${group.clients.map(c => c.name).join(" ")} ${group.clients.map(c => c.phone).join(" ")}`.toLocaleLowerCase("ar").includes(q)) continue;
       rows.push({ key, profile: group.profile, clients: group.clients });
     }
     return rows;
   }, [userGroupMap, search]);
-
-  const selectedAccount = useMemo(() => {
-    if (!selected) return undefined;
-    return accountRows.find(a => a.clients.some(c => c.id === selected.id));
-  }, [selected, accountRows]);
 
   const stats = useMemo(() => ({
     total: clients.length,
@@ -224,415 +291,588 @@ export default function AdminClientsPage() {
     sharedAccounts: [...userGroupMap.values()].filter(g => g.clients.length > 1).length,
   }), [clients, userGroupMap]);
 
-  const renderInput = (label: string, field: string, value: string, onChange: (v: string) => void, type = "text") => (
-    <div>
-      <label style={{ display: "block", fontSize: ".6rem", color: "#6b7d93", marginBottom: 4, fontWeight: 600 }}>{label}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)}
-        onFocus={() => setFocusedField(field)} onBlur={() => setFocusedField(null)}
-        style={{ ...inputStyle, ...(focusedField === field ? focusStyle : {}) }} />
-    </div>
-  );
+  const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "info",          label: "المعلومات",    icon: <Info size={13} /> },
+    { id: "orders",        label: "الطلبات",       icon: <ShoppingBag size={13} /> },
+    { id: "subscriptions", label: "الاشتراكات",   icon: <Package size={13} /> },
+    { id: "invoices",      label: "الفواتير",      icon: <Receipt size={13} /> },
+    { id: "tickets",       label: "التذاكر",       icon: <MessageSquare size={13} /> },
+    { id: "docs",          label: "المستندات",     icon: <FileText size={13} /> },
+  ];
 
-  if (authLoading) return <div className="follow-empty">جاري التحميل...</div>;
+  if (authLoading) return <PageLoader text="جاري تحميل العملاء..." />;
+
   return (
-      <div className="ops-layout" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-        <div className="ops-main">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-            <h1 style={{ margin: 0, fontSize: "1.1rem", display: "flex", alignItems: "center", gap: 8 }}>
-              <Users size={20} color="#073766" /> العملاء
-            </h1>
+    <div style={{ direction: "rtl", display: "flex", height: "calc(100vh - 60px)", overflow: "hidden" }}>
+
+      {/* ── List pane ── */}
+      <div style={{
+        width: selected ? 320 : "100%", minWidth: selected ? 320 : undefined, flexShrink: 0,
+        borderLeft: selected ? "1.5px solid #e8edf5" : "none",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+        transition: "width .2s",
+      }}>
+        {/* Header */}
+        <div style={{ padding: "20px 20px 12px", borderBottom: "1.5px solid #e8edf5" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <Users size={18} color="#073766" />
+            <h1 style={{ margin: 0, fontSize: "1rem", fontWeight: 800, color: "#073766" }}>العملاء</h1>
+            <span style={{ marginRight: "auto", fontSize: ".6rem", background: "#eaf4ff", color: "#0875dc", padding: "2px 10px", borderRadius: 20, fontWeight: 700 }}>{clients.length}</span>
           </div>
-
-          {notice && (
-            <div style={{
-              background: noticeType === "success" ? "#f0fdf4" : "#fef2f2",
-              color: noticeType === "success" ? "#15803d" : "#dc2626",
-              padding: "10px 16px", borderRadius: 10, fontSize: ".72rem", marginBottom: 16,
-              display: "flex", alignItems: "center", gap: 8, border: `1px solid ${noticeType === "success" ? "#bbf7d0" : "#fecaca"}`,
-            }}>
-              {noticeType === "success" ? <CheckCircle size={15} /> : <AlertTriangle size={15} />}
-              {notice}
-            </div>
-          )}
-
-          <div className="ops-toolbar" style={{ flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
-            <label style={{ flex: 1, minWidth: 200 }}>
-              <Search size={15} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث بالاسم، الجوال، البريد..." />
-            </label>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 18 }}>
-            {[
-              { icon: Users, label: "إجمالي العملاء", value: stats.total, color: "#073766", bg: "#eaf4ff", iconBg: "rgba(7,55,102,.1)" },
-              { icon: UserCheck, label: "نشط", value: stats.active, color: "#15803d", bg: "#f0fdf4", iconBg: "rgba(21,128,61,.1)" },
-              { icon: UserX, label: "موقوف", value: stats.inactive, color: "#dc2626", bg: "#fef2f2", iconBg: "rgba(220,38,38,.1)" },
-              { icon: Building2, label: "مؤسسات", value: stats.companies, color: "#7c3aed", bg: "#f5f3ff", iconBg: "rgba(124,58,237,.1)" },
-              { icon: Users, label: "حسابات مشتركة", value: stats.sharedAccounts, color: "#b45309", bg: "#fef9ee", iconBg: "rgba(180,83,9,.1)" },
-            ].map((card) => (
-              <article key={card.label} style={{
-                background: card.bg, borderRadius: 12, padding: "14px 16px",
-                display: "flex", alignItems: "center", gap: 12,
-              }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: 10,
-                  background: card.iconBg, display: "grid", placeItems: "center", flexShrink: 0,
-                }}>
-                  <card.icon size={18} color={card.color} />
-                </div>
-                <div>
-                  <strong style={{ fontSize: "1rem", color: card.color, display: "block" }}>{card.value}</strong>
-                  <small style={{ fontSize: ".6rem", color: "#6b7d93" }}>{card.label}</small>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          {loading ? (
-            <div className="ops-table-card">
-              <div className="ops-table-scroll">
-                <table><tbody><tr><td className="ops-empty" colSpan={6}>
-                  <div style={{ textAlign: "center", padding: "40px 0" }}>
-                    <div style={{ width: 24, height: 24, border: "2px solid #e5ecf3", borderTopColor: "#073766", borderRadius: "50%", animation: "spin .6s linear infinite", margin: "0 auto 10px" }} />
-                    جاري التحميل...
-                  </div>
-                </td></tr></tbody></table>
-              </div>
-            </div>
-            ) : accountRows.length === 0 ? (
-            <div className="ops-table-card">
-              <div className="ops-table-scroll">
-                <table><tbody><tr><td className="ops-empty" colSpan={6}>
-                  <div style={{ textAlign: "center", padding: "40px 0", color: "#8b9dad" }}>
-                    <Users size={32} style={{ marginBottom: 10, opacity: .3 }} />
-                    <p>{search ? "لا توجد نتائج للبحث" : "لا يوجد عملاء مسجلون بعد"}</p>
-                  </div>
-                </td></tr></tbody></table>
-              </div>
-            </div>
-          ) : (
-            <div className="ops-table-card">
-              <div className="ops-table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>صاحب الحساب</th>
-                      <th>العملاء</th>
-                      <th>عدد العملاء</th>
-                      <th>الجوالات</th>
-                      <th>السجلات التجارية</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {accountRows.map((acc) => {
-                      const isActive = acc.clients.some(c => c.active);
-                      const isThisSelected = selectedAccount?.key === acc.key;
-                      return (
-                      <tr key={acc.key} onClick={() => { setSelected(acc.clients[0]); setEditing(null); }}
-                        style={{
-                          cursor: "pointer", opacity: isActive ? 1 : .55, transition: "background .1s",
-                          background: isThisSelected ? "#f5f8fc" : undefined,
-                          borderLeft: acc.clients.length > 1 ? "3px solid #b45309" : undefined,
-                        }}
-                        onMouseEnter={e => { if (!isThisSelected) e.currentTarget.style.background = "#fafbfc"; }}
-                        onMouseLeave={e => { if (!isThisSelected) e.currentTarget.style.background = ""; }}>
-                        <td>
-                          <div className="ops-owner">
-                            <i style={{ background: "#eaf4ff", color: "#073766" }}>
-                              {((acc.profile?.full_name || "?").charAt(0))}
-                            </i>
-                            <div>
-                              <strong>{acc.profile?.full_name || "بدون حساب"}</strong>
-                              {acc.clients.length > 1 && <span style={{
-                                display: "inline-block", fontSize: ".5rem", padding: "1px 6px", borderRadius: 4,
-                                background: "#fef9ee", color: "#b45309", marginTop: 2,
-                              }}>
-                                {acc.clients.length} عملاء
-                              </span>}
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ fontSize: ".62rem" }}>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 72, overflowY: "auto" }}>
-                            {acc.clients.map((c, i) => (
-                              <span key={c.id} style={{
-                                display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap",
-                                color: c.active ? "#344d69" : "#b0bcc9",
-                                fontSize: ".6rem",
-                              }}>
-                                <span style={{
-                                  width: 5, height: 5, borderRadius: "50%", flexShrink: 0,
-                                  background: c.active ? "#22c55e" : "#ef4444",
-                                }} />
-                                {c.name}
-                                <span style={{ color: "#8b9dad", fontSize: ".5rem" }}>
-                                  ({c.client_type === "company" ? "مؤسسة" : "فرد"})
-                                </span>
-                                {c.commercial_register_expiry && (() => {
-                                  const expiry = new Date(c.commercial_register_expiry);
-                                  const now = new Date();
-                                  const diff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                                  if (diff < 0) return <span style={{ fontSize: ".5rem", background: "#fef2f2", color: "#dc2626", borderRadius: 4, padding: "0 5px", fontWeight: 700, border: "1px solid #fecaca" }}>منتهي</span>;
-                                  if (diff <= 30) return <span style={{ fontSize: ".5rem", background: "#fffbeb", color: "#d97706", borderRadius: 4, padding: "0 5px", fontWeight: 700, border: "1px solid #fde68a" }}>{diff} يوم</span>;
-                                  return null;
-                                })()}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td style={{ fontSize: ".68rem", color: "#5a6b7d", fontWeight: 600, textAlign: "center" }}>
-                          {acc.clients.length}
-                        </td>
-                        <td style={{ fontSize: ".6rem", color: "#5a6b7d", direction: "ltr" }}>
-                          {acc.clients.map(c => c.phone).filter(Boolean).join(" / ")}
-                        </td>
-                        <td style={{ fontSize: ".6rem" }}>
-                          {acc.clients.map(c => c.commercial_number).filter(Boolean).join(" / ") || <span style={{ color: "#b0bcc9" }}>—</span>}
-                        </td>
-                        <td>
-                          <button onClick={(e) => { e.stopPropagation(); setSelected(acc.clients[0]); setEditing(null); }}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "#8b9dad", padding: 4, borderRadius: 6, display: "flex" }}>
-                            <Eye size={15} />
-                          </button>
-                        </td>
-                      </tr>
-                    );})}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, background: "#f4f7fb", border: "1.5px solid #e8edf5", borderRadius: 9, padding: "7px 12px" }}>
+            <Search size={13} color="#a0adb8" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ابحث بالاسم، الجوال..."
+              style={{ background: "none", border: "none", outline: "none", fontSize: ".68rem", color: "#344d69", width: "100%" }} />
+          </label>
         </div>
 
-        {/* Detail Panel - Modal overlay */}
-        {(selected || editing) && (
-          <div
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.3)", zIndex: 999, display: "grid", placeItems: "center", padding: 20 }}
-            onClick={() => { if (!editing) setSelected(null); }}
-          >
-            <div
-              style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.15)" }}
-              onClick={e => e.stopPropagation()}
-            >
-          {editing ? (
-            <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
-              <div className="ops-summary-head" style={{ borderBottom: "1px solid #f0f4f8" }}>
-                <h2 style={{ fontSize: ".85rem", display: "flex", alignItems: "center", gap: 6 }}>
-                  <Edit2 size={15} color="#073766" /> تعديل {editing.name}
-                </h2>
-                <button onClick={() => setEditing(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#8b9dad", padding: 4 }}>
-                  <X size={16} />
-                </button>
-              </div>
-              <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
-                {renderInput("الاسم", "name", editing.name, (v) => setEditing({ ...editing, name: v }))}
-                {renderInput("الجوال", "phone", editing.phone, (v) => setEditing({ ...editing, phone: v }))}
-                {renderInput("البريد", "email", editing.email || "", (v) => setEditing({ ...editing, email: v }), "email")}
-                {renderInput("السجل التجاري", "commercial", editing.commercial_number || "", (v) => setEditing({ ...editing, commercial_number: v }))}
-                {renderInput("رقم الهوية", "national", editing.national_id || "", (v) => setEditing({ ...editing, national_id: v }))}
-                <div>
-                  <label style={{ display: "block", fontSize: ".6rem", color: "#6b7d93", marginBottom: 4, fontWeight: 600 }}>ملاحظات</label>
-                  <textarea value={editing.notes || ""} onChange={e => setEditing({ ...editing, notes: e.target.value })}
-                    rows={3} style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }} />
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                  <button onClick={saveEdit} style={{
-                    flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                    background: "#073766", color: "#fff", border: "none", borderRadius: 8, padding: "10px 0",
-                    fontSize: ".73rem", fontWeight: 700, cursor: "pointer", transition: "opacity .15s",
-                  }} onMouseEnter={e => e.currentTarget.style.opacity = ".9"} onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
-                    <Save size={14} /> حفظ التعديلات
-                  </button>
-                  <button onClick={() => setEditing(null)} style={{
-                    flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                    background: "#f0f4f8", color: "#5a6b7d", border: "none", borderRadius: 8, padding: "10px 0",
-                    fontSize: ".73rem", fontWeight: 600, cursor: "pointer",
-                  }}>
-                    <X size={14} /> إلغاء
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : selected ? <>
-            <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
-              <div className="ops-summary-head" style={{ borderBottom: "1px solid #f0f4f8" }}>
-                <h2 style={{ fontSize: ".85rem", display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: 8, display: "grid", placeItems: "center",
-                    background: typeColors[selected.client_type]?.bg, color: typeColors[selected.client_type]?.text,
-                    fontSize: ".7rem", fontWeight: 800,
-                  }}>
-                    {(selected.name || "?").charAt(0)}
-                  </div>
-                  {selected.name}
-                  {selected.profiles && <span style={{ fontSize: ".58rem", color: "#8b9dad", fontWeight: 400 }}>({selected.profiles.full_name})</span>}
-                </h2>
-                <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#8b9dad", padding: 4 }}>
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div style={{ padding: "12px 16px", display: "flex", gap: 6, flexWrap: "wrap", borderBottom: "1px solid #f0f4f8" }}>
-                {isAdmin && <ActionBtn icon={Edit2} label="تعديل" color="#073766" bg="#eaf4ff" onClick={() => setEditing({ ...selected })} />}
-                {isAdmin && <ActionBtn icon={selected.active ? UserX : UserCheck}
-                  label={selected.active ? "إيقاف" : "تفعيل"}
-                  color={selected.active ? "#dc2626" : "#15803d"}
-                  bg={selected.active ? "#fef2f2" : "#f0fdf4"}
-                  onClick={() => toggleActive(selected)} />}
-                {isAdmin && <ActionBtn icon={Trash2} label="حذف" color="#dc2626" bg="#fef2f2" onClick={() => setConfirmDelete(selected.id)} />}
-                {isAdmin && selected.user_id && <ActionBtn icon={KeyRound} label="تغيير كلمة المرور" color="#7c3aed" bg="#f5f3ff" onClick={() => { setPassModal(selected.user_id!); setNewPass(""); }} />}
-              </div>
-
-              {confirmDelete === selected.id && (
-                <div style={{
-                  padding: "12px 16px", background: "#fef2f2", borderBottom: "1px solid #fecaca",
-                  display: "flex", alignItems: "center", gap: 8, fontSize: ".68rem",
-                }}>
-                  <AlertTriangle size={15} color="#dc2626" style={{ flexShrink: 0 }} />
-                  <span style={{ flex: 1, color: "#991b1b", fontWeight: 600 }}>تأكيد حذف العميل؟</span>
-                  <button onClick={() => handleDelete(selected.id)}
-                    style={{ background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: ".65rem", fontWeight: 600, cursor: "pointer" }}>نعم، احذف</button>
-                  <button onClick={() => setConfirmDelete(null)}
-                    style={{ background: "#fff", color: "#6b7280", border: "1px solid #d1d5db", borderRadius: 6, padding: "5px 12px", fontSize: ".65rem", cursor: "pointer" }}>إلغاء</button>
-                </div>
-              )}
-
-              <div style={{ padding: "8px 0" }}>
-                <InfoRow icon={User} label="نوع العميل" value={selected.client_type === "company" ? "مؤسسة" : "فرد"} />
-                <InfoRow icon={Phone} label="الجوال" value={selected.phone} />
-                {selected.email && <InfoRow icon={Mail} label="البريد" value={selected.email} />}
-                {selected.national_id && <InfoRow icon={CreditCard} label="رقم الهوية" value={selected.national_id} />}
-                {selected.commercial_number && <InfoRow icon={FileText} label="السجل التجاري" value={selected.commercial_number} />}
-                {selected.unified_register_number && <InfoRow icon={FileText} label="الرقم الموحد" value={selected.unified_register_number} />}
-                {selected.company_address && <InfoRow icon={MapPin} label="العنوان" value={selected.company_address} />}
-                {selected.company_activity && <InfoRow icon={Activity} label="النشاط" value={selected.company_activity} />}
-                {selected.notes && <InfoRow icon={FileCheck} label="ملاحظات" value={selected.notes} />}
-                <InfoRow icon={UserCheck} label="الحالة" value={
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", gap: 4,
-                    background: selected.active ? statusColors.active.bg : statusColors.inactive.bg,
-                    color: selected.active ? statusColors.active.text : statusColors.inactive.text,
-                    fontSize: ".6rem", padding: "2px 10px", borderRadius: 20, fontWeight: 600,
-                  }}>
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: selected.active ? statusColors.active.dot : statusColors.inactive.dot }} />
-                    {selected.active ? "نشط" : "موقوف"}
-                  </span>
-                } />
-                <InfoRow icon={Clock} label="آخر تحديث" value={new Date(selected.updated_at).toLocaleString("ar-SA")} />
-              </div>
-
-              {selectedAccount && selectedAccount.clients.length > 1 && (
-                <div style={{ padding: "14px 20px", borderTop: "1px solid #f0f4f8" }}>
-                  <h3 style={{ fontSize: ".72rem", color: "#b45309", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                    <Users size={14} /> عملاء الحساب ({selectedAccount.clients.length})
-                  </h3>
-                  {selectedAccount.clients.map(ac => (
-                    <div key={ac.id} onClick={() => setSelected(ac)}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 10,
-                        padding: "8px 10px", borderRadius: 8, cursor: "pointer",
-                        background: ac.id === selected.id ? "#f5f8fc" : "transparent",
-                        borderBottom: "1px solid #f0f4f8", transition: "background .1s",
-                        fontSize: ".68rem",
-                      }}
-                      onMouseEnter={e => { if (ac.id !== selected.id) e.currentTarget.style.background = "#fafbfc"; }}
-                      onMouseLeave={e => { if (ac.id !== selected.id) e.currentTarget.style.background = "transparent"; }}>
-                      <div style={{
-                        width: 24, height: 24, borderRadius: 6, display: "grid", placeItems: "center",
-                        background: typeColors[ac.client_type]?.bg, color: typeColors[ac.client_type]?.text,
-                        fontSize: ".55rem", fontWeight: 800, flexShrink: 0,
-                      }}>
-                        {(ac.name || "?").charAt(0)}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <strong style={{ fontSize: ".65rem", color: "#344d69", display: "block" }}>{ac.name}</strong>
-                        <span style={{ fontSize: ".55rem", color: "#8b9dad" }}>{ac.client_type === "company" ? "مؤسسة" : "فرد"} · {ac.phone}</span>
-                      </div>
-                      <span style={{
-                        width: 6, height: 6, borderRadius: "50%",
-                        background: ac.active ? "#22c55e" : "#ef4444", flexShrink: 0,
-                      }} />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ padding: "14px 20px", borderTop: "1px solid #f0f4f8" }}>
-                <h3 style={{ fontSize: ".72rem", color: "#073766", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                  <FileText size={14} /> المستندات
-                </h3>
-                {selected.commercial_register_doc && <DocLink label="السجل التجاري" path={selected.commercial_register_doc} />}
-                {selected.company_license_doc && <DocLink label="رخصة المنشأة" path={selected.company_license_doc} />}
-                {selected.national_id_doc && <DocLink label="صورة الهوية" path={selected.national_id_doc} />}
-                {clientDocs.map(doc => (
-                  <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, padding: "6px 10px", background: "#f8fafc", borderRadius: 8 }}>
-                    <FileText size={13} style={{ color: "#6b7d93", flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <strong style={{ fontSize: ".62rem", color: "#1a2d40", display: "block" }}>{doc.filename}</strong>
-                      <span style={{ fontSize: ".55rem", color: "#8b9dad" }}>{doc.original_name} · {new Date(doc.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}</span>
-                    </div>
-                    {doc.signedUrl && (
-                      <a href={doc.signedUrl} target="_blank" rel="noopener"
-                        style={{ display: "grid", placeItems: "center", width: 28, height: 28, borderRadius: 6, background: "#eaf4ff", color: "#0875dc" }}>
-                        <Download size={12} />
-                      </a>
-                    )}
-                  </div>
-                ))}
-                {!selected.commercial_register_doc && !selected.company_license_doc && !selected.national_id_doc && clientDocs.length === 0 && (
-                  <p style={{ color: "#b0bcc9", fontSize: ".65rem" }}>لا توجد مستندات مرفوعة</p>
-                )}
-              </div>
-            </div>
-            {passModal && <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.3)",display:"grid",placeItems:"center",zIndex:999}} onClick={()=>{if(!passLoading)setPassModal(null)}}><div style={{background:"#fff",borderRadius:14,padding:24,width:320,boxShadow:"0 4px 24px rgba(0,0,0,.12)"}} onClick={e=>e.stopPropagation()}><h3 style={{fontSize:".85rem",marginBottom:16}}>تغيير كلمة مرور العميل</h3><input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} placeholder="كلمة المرور الجديدة" autoFocus style={{width:"100%",padding:"10px 12px",border:"1px solid #dce3eb",borderRadius:8,fontSize:".75rem",outline:"none",boxSizing:"border-box"}} /><div style={{display:"flex",gap:8,marginTop:16}}><button onClick={changeClientPassword} disabled={passLoading||newPass.length<6} style={{flex:1,background:"#073766",color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:".73rem",fontWeight:700,cursor:"pointer",opacity:(passLoading||newPass.length<6)?0.5:1}}>{passLoading?"جاري...":"حفظ"}</button><button onClick={()=>{if(!passLoading)setPassModal(null)}} style={{flex:1,background:"#f0f4f8",color:"#5a6b7d",border:"none",borderRadius:8,padding:"10px 0",fontSize:".73rem",cursor:"pointer"}}>إلغاء</button></div></div></div>}
-          </> : (
-            <div style={{ padding: 40, textAlign: "center", color: "#8b9dad" }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: 16, background: "#f0f4f8",
-                display: "grid", placeItems: "center", margin: "0 auto 14px",
+        {/* Stats — only when no client selected */}
+        {!selected && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", borderBottom: "1.5px solid #e8edf5" }}>
+            {[
+              { icon: Users,     label: "إجمالي العملاء",  value: stats.total,          color: "#073766", bg: "#eaf4ff",  iconBg: "#d1e9ff" },
+              { icon: UserCheck, label: "نشط",              value: stats.active,         color: "#15803d", bg: "#f0fdf4",  iconBg: "#bbf7d0" },
+              { icon: UserX,     label: "موقوف",            value: stats.inactive,       color: "#dc2626", bg: "#fef2f2",  iconBg: "#fecaca" },
+              { icon: Building2, label: "مؤسسات",           value: stats.companies,      color: "#0f766e", bg: "#f0fdfa",  iconBg: "#99f6e4" },
+              { icon: Users,     label: "حسابات مشتركة",   value: stats.sharedAccounts, color: "#b45309", bg: "#fef9ee",  iconBg: "#fde68a" },
+            ].map((card, i, a) => (
+              <div key={card.label} style={{
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                gap: 6, padding: "14px 8px",
+                borderLeft: i < a.length - 1 ? "1px solid #e8edf5" : "none",
+                background: "#fff",
               }}>
-                <Users size={28} style={{ opacity: .4 }} />
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: card.iconBg, display: "grid", placeItems: "center" }}>
+                  <card.icon size={15} color={card.color} />
+                </div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: card.color, lineHeight: 1 }}>{card.value}</div>
+                <div style={{ fontSize: ".52rem", color: "#8b9dad", fontWeight: 600, textAlign: "center" }}>{card.label}</div>
               </div>
-              <p style={{ fontSize: ".75rem", fontWeight: 600, color: "#5a6b7d" }}>اختر عميلاً لعرض التفاصيل</p>
-              <p style={{ fontSize: ".62rem", marginTop: 4 }}>اضغط على أي عميل من الجدول</p>
-            </div>
-          )}
-            </div>
+            ))}
           </div>
         )}
+
+        {/* Notice */}
+        {notice && (
+          <div style={{
+            margin: "8px 16px 0", padding: "8px 12px", borderRadius: 8, fontSize: ".68rem",
+            background: noticeType === "success" ? "#f0fdf4" : "#fef2f2",
+            color: noticeType === "success" ? "#15803d" : "#dc2626",
+            border: `1px solid ${noticeType === "success" ? "#bbf7d0" : "#fecaca"}`,
+            display: "flex", alignItems: "center", gap: 6,
+          }}>
+            {noticeType === "success" ? <CheckCircle size={13} /> : <AlertTriangle size={13} />}
+            {notice}
+          </div>
+        )}
+
+        {/* Client list */}
+        <div style={{ flex: 1, overflowY: "auto", padding: selected ? "8px 0" : "10px 14px", display: "flex", flexDirection: "column", gap: selected ? 0 : 6 }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: "center", color: "#8b9dad", fontSize: ".7rem" }}>جاري التحميل...</div>
+          ) : accountRows.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: "#8b9dad" }}>
+              <Users size={28} style={{ opacity: .3, marginBottom: 8 }} />
+              <p style={{ fontSize: ".7rem" }}>{search ? "لا توجد نتائج" : "لا يوجد عملاء بعد"}</p>
+            </div>
+          ) : accountRows.map(acc => {
+            const isActive = acc.clients.some(c => c.active);
+            const isSelected = !!(selected && acc.clients.some(c => c.id === selected.id));
+            const hasExpiry = acc.clients.some(c => c.commercial_register_expiry && Math.ceil((new Date(c.commercial_register_expiry).getTime() - Date.now()) / 86400000) < 0);
+            const hasExpirySoon = !hasExpiry && acc.clients.some(c => c.commercial_register_expiry && Math.ceil((new Date(c.commercial_register_expiry).getTime() - Date.now()) / 86400000) <= 30);
+            const avatarColors = [
+              { bg: "#dbeafe", color: "#1d4ed8" }, { bg: "#dcfce7", color: "#15803d" },
+              { bg: "#f3e8ff", color: "#0f766e" }, { bg: "#fef9c3", color: "#a16207" },
+              { bg: "#ffe4e6", color: "#be123c" }, { bg: "#cffafe", color: "#0e7490" },
+            ];
+            const avatarColor = avatarColors[(acc.profile?.full_name || "?").charCodeAt(0) % avatarColors.length];
+            const primaryClient = acc.clients[0];
+            const allPhones = [...new Set(acc.clients.map(c => c.phone).filter(Boolean))];
+
+            if (selected) {
+              // Compact mode when detail panel open
+              return (
+                <div key={acc.key} onClick={() => setSelected(primaryClient)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+                    borderBottom: "1px solid #f0f4f8", cursor: "pointer",
+                    background: isSelected ? "#eef5ff" : "transparent",
+                    borderRight: isSelected ? "3px solid #0875dc" : "3px solid transparent",
+                    opacity: isActive ? 1 : .55,
+                  }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "#f7fafc"; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: avatarColor.bg, color: avatarColor.color, display: "grid", placeItems: "center", fontSize: ".72rem", fontWeight: 800, flexShrink: 0 }}>
+                    {(acc.profile?.full_name || "?").charAt(0)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: ".68rem", fontWeight: 700, color: "#1a2d40", display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{acc.profile?.full_name || "بدون حساب"}</span>
+                      {hasExpiry && <span style={{ fontSize: ".45rem", background: "#fef2f2", color: "#dc2626", padding: "1px 5px", borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>منتهي</span>}
+                    </div>
+                    <div style={{ fontSize: ".56rem", color: "#8b9dad", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {acc.clients.map(c => c.name).join("، ")}
+                    </div>
+                  </div>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: isActive ? "#22c55e" : "#ef4444", flexShrink: 0 }} />
+                </div>
+              );
+            }
+
+            // Full card mode (no detail panel)
+            return (
+              <div key={acc.key} onClick={() => setSelected(primaryClient)}
+                style={{
+                  background: "#fff", border: `1.5px solid ${isSelected ? "#bddcff" : "#e8edf5"}`,
+                  borderRadius: 12, padding: "14px 16px", cursor: "pointer",
+                  boxShadow: isSelected ? "0 0 0 3px rgba(8,117,220,.08)" : "0 1px 3px rgba(0,0,0,.04)",
+                  opacity: isActive ? 1 : .65, transition: "box-shadow .15s, border-color .15s",
+                }}
+                onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,.08)"; e.currentTarget.style.borderColor = "#c8d9ee"; } }}
+                onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,.04)"; e.currentTarget.style.borderColor = "#e8edf5"; } }}>
+
+                {/* Card — single row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, background: avatarColor.bg, color: avatarColor.color, display: "grid", placeItems: "center", fontSize: ".9rem", fontWeight: 800, flexShrink: 0 }}>
+                    {(acc.profile?.full_name || "?").charAt(0)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: ".73rem", fontWeight: 800, color: "#073766", marginBottom: 3 }}>{acc.profile?.full_name || "بدون حساب"}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: ".58rem", color: "#8b9dad", direction: "ltr" }}>{allPhones[0]}</span>
+                      {acc.clients.length > 1 && (
+                        <span style={{ fontSize: ".5rem", background: "#f0f4f9", color: "#526983", padding: "1px 7px", borderRadius: 10, fontWeight: 600 }}>
+                          {acc.clients.length} منشآت
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+                    <span style={{ fontSize: ".52rem", fontWeight: 700, padding: "2px 9px", borderRadius: 20, background: isActive ? "#f0fdf4" : "#fef2f2", color: isActive ? "#15803d" : "#dc2626" }}>
+                      {isActive ? "● نشط" : "● موقوف"}
+                    </span>
+                    {hasExpiry && <span style={{ fontSize: ".49rem", background: "#fef2f2", color: "#dc2626", padding: "1px 7px", borderRadius: 20, fontWeight: 700, border: "1px solid #fecaca" }}>سجل منتهي</span>}
+                    {hasExpirySoon && !hasExpiry && <span style={{ fontSize: ".49rem", background: "#fffbeb", color: "#d97706", padding: "1px 7px", borderRadius: 20, fontWeight: 700, border: "1px solid #fde68a" }}>سينتهي السجل التجاري قريباً</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
+
+      {/* ── Detail pane ── */}
+      {selected ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, background: "#fff" }}>
+
+          {/* Detail header */}
+          <div style={{ padding: "16px 24px 0", borderBottom: "1.5px solid #e8edf5", background: "#fff" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              {/* Avatar */}
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: "#eaf4ff", color: "#073766", display: "grid", placeItems: "center", fontWeight: 800, fontSize: ".85rem", flexShrink: 0 }}>
+                {selected.name.charAt(0)}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: ".85rem", fontWeight: 800, color: "#073766" }}>{selected.name}</div>
+                <div style={{ fontSize: ".6rem", color: "#8b9dad", marginTop: 1 }}>
+                  {selected.profiles?.full_name && <span>{selected.profiles.full_name} · </span>}
+                  {selected.phone}
+                  {selected.email && <span> · {selected.email}</span>}
+                </div>
+              </div>
+              {/* Status badge */}
+              <span style={{
+                fontSize: ".58rem", fontWeight: 700, padding: "3px 10px", borderRadius: 20,
+                background: selected.active ? "#f0fdf4" : "#fef2f2",
+                color: selected.active ? "#15803d" : "#dc2626",
+              }}>
+                {selected.active ? "● نشط" : "● موقوف"}
+              </span>
+              {/* Actions */}
+              {isAdmin && (
+                <div style={{ display: "flex", gap: 5 }}>
+                  <Btn icon={Edit2} label="تعديل" color="#0875dc" bg="#eaf4ff" onClick={() => setEditing({ ...selected })} />
+                  <Btn icon={selected.active ? UserX : UserCheck} label={selected.active ? "إيقاف" : "تفعيل"}
+                    color={selected.active ? "#dc2626" : "#15803d"}
+                    bg={selected.active ? "#fef2f2" : "#f0fdf4"}
+                    onClick={() => toggleActive(selected)} />
+                  {selected.user_id && <Btn icon={KeyRound} label="كلمة المرور" color="#0f766e" bg="#f0fdfa" onClick={() => { setPassModal(selected.user_id!); setNewPass(""); }} />}
+                  <Btn icon={Trash2} label="حذف" color="#dc2626" bg="#fef2f2" onClick={() => setConfirmDelete(selected.id)} />
+                </div>
+              )}
+              <button onClick={() => setSelected(null)}
+                style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid #e8edf5", background: "#f8fafc", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                <X size={14} color="#7c8b9b" />
+              </button>
+            </div>
+
+            {/* Confirm delete */}
+            {confirmDelete === selected.id && (
+              <div style={{ marginBottom: 10, padding: "8px 12px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, display: "flex", alignItems: "center", gap: 8, fontSize: ".65rem" }}>
+                <AlertTriangle size={13} color="#dc2626" />
+                <span style={{ flex: 1, color: "#991b1b", fontWeight: 600 }}>تأكيد حذف العميل؟</span>
+                <button onClick={() => handleDelete(selected.id)} style={{ background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "4px 12px", fontSize: ".62rem", fontWeight: 600, cursor: "pointer" }}>احذف</button>
+                <button onClick={() => setConfirmDelete(null)} style={{ background: "#fff", color: "#6b7280", border: "1px solid #d1d5db", borderRadius: 6, padding: "4px 10px", fontSize: ".62rem", cursor: "pointer" }}>إلغاء</button>
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div style={{ display: "flex", gap: 0, marginBottom: -1.5 }}>
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setActiveTab(t.id)}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 5, padding: "9px 14px",
+                    fontSize: ".63rem", fontWeight: activeTab === t.id ? 800 : 600,
+                    color: activeTab === t.id ? "#0875dc" : "#7c8b9b",
+                    background: "none", border: "none", cursor: "pointer",
+                    borderBottom: activeTab === t.id ? "2.5px solid #0875dc" : "2.5px solid transparent",
+                    marginBottom: -1.5, whiteSpace: "nowrap",
+                  }}>
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tab content */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+            {tabLoading ? (
+              <div style={{ padding: 40, textAlign: "center", color: "#8b9dad", fontSize: ".7rem" }}>جاري التحميل...</div>
+            ) : activeTab === "info" ? (
+              <InfoTab client={selected} docs={clientDocs} />
+            ) : activeTab === "orders" ? (
+              <OrdersTab orders={orders} />
+            ) : activeTab === "subscriptions" ? (
+              <SubsTab subs={subscriptions} />
+            ) : activeTab === "invoices" ? (
+              <InvoicesTab invoices={invoices} />
+            ) : activeTab === "tickets" ? (
+              <TicketsTab tickets={tickets} />
+            ) : (
+              <DocsTab client={selected} docs={clientDocs} />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ flex: 1, display: "grid", placeItems: "center", color: "#8b9dad" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: "#f0f4f8", display: "grid", placeItems: "center", margin: "0 auto 14px" }}>
+              <Users size={26} style={{ opacity: .35 }} />
+            </div>
+            <p style={{ fontSize: ".78rem", fontWeight: 600, color: "#5a6b7d" }}>اختر عميلاً لعرض ملفه الشامل</p>
+            <p style={{ fontSize: ".62rem", marginTop: 4 }}>الطلبات · الاشتراكات · الفواتير · التذاكر</p>
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editing && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", zIndex: 300, display: "grid", placeItems: "center" }}
+          onClick={() => setEditing(null)}>
+          <div style={{ background: "#fff", borderRadius: 14, padding: 24, width: 420, boxShadow: "0 16px 48px rgba(0,0,0,.18)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <div style={{ fontSize: ".8rem", fontWeight: 800, color: "#073766" }}>تعديل {editing.name}</div>
+              <button onClick={() => setEditing(null)} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={16} color="#8b9dad" /></button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {[
+                { label: "الاسم", key: "name" as const },
+                { label: "الجوال", key: "phone" as const },
+                { label: "البريد", key: "email" as const },
+                { label: "السجل التجاري", key: "commercial_number" as const },
+                { label: "رقم الهوية", key: "national_id" as const },
+              ].map(f => (
+                <div key={f.key}>
+                  <label style={{ fontSize: ".6rem", color: "#6b7d93", fontWeight: 600, display: "block", marginBottom: 4 }}>{f.label}</label>
+                  <input value={(editing as any)[f.key] || ""} onChange={e => setEditing({ ...editing, [f.key]: e.target.value })} style={inputStyle} />
+                </div>
+              ))}
+              <div>
+                <label style={{ fontSize: ".6rem", color: "#6b7d93", fontWeight: 600, display: "block", marginBottom: 4 }}>ملاحظات</label>
+                <textarea value={editing.notes || ""} onChange={e => setEditing({ ...editing, notes: e.target.value })}
+                  rows={3} style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }} />
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button onClick={saveEdit} style={{ flex: 1, background: "#073766", color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", fontSize: ".73rem", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  <Save size={13} /> حفظ
+                </button>
+                <button onClick={() => setEditing(null)} style={{ flex: 1, background: "#f0f4f8", color: "#5a6b7d", border: "none", borderRadius: 8, padding: "10px 0", fontSize: ".73rem", cursor: "pointer" }}>
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password modal */}
+      {passModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", zIndex: 300, display: "grid", placeItems: "center" }}
+          onClick={() => { if (!passLoading) setPassModal(null); }}>
+          <div style={{ background: "#fff", borderRadius: 14, padding: 24, width: 320, boxShadow: "0 8px 32px rgba(0,0,0,.15)" }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: ".85rem", marginBottom: 16 }}>تغيير كلمة مرور العميل</h3>
+            <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)}
+              placeholder="كلمة المرور الجديدة" autoFocus
+              style={{ ...inputStyle, boxSizing: "border-box" as const }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={changeClientPassword} disabled={passLoading || newPass.length < 6}
+                style={{ flex: 1, background: "#073766", color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", fontSize: ".73rem", fontWeight: 700, cursor: "pointer", opacity: (passLoading || newPass.length < 6) ? .5 : 1 }}>
+                {passLoading ? "جاري..." : "حفظ"}
+              </button>
+              <button onClick={() => { if (!passLoading) setPassModal(null); }}
+                style={{ flex: 1, background: "#f0f4f8", color: "#5a6b7d", border: "none", borderRadius: 8, padding: "10px 0", fontSize: ".73rem", cursor: "pointer" }}>
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
   );
 }
 
-function ActionBtn({ icon: Icon, label, color, bg, onClick }: { icon: any; label: string; color: string; bg: string; onClick: () => void }) {
+/* ── Btn ── */
+function Btn({ icon: Icon, label, color, bg, onClick }: { icon: any; label: string; color: string; bg: string; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 4, background: bg, color,
-        border: "none", borderRadius: 8, padding: "6px 12px", fontSize: ".65rem", fontWeight: 600,
-        cursor: "pointer", transition: "opacity .15s",
-      }}
+      style={{ display: "inline-flex", alignItems: "center", gap: 4, background: bg, color, border: "none", borderRadius: 7, padding: "5px 10px", fontSize: ".6rem", fontWeight: 600, cursor: "pointer" }}
       onMouseEnter={e => e.currentTarget.style.opacity = ".8"}
       onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
-      <Icon size={13} /> {label}
+      <Icon size={12} /> {label}
     </button>
   );
 }
 
+/* ── InfoRow ── */
 function InfoRow({ icon: Icon, label, value }: { icon: any; label: string; value: React.ReactNode }) {
   return (
-    <div style={{
-      display: "flex", alignItems: "flex-start", gap: 10,
-      padding: "9px 20px", borderBottom: "1px solid #f5f8fc",
-    }}>
-      <div style={{ width: 20, flexShrink: 0, paddingTop: 1 }}>
-        <Icon size={14} color="#8b9dad" />
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 0", borderBottom: "1px solid #f5f8fc" }}>
+      <Icon size={14} color="#8b9dad" style={{ marginTop: 1, flexShrink: 0 }} />
+      <div>
+        <div style={{ fontSize: ".57rem", color: "#8b9dad", marginBottom: 2 }}>{label}</div>
+        <div style={{ fontSize: ".7rem", color: "#344d69", fontWeight: 500, wordBreak: "break-word" }}>{value}</div>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: ".58rem", color: "#8b9dad", marginBottom: 2 }}>{label}</span>
-        <span style={{ fontSize: ".7rem", color: "#344d69", fontWeight: 500, wordBreak: "break-word" }}>{value}</span>
+    </div>
+  );
+}
+
+/* ── EmptyState ── */
+function Empty({ icon: Icon, text }: { icon: any; text: string }) {
+  return (
+    <div style={{ padding: "48px 0", textAlign: "center", color: "#8b9dad" }}>
+      <Icon size={28} style={{ opacity: .25, marginBottom: 10 }} />
+      <p style={{ fontSize: ".7rem" }}>{text}</p>
+    </div>
+  );
+}
+
+/* ── Tab panels ── */
+
+function InfoTab({ client, docs }: { client: ClientRecord; docs: any[] }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      {/* Left column */}
+      <div style={{ background: "#f8fafc", border: "1px solid #e8edf5", borderRadius: 12, padding: "16px 18px" }}>
+        <div style={{ fontSize: ".65rem", fontWeight: 800, color: "#073766", marginBottom: 12 }}>بيانات العميل</div>
+        <InfoRow icon={User} label="نوع العميل" value={client.client_type === "company" ? "مؤسسة / شركة" : "فرد"} />
+        <InfoRow icon={Phone} label="الجوال" value={client.phone} />
+        {client.email && <InfoRow icon={Mail} label="البريد الإلكتروني" value={client.email} />}
+        {client.national_id && <InfoRow icon={CreditCard} label="رقم الهوية" value={client.national_id} />}
+        {client.commercial_number && <InfoRow icon={FileText} label="السجل التجاري" value={client.commercial_number} />}
+        {client.unified_register_number && <InfoRow icon={FileText} label="الرقم الموحد" value={client.unified_register_number} />}
+        {client.company_address && <InfoRow icon={MapPin} label="العنوان" value={client.company_address} />}
+        {client.company_activity && <InfoRow icon={Activity} label="النشاط التجاري" value={client.company_activity} />}
+        {client.notes && <InfoRow icon={FileCheck} label="ملاحظات" value={client.notes} />}
+        <InfoRow icon={Clock} label="تاريخ التسجيل" value={fmtDate(client.created_at)} />
       </div>
+      {/* Right column - docs */}
+      <div style={{ background: "#f8fafc", border: "1px solid #e8edf5", borderRadius: 12, padding: "16px 18px" }}>
+        <div style={{ fontSize: ".65rem", fontWeight: 800, color: "#073766", marginBottom: 12 }}>المستندات</div>
+        {[
+          { label: "السجل التجاري", path: client.commercial_register_doc },
+          { label: "رخصة المنشأة", path: client.company_license_doc },
+          { label: "صورة الهوية", path: client.national_id_doc },
+        ].filter(d => d.path).map(d => (
+          <DocLink key={d.label} label={d.label} path={d.path!} />
+        ))}
+        {docs.map(doc => (
+          <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid #f0f4f8" }}>
+            <FileText size={13} color="#6b7d93" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: ".62rem", fontWeight: 600, color: "#1a2d40" }}>{doc.filename}</div>
+              <div style={{ fontSize: ".53rem", color: "#8b9dad" }}>{fmtDate(doc.created_at)}</div>
+            </div>
+            {doc.signedUrl && (
+              <a href={doc.signedUrl} target="_blank" rel="noopener"
+                style={{ display: "grid", placeItems: "center", width: 26, height: 26, borderRadius: 6, background: "#eaf4ff", color: "#0875dc" }}>
+                <Download size={11} />
+              </a>
+            )}
+          </div>
+        ))}
+        {!client.commercial_register_doc && !client.company_license_doc && !client.national_id_doc && docs.length === 0 && (
+          <p style={{ fontSize: ".65rem", color: "#b0bcc9" }}>لا توجد مستندات</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OrdersTab({ orders }: { orders: any[] }) {
+  if (!orders.length) return <Empty icon={ShoppingBag} text="لا توجد طلبات لهذا العميل" />;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 0, border: "1px solid #e8edf5", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "130px 1fr 100px 120px 100px", background: "#f4f7fb", borderBottom: "1px solid #e8edf5" }}>
+        {["رقم الطلب", "الخدمة", "الجهة", "الحالة", "التاريخ"].map((h, i, a) => (
+          <div key={h} style={{ padding: "9px 12px", fontSize: ".55rem", fontWeight: 800, color: "#4a6075", borderLeft: i < a.length - 1 ? "1px solid #e8edf5" : "none" }}>{h}</div>
+        ))}
+      </div>
+      {orders.map((o, i, a) => {
+        const cfg = STATUS_ORDER[o.status] || { label: o.status, color: "#526983", bg: "#f3f4f6" };
+        return (
+          <div key={o.id} style={{ display: "grid", gridTemplateColumns: "130px 1fr 100px 120px 100px", borderBottom: i < a.length - 1 ? "1px solid #f0f4f8" : "none" }}>
+            <div style={{ padding: "10px 12px", fontSize: ".6rem", fontWeight: 700, color: "#0875dc", fontFamily: "monospace", borderLeft: "1px solid #f0f4f8" }}>{o.reference_no || o.id?.slice(0,8)}</div>
+            <div style={{ padding: "10px 12px", fontSize: ".63rem", color: "#334155", borderLeft: "1px solid #f0f4f8" }}>{o.service_name || o.description || "—"}</div>
+            <div style={{ padding: "10px 12px", fontSize: ".58rem", color: "#526983", borderLeft: "1px solid #f0f4f8" }}>{o.government_entity || "—"}</div>
+            <div style={{ padding: "10px 12px", borderLeft: "1px solid #f0f4f8" }}>
+              <span style={{ fontSize: ".55rem", fontWeight: 700, color: cfg.color, background: cfg.bg, padding: "2px 8px", borderRadius: 20 }}>{cfg.label}</span>
+            </div>
+            <div style={{ padding: "10px 12px", fontSize: ".58rem", color: "#526983" }}>{fmtDate(o.created_at)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SubsTab({ subs }: { subs: any[] }) {
+  if (!subs.length) return <Empty icon={Package} text="لا توجد اشتراكات لهذا العميل" />;
+  return (
+    <div style={{ border: "1px solid #e8edf5", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 120px 100px 100px", background: "#f4f7fb", borderBottom: "1px solid #e8edf5" }}>
+        {["الباقة", "الحالة", "دورة الفوترة", "المبلغ", "البداية"].map((h, i, a) => (
+          <div key={h} style={{ padding: "9px 12px", fontSize: ".55rem", fontWeight: 800, color: "#4a6075", borderLeft: i < a.length - 1 ? "1px solid #e8edf5" : "none" }}>{h}</div>
+        ))}
+      </div>
+      {subs.map((s, i, a) => {
+        const cfg = STATUS_SUB[s.status] || { label: s.status, color: "#526983", bg: "#f3f4f6" };
+        return (
+          <div key={s.id} style={{ display: "grid", gridTemplateColumns: "1fr 110px 120px 100px 100px", borderBottom: i < a.length - 1 ? "1px solid #f0f4f8" : "none" }}>
+            <div style={{ padding: "10px 12px", fontSize: ".65rem", fontWeight: 700, color: "#073766", borderLeft: "1px solid #f0f4f8" }}>{s.packages?.name || s.package_name || "—"}</div>
+            <div style={{ padding: "10px 12px", borderLeft: "1px solid #f0f4f8" }}>
+              <span style={{ fontSize: ".55rem", fontWeight: 700, color: cfg.color, background: cfg.bg, padding: "2px 8px", borderRadius: 20 }}>{cfg.label}</span>
+            </div>
+            <div style={{ padding: "10px 12px", fontSize: ".6rem", color: "#526983", borderLeft: "1px solid #f0f4f8" }}>{s.billing_cycle === "monthly" ? "شهري" : s.billing_cycle === "yearly" ? "سنوي" : s.billing_cycle || "—"}</div>
+            <div style={{ padding: "10px 12px", fontSize: ".65rem", fontWeight: 700, color: "#073766", borderLeft: "1px solid #f0f4f8" }}>{s.amount ? fmtMoney(s.amount) : "—"}</div>
+            <div style={{ padding: "10px 12px", fontSize: ".58rem", color: "#526983" }}>{s.start_date ? fmtDate(s.start_date) : "—"}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function InvoicesTab({ invoices }: { invoices: any[] }) {
+  if (!invoices.length) return <Empty icon={Receipt} text="لا توجد فواتير لهذا العميل" />;
+  const total = invoices.filter(i => i.status === "paid").reduce((a, i) => a + i.total_amount, 0);
+  return (
+    <div>
+      {total > 0 && (
+        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <CheckCircle size={15} color="#15803d" />
+          <span style={{ fontSize: ".68rem", color: "#15803d", fontWeight: 700 }}>إجمالي المدفوع: {fmtMoney(total)} ر.س</span>
+        </div>
+      )}
+      <div style={{ border: "1px solid #e8edf5", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "120px 1fr 110px 120px 100px 50px", background: "#f4f7fb", borderBottom: "1px solid #e8edf5" }}>
+          {["رقم الفاتورة", "الخدمة", "الحالة", "الإجمالي", "التاريخ", ""].map((h, i, a) => (
+            <div key={i} style={{ padding: "9px 12px", fontSize: ".55rem", fontWeight: 800, color: "#4a6075", borderLeft: i < a.length - 1 ? "1px solid #e8edf5" : "none" }}>{h}</div>
+          ))}
+        </div>
+        {invoices.map((inv, i, a) => {
+          const cfg = STATUS_INV[inv.status] || { label: inv.status, color: "#526983", bg: "#f3f4f6" };
+          return (
+            <div key={inv.id} style={{ display: "grid", gridTemplateColumns: "120px 1fr 110px 120px 100px 50px", borderBottom: i < a.length - 1 ? "1px solid #f0f4f8" : "none" }}>
+              <div style={{ padding: "10px 12px", fontSize: ".6rem", fontWeight: 700, color: "#0875dc", fontFamily: "monospace", borderLeft: "1px solid #f0f4f8" }}>{inv.invoice_number}</div>
+              <div style={{ padding: "10px 12px", fontSize: ".63rem", color: "#334155", borderLeft: "1px solid #f0f4f8" }}>{inv.service_name || inv.description}</div>
+              <div style={{ padding: "10px 12px", borderLeft: "1px solid #f0f4f8" }}>
+                <span style={{ fontSize: ".55rem", fontWeight: 700, color: cfg.color, background: cfg.bg, padding: "2px 8px", borderRadius: 20 }}>{cfg.label}</span>
+              </div>
+              <div style={{ padding: "10px 12px", fontSize: ".65rem", fontWeight: 700, color: "#073766", borderLeft: "1px solid #f0f4f8" }}>{fmtMoney(inv.total_amount)}</div>
+              <div style={{ padding: "10px 12px", fontSize: ".58rem", color: "#526983", borderLeft: "1px solid #f0f4f8" }}>{fmtDate(inv.created_at)}</div>
+              <div style={{ padding: "10px 8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener"
+                  style={{ display: "grid", placeItems: "center", width: 24, height: 24, borderRadius: 6, background: "#eaf4ff", color: "#0875dc" }}>
+                  <Eye size={11} />
+                </a>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TicketsTab({ tickets }: { tickets: any[] }) {
+  if (!tickets.length) return <Empty icon={MessageSquare} text="لا توجد تذاكر لهذا العميل" />;
+  return (
+    <div style={{ border: "1px solid #e8edf5", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 100px 100px", background: "#f4f7fb", borderBottom: "1px solid #e8edf5" }}>
+        {["العنوان", "الحالة", "الأولوية", "التاريخ"].map((h, i, a) => (
+          <div key={h} style={{ padding: "9px 12px", fontSize: ".55rem", fontWeight: 800, color: "#4a6075", borderLeft: i < a.length - 1 ? "1px solid #e8edf5" : "none" }}>{h}</div>
+        ))}
+      </div>
+      {tickets.map((t, i, a) => {
+        const cfg = STATUS_TKT[t.status] || { label: t.status, color: "#526983", bg: "#f3f4f6" };
+        const priColor = t.priority === "urgent" ? "#dc2626" : t.priority === "high" ? "#b45309" : "#8b9dad";
+        return (
+          <div key={t.id} style={{ display: "grid", gridTemplateColumns: "1fr 110px 100px 100px", borderBottom: i < a.length - 1 ? "1px solid #f0f4f8" : "none" }}>
+            <div style={{ padding: "10px 12px", borderLeft: "1px solid #f0f4f8" }}>
+              <div style={{ fontSize: ".65rem", fontWeight: 700, color: "#073766" }}>{t.title}</div>
+              <div style={{ fontSize: ".55rem", color: "#a0adb8", marginTop: 2 }}>{t.id.slice(0, 8).toUpperCase()}</div>
+            </div>
+            <div style={{ padding: "10px 12px", borderLeft: "1px solid #f0f4f8" }}>
+              <span style={{ fontSize: ".55rem", fontWeight: 700, color: cfg.color, background: cfg.bg, padding: "2px 8px", borderRadius: 20 }}>{cfg.label}</span>
+            </div>
+            <div style={{ padding: "10px 12px", fontSize: ".6rem", color: priColor, fontWeight: 600, borderLeft: "1px solid #f0f4f8" }}>
+              {t.priority === "urgent" ? "● عاجلة" : t.priority === "high" ? "● مرتفعة" : "● عادية"}
+            </div>
+            <div style={{ padding: "10px 12px", fontSize: ".58rem", color: "#526983" }}>{fmtDate(t.created_at)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DocsTab({ client, docs }: { client: ClientRecord; docs: any[] }) {
+  const hasAny = client.commercial_register_doc || client.company_license_doc || client.national_id_doc || docs.length > 0;
+  if (!hasAny) return <Empty icon={FileText} text="لا توجد مستندات مرفوعة" />;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {[
+        { label: "السجل التجاري", path: client.commercial_register_doc },
+        { label: "رخصة المنشأة", path: client.company_license_doc },
+        { label: "صورة الهوية", path: client.national_id_doc },
+      ].filter(d => d.path).map(d => <DocLink key={d.label} label={d.label} path={d.path!} />)}
+      {docs.map(doc => (
+        <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", border: "1px solid #e8edf5", borderRadius: 10 }}>
+          <FileText size={15} color="#6b7d93" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: ".65rem", fontWeight: 600, color: "#1a2d40" }}>{doc.filename}</div>
+            <div style={{ fontSize: ".55rem", color: "#8b9dad", marginTop: 2 }}>{doc.original_name} · {fmtDate(doc.created_at)}</div>
+          </div>
+          {doc.signedUrl && (
+            <a href={doc.signedUrl} target="_blank" rel="noopener"
+              style={{ display: "grid", placeItems: "center", width: 30, height: 30, borderRadius: 8, background: "#eaf4ff", color: "#0875dc" }}>
+              <Download size={13} />
+            </a>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -640,31 +880,20 @@ function InfoRow({ icon: Icon, label, value }: { icon: any; label: string; value
 function DocLink({ label, path }: { label: string; path: string }) {
   const supabase = createSupabaseBrowserClient();
   const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(true);
-
   useEffect(() => {
-    supabase.storage.from("client-documents").createSignedUrl(path, 3600).then(({ data }) => {
-      if (data) setUrl(data.signedUrl);
-      setLoading(false);
-    });
+    supabase.storage.from("client-documents").createSignedUrl(path, 3600).then(({ data }) => { if (data) setUrl(data.signedUrl); });
   }, [path]);
-
   return (
-    <div style={{ marginBottom: 6 }}>
-      {loading ? (
-        <span style={{ fontSize: ".62rem", color: "#b0bcc9" }}>جاري تحميل الرابط...</span>
-      ) : (
+    <div style={{ padding: "10px 14px", background: "#f8fafc", border: "1px solid #e8edf5", borderRadius: 10, display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+      <FileText size={15} color="#6b7d93" />
+      <span style={{ flex: 1, fontSize: ".65rem", color: "#344d69", fontWeight: 600 }}>{label}</span>
+      {url ? (
         <a href={url} target="_blank" rel="noopener"
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            color: "#0875dc", fontSize: ".65rem", textDecoration: "none",
-            padding: "4px 10px", borderRadius: 6, background: "#eaf4ff",
-            transition: "background .15s",
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = "#dbeafe"}
-          onMouseLeave={e => e.currentTarget.style.background = "#eaf4ff"}>
-          <FileText size={13} /> {label} <ExternalLink size={10} style={{ opacity: .6 }} />
+          style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".6rem", color: "#0875dc", textDecoration: "none", background: "#eaf4ff", padding: "4px 10px", borderRadius: 6 }}>
+          <ExternalLink size={10} /> فتح
         </a>
+      ) : (
+        <span style={{ fontSize: ".58rem", color: "#b0bcc9" }}>جاري...</span>
       )}
     </div>
   );

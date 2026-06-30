@@ -44,17 +44,20 @@ export default function AdminShellClient({ children }: { children: React.ReactNo
   useEffect(() => {
     if (isLoginPage) return;
     function fetchNotifs() {
-      fetch("/api/admin/notifications")
+      fetch("/api/notifications")
         .then(r => r.ok && r.json())
-        .then(d => {
-          if (!d) return;
-          setNotifCount((d.overdue || 0) + (d.today || 0) + (d.newRatings || 0));
-        })
+        .then(d => { if (d) setNotifCount(d.count || 0); })
         .catch(() => {});
     }
     fetchNotifs();
-    const interval = setInterval(fetchNotifs, 30000);
-    return () => clearInterval(interval);
+    // Realtime via Supabase channel
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase
+      .channel("admin-notifs")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, () => fetchNotifs())
+      .subscribe();
+    const interval = setInterval(fetchNotifs, 60000);
+    return () => { clearInterval(interval); void supabase.removeChannel(channel); };
   }, [isLoginPage]);
 
   const handleLogout = useCallback(async () => {

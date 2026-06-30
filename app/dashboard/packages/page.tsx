@@ -1,7 +1,8 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Loader2, CreditCard, Users, CalendarDays, ChevronLeft, Building2, X, ArrowLeftRight, Star } from "lucide-react";
+import { Check, Loader2, CreditCard, Users, X, ArrowLeftRight, CheckCircle } from "lucide-react";
 import Link from "next/link";
 
 type PackageItem = {
@@ -21,311 +22,296 @@ type PackageItem = {
   sort_order: number;
 };
 
-const categoryLabels: Record<string, string> = {
-  services: "باقات الخدمات",
-  legal: "الباقات القانونية",
-  founding: "تأسيس الشركات",
+const cycleLabels: Record<string, string> = {
+  monthly:   "شهري",
+  yearly:    "سنوي",
+  quarterly: "ربع سنوي",
+  "one-time":"مرة واحدة",
 };
 
-const cycleLabels: Record<string, string> = {
-  monthly: "شهري",
-  yearly: "سنوي",
-  quarterly: "ربع سنوي",
-  "one-time": "مرة واحدة",
+const CATEGORY_COLORS: Record<string, { accent: string; light: string; border: string }> = {
+  founding: { accent: "#073766", light: "#f0f7ff", border: "#d1e4f5" },
+  services:  { accent: "#073766", light: "#f0f7ff", border: "#d1e4f5" },
+  legal:     { accent: "#073766", light: "#f0f7ff", border: "#d1e4f5" },
 };
 
 export default function ClientPackagesPage() {
-  const [packages, setPackages] = useState<PackageItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [subscribing, setSubscribing] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState("");
-  const [activeTab, setActiveTab] = useState("all");
+  const [packages, setPackages]           = useState<PackageItem[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState("");
+  const [subscribing, setSubscribing]     = useState<string | null>(null);
+  const [successId, setSuccessId]         = useState<string | null>(null);
+  const [activeTab, setActiveTab]         = useState("all");
   const [employeeCounts, setEmployeeCounts] = useState<Record<string, number>>({});
-  const [compareIds, setCompareIds] = useState<string[]>([]);
-  const [showCompare, setShowCompare] = useState(false);
-
-  function toggleCompare(id: string) {
-    setCompareIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  }
+  const [compareIds, setCompareIds]       = useState<string[]>([]);
+  const [showCompare, setShowCompare]     = useState(false);
 
   useEffect(() => {
     fetch("/api/client/packages")
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.data) setPackages(res.data);
-        else setError(res.error || "فشل تحميل الباقات");
-      })
+      .then(r => r.json())
+      .then(res => { if (res.data) setPackages(res.data); else setError(res.error || "فشل تحميل الباقات"); })
       .catch(() => setError("تعذر الاتصال بالخادم"))
       .finally(() => setLoading(false));
   }, []);
 
   const tabs = [
-    { id: "all", label: "الكل" },
+    { id: "all",      label: "الكل" },
     { id: "founding", label: "تأسيس الشركات" },
     { id: "services", label: "باقات الخدمات" },
-    { id: "legal", label: "الباقات القانونية" },
+    { id: "legal",    label: "الباقات القانونية" },
   ];
 
-  const visiblePackages =
-    activeTab === "all"
-      ? packages
-      : packages.filter((p) => p.category === activeTab);
+  const visible = activeTab === "all" ? packages : packages.filter(p => p.category === activeTab);
+
+  function getPricing(pkg: PackageItem) {
+    const emp      = employeeCounts[pkg.id] || 0;
+    const extra    = Math.max(0, emp - (pkg.max_employees || 0));
+    const extraAmt = extra * (pkg.extra_employee_price || 0);
+    const subtotal = pkg.price + extraAmt;
+    const taxAmt   = Math.round(subtotal * (pkg.tax_percent || 15) / 100 * 100) / 100;
+    return { subtotal, taxAmt, total: subtotal + taxAmt, extraAmt };
+  }
 
   async function subscribe(pkg: PackageItem) {
     setSubscribing(pkg.id);
     setError("");
-    setSuccessMsg("");
     try {
-      const res = await fetch("/api/client/subscriptions", {
+      const res  = await fetch("/api/client/subscriptions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          package_id: pkg.id,
-          employee_count: employeeCounts[pkg.id] || 0,
-        }),
+        body: JSON.stringify({ package_id: pkg.id, employee_count: employeeCounts[pkg.id] || 0 }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setSuccessMsg(`تم الاشتراك في "${pkg.title_ar}" بنجاح!`);
+      setSuccessId(pkg.id);
     } catch (err: any) {
-      setError(err.message || "فشل الاشتراك في الباقة");
+      setError(err.message || "فشل الاشتراك");
     } finally {
       setSubscribing(null);
     }
   }
 
-  function getPriceWithExtras(pkg: PackageItem): {
-    baseLabel: string;
-    extraLabel: string;
-    total: number;
-  } {
-    const empCount = employeeCounts[pkg.id] || 0;
-    const extra = Math.max(0, empCount - (pkg.max_employees || 0));
-    const extraPrice = extra * (pkg.extra_employee_price || 0);
-    const base = pkg.price;
-    const subtotal = base + extraPrice;
-    const tax = Math.round(subtotal * (pkg.tax_percent || 15) / 100 * 100) / 100;
-    const total = subtotal + tax;
-    return {
-      baseLabel: `${base.toLocaleString("ar-SA")} ر.س`,
-      extraLabel: extraPrice > 0 ? `+ ${extraPrice.toLocaleString("ar-SA")} ر.س` : "",
-      total,
-    };
-  }
-
-  if (loading) {
-    return (
-      <div className="dashboard-empty">
-        <Loader2 size={32} className="spin" />
-        <p>جاري تحميل الباقات...</p>
-      </div>
-    );
-  }
+  if (loading) return <PageLoader text="جاري تحميل الباقات..." />;
 
   return (
-    <section className="dashboard-section">
-      <div className="dashboard-heading">
-        <div>
-          <p className="eyebrow">الباقات</p>
-          <h1>اختر الباقة المناسبة لمنشأتك</h1>
-          <span>اشترك في إحدى الباقات الجاهزة وابدأ فوراً</span>
-        </div>
+    <div className="client-dash-page">
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <p style={{ fontSize: ".7rem", color: "#8b9dad", margin: "0 0 4px" }}>لوحة التحكم</p>
+        <h1 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#0b1e36", margin: "0 0 4px" }}>الباقات</h1>
+        <p style={{ fontSize: ".75rem", color: "#8b9dad", margin: 0 }}>اختر الباقة المناسبة لمنشأتك وابدأ فوراً</p>
       </div>
 
-      {successMsg ? (
-        <div className="dashboard-success">
-          <Check size={18} />
-          <span>{successMsg}</span>
-          <Link href="/dashboard/subscriptions" className="dashboard-btn">
+      {/* Success banner */}
+      {successId && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, color: "#15803d", marginBottom: 20 }}>
+          <CheckCircle size={18} />
+          <span style={{ fontSize: ".78rem", fontWeight: 600 }}>تم الاشتراك بنجاح!</span>
+          <Link href="/dashboard/subscriptions" style={{ marginRight: "auto", padding: "6px 14px", background: "#15803d", color: "#fff", borderRadius: 8, textDecoration: "none", fontSize: ".72rem", fontWeight: 700 }}>
             عرض اشتراكاتي
           </Link>
         </div>
-      ) : null}
+      )}
 
-      {error ? (
-        <div className="dashboard-error">
-          <span>{error}</span>
+      {error && (
+        <div style={{ padding: "12px 16px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, color: "#dc2626", marginBottom: 20, fontSize: ".75rem" }}>
+          {error}
         </div>
-      ) : null}
+      )}
 
-      <div className="packages-tabs">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={`package-tab ${activeTab === tab.id ? "active" : ""}`}
-            onClick={() => setActiveTab(tab.id)}
-            type="button"
-          >
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 10, padding: 4, marginBottom: 24, overflowX: "auto", scrollbarWidth: "none" }}>
+        {tabs.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} type="button"
+            style={{ padding: "8px 18px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500, color: activeTab === tab.id ? "#073766" : "#64748b", background: activeTab === tab.id ? "#fff" : "transparent", boxShadow: activeTab === tab.id ? "0 1px 3px rgba(0,0,0,.08)" : "none", cursor: "pointer", font: "inherit", whiteSpace: "nowrap", transition: "all .2s" }}>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {visiblePackages.length === 0 ? (
-        <div className="dashboard-empty">
-          <Building2 size={48} />
-          <p>لا توجد باقات متاحة حالياً</p>
-        </div>
-      ) : (
-        <div className="client-packages-grid">
-          {visiblePackages.map((pkg) => {
-            const pricing = getPriceWithExtras(pkg);
-            return (
-              <article
-                className={`client-package-card ${pkg.is_popular ? "popular" : ""}`}
-                key={pkg.id}
-              >
-                {pkg.is_popular ? (
-                  <div className="popular-badge">الأكثر طلباً</div>
-                ) : null}
-                <label className="pkg-compare-toggle">
-                  <input type="checkbox" checked={compareIds.includes(pkg.id)} onChange={() => toggleCompare(pkg.id)} />
-                  <span>مقارنة</span>
-                </label>
-                <div className="package-header">
-                  <span className="package-tier">{pkg.tier_ar}</span>
-                  <h3>{pkg.title_ar}</h3>
-                  {pkg.description_ar ? <p>{pkg.description_ar}</p> : null}
-                </div>
-
-                <div className="package-pricing">
-                  <strong>{pricing.total.toLocaleString("ar-SA")}</strong>
-                  <small>ر.س / {cycleLabels[pkg.billing_cycle] || pkg.billing_cycle}</small>
-                  {pkg.original_price ? (
-                    <del>{pkg.original_price.toLocaleString("ar-SA")} ر.س</del>
-                  ) : null}
-                </div>
-
-                {pkg.max_employees > 0 || pkg.extra_employee_price > 0 ? (
-                  <div className="package-employees">
-                    <Users size={16} />
-                    <label>
-                      عدد الموظفين
-                      {pkg.max_employees > 0
-                        ? ` (أول ${pkg.max_employees} موظف مشمولون)`
-                        : ""}
-                      <input
-                        type="number"
-                        min={0}
-                        value={employeeCounts[pkg.id] || 0}
-                        onChange={(e) =>
-                          setEmployeeCounts((prev) => ({
-                            ...prev,
-                            [pkg.id]: Math.max(0, parseInt(e.target.value) || 0),
-                          }))
-                        }
-                      />
-                    </label>
-                  </div>
-                ) : null}
-
-                <div className="package-features">
-                  {pkg.features.map((feature, i) => (
-                    <div className="feature-item" key={i}>
-                      <Check size={16} />
-                      <span>{feature}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="package-summary">
-                  <div>
-                    <span>السعر الأساسي</span>
-                    <strong>{pricing.baseLabel}</strong>
-                  </div>
-                  {pricing.extraLabel ? (
-                    <div>
-                      <span>موظفين إضافيين</span>
-                      <strong>{pricing.extraLabel}</strong>
-                    </div>
-                  ) : null}
-                  <div>
-                    <span>ضريبة ({(pkg.tax_percent || 15)}%)</span>
-                    <strong>
-                      {(
-                        Math.round(
-                          ((pkg.price +
-                            Math.max(0, (employeeCounts[pkg.id] || 0) - (pkg.max_employees || 0)) *
-                              (pkg.extra_employee_price || 0)) *
-                            (pkg.tax_percent || 15)) /
-                            100 *
-                            100
-                        ) / 100
-                      ).toLocaleString("ar-SA")}{" "}
-                      ر.س
-                    </strong>
-                  </div>
-                  <div className="total-row">
-                    <span>المجموع</span>
-                    <strong>{pricing.total.toLocaleString("ar-SA")} ر.س</strong>
-                  </div>
-                </div>
-
-                <button
-                  className="client-subscribe-btn"
-                  onClick={() => subscribe(pkg)}
-                  disabled={subscribing === pkg.id}
-                  type="button"
-                >
-                  {subscribing === pkg.id ? (
-                    <Loader2 size={16} className="spin" />
-                  ) : (
-                    <CreditCard size={16} />
-                  )}
-                  {subscribing === pkg.id ? "جاري الاشتراك..." : "اشترك الآن"}
-                </button>
-              </article>
-            );
-          })}
+      {/* Empty */}
+      {visible.length === 0 && (
+        <div style={{ textAlign: "center", padding: "60px 20px", color: "#94a3b8" }}>
+          <p style={{ fontWeight: 700, color: "#526983" }}>لا توجد باقات في هذا التصنيف</p>
         </div>
       )}
 
+      {/* Cards grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
+        {visible.map(pkg => {
+          const pricing = getPricing(pkg);
+          const clr     = CATEGORY_COLORS[pkg.category] ?? { accent: "#073766", light: "#eaf4ff", border: "#bfdbfe" };
+          const isDone  = successId === pkg.id;
+
+          return (
+            <article key={pkg.id} style={{
+              background: "#fff",
+              border: `2px solid ${pkg.is_popular ? "#b45309" : "#e8edf5"}`,
+              borderRadius: 18,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              position: "relative",
+              transition: "box-shadow .2s, border-color .2s",
+              boxShadow: pkg.is_popular ? "0 4px 24px rgba(180,83,9,.12)" : "none",
+            }}
+              onMouseEnter={e => { if (!pkg.is_popular) { e.currentTarget.style.borderColor = "#c8d8eb"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(7,55,102,.07)"; } }}
+              onMouseLeave={e => { if (!pkg.is_popular) { e.currentTarget.style.borderColor = "#e8edf5"; e.currentTarget.style.boxShadow = "none"; } }}>
+
+              {/* Popular ribbon */}
+              {pkg.is_popular && (
+                <div style={{ background: "linear-gradient(90deg, #92400e, #b45309)", color: "#fef3c7", fontSize: 11, fontWeight: 700, textAlign: "center", padding: "5px 0", letterSpacing: .5 }}>
+                  ★ الأكثر طلباً
+                </div>
+              )}
+
+              {/* Card top */}
+              <div style={{ padding: "16px 18px 14px", borderBottom: "1px solid #f0f4f8" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#073766", background: "#eaf1fb", border: "1px solid #c8daf0", borderRadius: 20, padding: "2px 9px" }}>
+                    {pkg.tier_ar}
+                  </span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontSize: 11, color: compareIds.includes(pkg.id) ? "#073766" : "#94a3b8", fontWeight: 600, userSelect: "none" }}>
+                    <input type="checkbox" checked={compareIds.includes(pkg.id)}
+                      onChange={() => setCompareIds(prev => prev.includes(pkg.id) ? prev.filter(x => x !== pkg.id) : [...prev, pkg.id])}
+                      style={{ width: 13, height: 13, cursor: "pointer", accentColor: "#073766" }} />
+                    مقارنة
+                  </label>
+                </div>
+
+                <h3 style={{ fontSize: ".88rem", fontWeight: 800, color: "#0b1e36", margin: "0 0 4px", lineHeight: 1.3 }}>{pkg.title_ar}</h3>
+                {pkg.description_ar && (
+                  <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 12px", lineHeight: 1.5 }}>{pkg.description_ar}</p>
+                )}
+
+                {/* Price */}
+                <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 24, fontWeight: 900, color: "#073766", lineHeight: 1 }}>
+                    {pricing.total.toLocaleString("ar-SA")}
+                  </span>
+                  <span style={{ fontSize: 12, color: "#94a3b8" }}>ر.س / {cycleLabels[pkg.billing_cycle] || pkg.billing_cycle}</span>
+                  {pkg.original_price && (
+                    <del style={{ fontSize: 12, color: "#ef4444" }}>{pkg.original_price.toLocaleString("ar-SA")} ر.س</del>
+                  )}
+                </div>
+              </div>
+
+              {/* Features */}
+              <div style={{ padding: "14px 18px", flex: 1 }}>
+                {pkg.max_employees > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12, padding: "8px 10px", background: "#f8fafc", borderRadius: 8 }}>
+                    <Users size={13} color="#64748b" />
+                    <label style={{ fontSize: 12, color: "#475569", display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                      <span>أول {pkg.max_employees} موظف مشمولون</span>
+                      <input type="number" min={0} value={employeeCounts[pkg.id] || 0}
+                        onChange={e => setEmployeeCounts(prev => ({ ...prev, [pkg.id]: Math.max(0, parseInt(e.target.value) || 0) }))}
+                        style={{ width: 52, padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, textAlign: "center", marginRight: "auto" }} />
+                    </label>
+                  </div>
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {pkg.features.map((f, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      <Check size={12} color="#073766" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <span style={{ fontSize: 12, color: "#334155", lineHeight: 1.5 }}>{f}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Breakdown + CTA */}
+              <div style={{ padding: "12px 18px 16px", borderTop: "1px solid #f0f4f8" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8" }}>
+                    <span>السعر الأساسي</span><span>{pkg.price.toLocaleString("ar-SA")} ر.س</span>
+                  </div>
+                  {pricing.extraAmt > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8" }}>
+                      <span>موظفون إضافيون</span><span>+ {pricing.extraAmt.toLocaleString("ar-SA")} ر.س</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8" }}>
+                    <span>ضريبة ({pkg.tax_percent || 15}%)</span><span>{pricing.taxAmt.toLocaleString("ar-SA")} ر.س</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 800, color: "#073766", borderTop: "1px dashed #e5eaf0", paddingTop: 5, marginTop: 2 }}>
+                    <span>المجموع</span><span>{pricing.total.toLocaleString("ar-SA")} ر.س</span>
+                  </div>
+                </div>
+
+                {isDone ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 9, color: "#15803d", fontSize: 13, fontWeight: 700 }}>
+                    <CheckCircle size={15} /> تم الاشتراك
+                  </div>
+                ) : (
+                  <button onClick={() => subscribe(pkg)} disabled={!!subscribing} type="button"
+                    style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px", background: subscribing === pkg.id ? "#8b9dad" : "#073766", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: subscribing ? "not-allowed" : "pointer", font: "inherit", transition: "background .2s" }}>
+                    {subscribing === pkg.id ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <CreditCard size={14} />}
+                    {subscribing === pkg.id ? "جاري الاشتراك..." : "اشترك الآن"}
+                  </button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
       {/* Compare bar */}
       {compareIds.length >= 2 && (
-        <div className="pkg-compare-bar">
-          <span>{compareIds.length} باقة محددة</span>
-          <button onClick={() => setShowCompare(true)}>
+        <div style={{ position: "fixed", bottom: 0, right: 0, left: 0, background: "#073766", color: "#fff", display: "flex", alignItems: "center", gap: 10, padding: "12px 24px", zIndex: 500, direction: "rtl" }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>{compareIds.length} باقات محددة</span>
+          <button onClick={() => setShowCompare(true)}
+            style={{ border: 0, borderRadius: 8, padding: "8px 16px", font: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, background: "#0875dc", color: "#fff" }}>
             <ArrowLeftRight size={14} /> مقارنة
           </button>
-          <button className="clear" onClick={() => setCompareIds([])}>إلغاء</button>
+          <button onClick={() => setCompareIds([])}
+            style={{ border: 0, background: "transparent", color: "rgba(255,255,255,.7)", font: "inherit", fontSize: 13, cursor: "pointer", padding: "8px 12px" }}>
+            إلغاء
+          </button>
         </div>
       )}
 
       {/* Compare modal */}
       {showCompare && (
-        <div className="pkg-compare-overlay" onClick={() => setShowCompare(false)}>
-          <div className="pkg-compare-modal" onClick={e => e.stopPropagation()}>
-            <div className="pkg-compare-header">
-              <h3>مقارنة الباقات</h3>
-              <button onClick={() => setShowCompare(false)}><X size={18} /></button>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, direction: "rtl" }}
+          onClick={() => setShowCompare(false)}>
+          <div style={{ background: "#fff", borderRadius: 18, width: "min(900px,100%)", maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,.15)" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 22px", borderBottom: "1px solid #e5ecf3" }}>
+              <h3 style={{ margin: 0, fontSize: ".9rem", color: "#073766" }}>مقارنة الباقات</h3>
+              <button onClick={() => setShowCompare(false)} style={{ border: 0, background: "#f5f8fc", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", color: "#526983" }}><X size={18} /></button>
             </div>
-            <div className="pkg-compare-table-wrap">
-              <table className="pkg-compare-table">
+            <div style={{ overflow: "auto", padding: "0 4px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr>
-                    <th>الميزة</th>
-                    {compareIds.map(id => { const p = packages.find(x => x.id === id); return <th key={id}>{p?.title_ar || ""}</th>; })}
+                    <th style={{ padding: "12px 14px", textAlign: "right", fontWeight: 700, color: "#425c76", background: "#fafbfc", borderBottom: "2px solid #e5ecf3", minWidth: 120 }}>الميزة</th>
+                    {compareIds.map(id => { const p = packages.find(x => x.id === id); return <th key={id} style={{ padding: "12px 14px", textAlign: "center", fontWeight: 800, color: "#073766", background: "#f8fafc", borderBottom: "2px solid #e5ecf3", whiteSpace: "nowrap" }}>{p?.title_ar}</th>; })}
                   </tr>
                 </thead>
                 <tbody>
-                  <tr><td>السعر</td>
-                    {compareIds.map(id => { const p = packages.find(x => x.id === id); return <td key={id}>{p?.price?.toLocaleString("ar-SA")} ر.س/{cycleLabels[p?.billing_cycle || ""] || ""}</td>; })}
-                  </tr>
-                  <tr><td>عدد الموظفين الأساسي</td>
-                    {compareIds.map(id => { const p = packages.find(x => x.id === id); return <td key={id}>{p?.max_employees || 0}</td>; })}
-                  </tr>
-                  <tr><td>سعر الموظف الإضافي</td>
-                    {compareIds.map(id => { const p = packages.find(x => x.id === id); return <td key={id}>{p?.extra_employee_price ? `${p.extra_employee_price} ر.س` : "—"}</td>; })}
-                  </tr>
-                  <tr><td>دورة الفوترة</td>
-                    {compareIds.map(id => { const p = packages.find(x => x.id === id); return <td key={id}>{cycleLabels[p?.billing_cycle || ""] || "—"}</td>; })}
-                  </tr>
-                  <tr><td>المميزات</td>
+                  {[
+                    { label: "السعر", render: (p: PackageItem) => `${p.price.toLocaleString("ar-SA")} ر.س / ${cycleLabels[p.billing_cycle] || ""}` },
+                    { label: "الموظفون الأساسيون", render: (p: PackageItem) => p.max_employees || 0 },
+                    { label: "سعر الموظف الإضافي", render: (p: PackageItem) => p.extra_employee_price ? `${p.extra_employee_price} ر.س` : "—" },
+                    { label: "دورة الفوترة", render: (p: PackageItem) => cycleLabels[p.billing_cycle] || "—" },
+                  ].map(row => (
+                    <tr key={row.label}>
+                      <td style={{ padding: "10px 14px", fontWeight: 700, color: "#425c76", background: "#fafbfc", borderBottom: "1px solid #eef2f6" }}>{row.label}</td>
+                      {compareIds.map(id => { const p = packages.find(x => x.id === id); return <td key={id} style={{ padding: "10px 14px", textAlign: "center", borderBottom: "1px solid #eef2f6", color: "#1a2d40" }}>{p ? row.render(p) : "—"}</td>; })}
+                    </tr>
+                  ))}
+                  <tr>
+                    <td style={{ padding: "10px 14px", fontWeight: 700, color: "#425c76", background: "#fafbfc", verticalAlign: "top" }}>المميزات</td>
                     {compareIds.map(id => { const p = packages.find(x => x.id === id); return (
-                      <td key={id}><ul className="pkg-compare-features">
-                        {(p?.features || []).map((f, i) => <li key={i}><Check size={12} /> {f}</li>)}
-                      </ul></td>
+                      <td key={id} style={{ padding: "10px 14px", verticalAlign: "top" }}>
+                        <ul style={{ listStyle: "none", margin: 0, padding: 0, textAlign: "right" }}>
+                          {(p?.features || []).map((f, i) => (
+                            <li key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", fontSize: 12, color: "#1a2d40" }}>
+                              <Check size={11} color="#15803d" /> {f}
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
                     ); })}
                   </tr>
                 </tbody>
@@ -335,267 +321,7 @@ export default function ClientPackagesPage() {
         </div>
       )}
 
-      <style>{`
-        .client-packages-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-          gap: 24px;
-          margin-top: 24px;
-        }
-        .client-package-card {
-          background: #fff;
-          border-radius: 12px;
-          border: 1px solid #e5ecf3;
-          padding: 24px;
-          position: relative;
-          transition: box-shadow .2s;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-        .client-package-card:hover {
-          box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-        }
-        .client-package-card.popular {
-          border-color: #0875dc;
-          border-width: 2px;
-        }
-        .popular-badge {
-          position: absolute;
-          top: -12px;
-          left: 24px;
-          background: #0875dc;
-          color: #fff;
-          font-size: 12px;
-          font-weight: 600;
-          padding: 4px 14px;
-          border-radius: 20px;
-        }
-        .package-header .package-tier {
-          font-size: 12px;
-          color: #0875dc;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: .5px;
-        }
-        .package-header h3 {
-          font-size: 18px;
-          margin: 4px 0;
-          color: #073766;
-        }
-        .package-header p {
-          font-size: 13px;
-          color: #64748b;
-          line-height: 1.6;
-        }
-        .package-pricing {
-          background: #f8fafc;
-          border-radius: 8px;
-          padding: 12px 16px;
-          display: flex;
-          align-items: baseline;
-          gap: 6px;
-          flex-wrap: wrap;
-        }
-        .package-pricing strong {
-          font-size: 24px;
-          color: #073766;
-        }
-        .package-pricing small {
-          font-size: 13px;
-          color: #64748b;
-        }
-        .package-pricing del {
-          font-size: 13px;
-          color: #ef4444;
-          margin-right: auto;
-        }
-        .package-employees {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .package-employees label {
-          font-size: 13px;
-          color: #475569;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex: 1;
-        }
-        .package-employees input {
-          width: 80px;
-          padding: 6px 10px;
-          border: 1px solid #e2e8f0;
-          border-radius: 6px;
-          font-size: 14px;
-          text-align: center;
-        }
-        .package-features {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        .feature-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 13px;
-          color: #334155;
-        }
-        .feature-item svg { color: #15803d; flex-shrink: 0; }
-        .package-summary {
-          border-top: 1px solid #e5ecf3;
-          padding-top: 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-        .package-summary > div {
-          display: flex;
-          justify-content: space-between;
-          font-size: 13px;
-        }
-        .package-summary > div span { color: #64748b; }
-        .package-summary > div strong { color: #334155; }
-        .package-summary .total-row {
-          border-top: 1px dashed #e5ecf3;
-          padding-top: 6px;
-          margin-top: 4px;
-        }
-        .package-summary .total-row span { font-weight: 600; color: #073766; }
-        .package-summary .total-row strong { font-size: 16px; color: #073766; }
-        .client-subscribe-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 12px;
-          background: #073766;
-          color: #fff;
-          border: none;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background .2s;
-          margin-top: auto;
-        }
-        .client-subscribe-btn:hover { background: #0a4a8a; }
-        .client-subscribe-btn:disabled { opacity: .6; cursor: not-allowed; }
-        .packages-tabs {
-          display: flex;
-          gap: 4px;
-          background: #f1f5f9;
-          border-radius: 10px;
-          padding: 4px;
-          margin-top: 16px;
-        }
-        .package-tab {
-          padding: 8px 18px;
-          border: none;
-          background: transparent;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 500;
-          color: #64748b;
-          cursor: pointer;
-          transition: all .2s;
-        }
-        .package-tab.active {
-          background: #fff;
-          color: #073766;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-        .dashboard-section {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 24px;
-        }
-        .dashboard-heading {
-          margin-bottom: 8px;
-        }
-        .dashboard-heading .eyebrow {
-          font-size: 12px;
-          color: #0875dc;
-          font-weight: 600;
-          margin: 0;
-        }
-        .dashboard-heading h1 {
-          font-size: 22px;
-          color: #073766;
-          margin: 4px 0;
-        }
-        .dashboard-heading span {
-          font-size: 14px;
-          color: #64748b;
-        }
-        .dashboard-empty {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 60px 20px;
-          color: #94a3b8;
-          gap: 12px;
-        }
-        .dashboard-success {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 14px 18px;
-          background: #f0fdf4;
-          border: 1px solid #bbf7d0;
-          border-radius: 8px;
-          color: #15803d;
-          margin-top: 16px;
-        }
-        .dashboard-success .dashboard-btn {
-          margin-right: auto;
-          padding: 6px 14px;
-          background: #15803d;
-          color: #fff;
-          border-radius: 6px;
-          text-decoration: none;
-          font-size: 13px;
-        }
-        .dashboard-error {
-          padding: 12px 16px;
-          background: #fef2f2;
-          border: 1px solid #fecaca;
-          border-radius: 8px;
-          color: #dc2626;
-          margin-top: 16px;
-          font-size: 13px;
-        }
-        .spin { animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .pkg-compare-toggle { display: flex; align-items: center; gap: 4px; padding: 4px 10px; margin: 0 16px 0 0; cursor: pointer; font-size: .6rem; color: #8b9dad; font-weight: 600; border-radius: 6px; transition: all .15s; user-select: none; }
-        .pkg-compare-toggle:hover { background: #f0f4f8; }
-        .pkg-compare-toggle input { width: 14px; height: 14px; cursor: pointer; accent-color: #0875dc; }
-        .pkg-compare-toggle:has(input:checked) { color: #0875dc; background: #eaf4ff; }
-
-        .pkg-compare-bar { position: fixed; bottom: 0; right: 0; left: 0; background: #073766; color: #fff; display: flex; align-items: center; gap: 10px; padding: 12px 24px; z-index: 500; font-size: .72rem; direction: rtl; }
-        .pkg-compare-bar span { font-weight: 700; }
-        .pkg-compare-bar button { border: 0; border-radius: 8px; padding: 8px 16px; font: inherit; font-size: .68rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; background: #0875dc; color: #fff; }
-        .pkg-compare-bar button.clear { background: transparent; color: rgba(255,255,255,.7); padding: 8px 12px; }
-
-        .pkg-compare-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 999; display: flex; align-items: center; justify-content: center; padding: 20px; direction: rtl; }
-        .pkg-compare-modal { background: #fff; border-radius: 18px; width: min(900px,100%); max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,.15); }
-        .pkg-compare-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid #e5ecf3; }
-        .pkg-compare-header h3 { margin: 0; font-size: .9rem; color: #073766; }
-        .pkg-compare-header button { border: 0; background: #f5f8fc; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; display: grid; place-items: center; color: #526983; }
-        .pkg-compare-table-wrap { overflow: auto; padding: 0 4px; }
-        .pkg-compare-table { width: 100%; border-collapse: collapse; font-size: .7rem; }
-        .pkg-compare-table th { padding: 12px 14px; text-align: center; font-weight: 800; color: #073766; background: #f8fafc; border-bottom: 2px solid #e5ecf3; white-space: nowrap; }
-        .pkg-compare-table th:first-child { text-align: right; background: transparent; min-width: 120px; }
-        .pkg-compare-table td { padding: 10px 14px; text-align: center; color: #1a2d40; border-bottom: 1px solid #eef2f6; }
-        .pkg-compare-table td:first-child { text-align: right; font-weight: 700; color: #425c76; background: #fafbfc; }
-        .pkg-compare-features { list-style: none; margin: 0; padding: 0; text-align: right; }
-        .pkg-compare-features li { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: .65rem; color: #1a2d40; }
-        .pkg-compare-features li svg { color: #15803d; flex-shrink: 0; }
-      `}</style>
-    </section>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
   );
 }

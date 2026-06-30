@@ -1,3 +1,4 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
@@ -27,7 +28,7 @@ const CAT_COLORS: Record<string, { bg: string; color: string; dot: string }> = {
   "السجل التجاري":   { bg: "#eff6ff", color: "#1d4ed8", dot: "#3b82f6" },
   "تأسيس الشركات":  { bg: "#f0fdf4", color: "#15803d", dot: "#22c55e" },
   "الزكاة والضريبة": { bg: "#fff7ed", color: "#c2410c", dot: "#f97316" },
-  "الملكية الفكرية": { bg: "#fdf4ff", color: "#7e22ce", dot: "#a855f7" },
+  "الملكية الفكرية": { bg: "#f0f7ff", color: "#073766", dot: "#0875dc" },
   "الموارد البشرية":  { bg: "#fff1f2", color: "#be123c", dot: "#f43f5e" },
   "التراخيص":        { bg: "#f0fdfa", color: "#0f766e", dot: "#14b8a6" },
   "الاستثمار":       { bg: "#fefce8", color: "#a16207", dot: "#eab308" },
@@ -204,16 +205,12 @@ export default function AdminServicesPage() {
     else toast("تعذر الحذف");
   }
 
-  if (loading) return (
-    <div style={{ display: "grid", placeItems: "center", height: "calc(100vh - 76px)" }}>
-      <div style={{ width: 28, height: 28, border: "3px solid #e5ecf3", borderTopColor: "#073766", borderRadius: "50%", animation: "spin .6s linear infinite" }} />
-    </div>
-  );
+  if (loading) return <PageLoader text="جاري تحميل الخدمات..." />;
 
   return (
     <>
       <style>{`
-        .svc-page{width:min(1400px,calc(100% - 48px));margin:auto;padding:32px 0 60px;direction:rtl}
+        .svc-page{width:100%;padding:32px 24px 60px;direction:rtl}
         .svc-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:14px}
         .svc-head-left p{margin:0 0 3px;color:#168d80;font-size:.67rem;font-weight:900}
         .svc-head-left h1{font-size:1.6rem;margin:0 0 5px;color:#073766}
@@ -233,7 +230,7 @@ export default function AdminServicesPage() {
         .svc-search input{width:100%;height:40px;border:1.5px solid #e5eaf0;border-radius:10px;padding:0 38px 0 14px;font:inherit;font-size:.72rem;color:#344d69;background:#fff;box-sizing:border-box;outline:none}
         .svc-search input:focus{border-color:#073766}
         .svc-cats{display:flex;gap:6px;flex-wrap:wrap}
-        .svc-cat-btn{padding:7px 14px;border-radius:20px;border:1.5px solid #e5eaf0;font:inherit;font-size:.62rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;background:#fff;color:#526983}
+        .svc-cat-btn{padding:5px 13px;border-radius:18px;border:1.5px solid #e5eaf0;font:inherit;font-size:.63rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;background:#fff;color:#526983}
         .svc-cat-btn.active{border-color:#073766;background:#073766;color:#fff}
         .svc-view-toggle{display:flex;border:1.5px solid #e5eaf0;border-radius:10px;overflow:hidden}
         .svc-view-btn{width:38px;height:38px;border:0;background:#fff;color:#8b9dad;cursor:pointer;display:grid;place-items:center;transition:all .15s}
@@ -244,7 +241,7 @@ export default function AdminServicesPage() {
         .svc-group-icon{font-size:1.2rem}
         .svc-group-name{font-size:.88rem;font-weight:800;color:#0b1e36}
         .svc-group-count{font-size:.58rem;font-weight:800;padding:3px 10px;border-radius:20px;background:#f0f4f8;color:#6b829b}
-        .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+        .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(220px,calc((100% - 50px) / 6)),1fr));gap:10px}
         .svc-card{background:#fff;border:1.5px solid #e5eaf0;border-radius:10px;overflow:hidden;transition:all .2s;position:relative;display:flex;flex-direction:column}
         .svc-card:hover{box-shadow:0 4px 16px rgba(7,55,102,.08);transform:translateY(-1px);border-color:#c7d8f0}
         .svc-card.inactive{opacity:.6}

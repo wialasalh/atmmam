@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { readTickets, saveTicket, Ticket, TicketStatus } from "@/lib/tickets";
 import { AlertCircle, CheckCircle } from "lucide-react";
+import { formatAppDateTime } from "@/lib/date-format";
 
 const workflowStatuses: TicketStatus[] = ["جديدة", "قيد المراجعة", "بانتظار العميل", "تم الحل", "مغلقة"];
 
@@ -67,7 +68,7 @@ export function AdminTicketList() {
             <p>نوع الطلب: {ticket.type}</p>
             {ticket.priority ? <p>الأولوية: {ticket.priority}</p> : null}
             {ticket.requesterName ? <p>العميل: {ticket.requesterName}</p> : null}
-            {ticket.updatedAt ? <p>آخر تحديث: {new Date(ticket.updatedAt).toLocaleString("ar-SA")}</p> : null}
+            {ticket.updatedAt ? <p>آخر تحديث: {formatAppDateTime(ticket.updatedAt)}</p> : null}
             <div className="ticket-status-actions" aria-label={`تغيير حالة ${ticket.title}`}>
               {workflowStatuses.map((status) => (
                 <button

@@ -160,7 +160,7 @@ export async function POST(request: Request) {
   if (error || !user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
   const body = await request.json();
-  const { title, description, category, priority, client_id, type } = body;
+  const { title, description, category, priority, client_id, type, consultation_method, consultation_phone, consultation_scheduled_at } = body;
 
   if (!title?.trim() || !description?.trim()) {
     return NextResponse.json({ error: "العنوان والوصف مطلوبان" }, { status: 400 });
@@ -240,27 +240,48 @@ export async function POST(request: Request) {
     assignedTo = await smartAssign(serviceClient, category);
   }
 
-  const { data: ticket, error: insertError } = await supabase
-    .from("tickets")
-    .insert({
-      user_id: user.id,
-      client_id: resolvedClientId,
-      title: title.trim(),
-      body: description.trim(),
-      description: description.trim(),
-      category: category || "استفسار",
-      priority: priority || "عادية",
-      status: "جديدة",
-      assigned_to: assignedTo,
-      assigned_at: assignedTo ? new Date().toISOString() : null,
-      sla_due_at: slaDueAt,
-      source: "web",
-      type: type || "ticket",
-    })
-    .select()
-    .single();
+  const baseInsert = {
+    user_id: user.id,
+    client_id: resolvedClientId,
+    title: title.trim(),
+    body: description.trim(),
+    description: description.trim(),
+    category: category || "استفسار",
+    priority: priority || "عادية",
+    status: "جديدة",
+    assigned_to: assignedTo,
+    assigned_at: assignedTo ? new Date().toISOString() : null,
+    sla_due_at: slaDueAt,
+    source: "web",
+    type: type || "ticket",
+  };
 
-  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
+  // Try inserting with consultation columns first; fall back without them if migration not yet applied
+  let ticket: Record<string, unknown> | null = null;
+  let insertError: { message: string; code?: string } | null = null;
+
+  if (type === "consultation") {
+    const res = await supabase.from("tickets").insert({
+      ...baseInsert,
+      consultation_method: consultation_method || null,
+      consultation_phone: consultation_phone || null,
+      consultation_scheduled_at: consultation_scheduled_at || null,
+    }).select().single();
+    ticket = res.data;
+    insertError = res.error;
+    // If migration not applied yet (column missing), retry without consultation columns
+    if (insertError && (insertError.code === "PGRST204" || insertError.message?.includes("consultation_method") || insertError.message?.includes("schema cache"))) {
+      const fallback = await supabase.from("tickets").insert(baseInsert).select().single();
+      ticket = fallback.data;
+      insertError = fallback.error;
+    }
+  } else {
+    const res = await supabase.from("tickets").insert(baseInsert).select().single();
+    ticket = res.data;
+    insertError = res.error;
+  }
+
+  if (insertError || !ticket) return NextResponse.json({ error: insertError?.message || "فشل إنشاء التذكرة" }, { status: 500 });
 
   // Log status history
   if (serviceClient) {

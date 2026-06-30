@@ -2,14 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Settings, ChevronDown, Bell, LayoutDashboard, ClipboardList, Users, Ticket, RefreshCw, Package, FileText, BarChart3, UserCog, CreditCard, CircleDollarSign } from "lucide-react";
+import { LogOut, Settings, ChevronDown, Bell, LayoutDashboard, ClipboardList, Users, Ticket, RefreshCw, Package, FileText, BarChart3, UserCog, CreditCard, CircleDollarSign, Building2, MessageCircle, Star, ShoppingBag, AlertCircle, CheckCheck, CalendarClock, Receipt } from "lucide-react";
 
-type Section = "dashboard" | "orders" | "clients" | "tickets" | "followups" | "services" | "packages" | "subscriptions" | "content" | "reports" | "team";
+type Section = "dashboard" | "orders" | "clients" | "tickets" | "consultations" | "followups" | "services" | "packages" | "subscriptions" | "invoices" | "content" | "reports" | "team";
 
 const roleLinks: Record<string, Section[]> = {
-  admin: ["dashboard", "orders", "clients", "tickets", "followups", "services", "packages", "subscriptions", "content", "reports", "team"],
-  manager: ["dashboard", "orders", "clients", "tickets", "followups", "services", "packages", "subscriptions", "content", "reports"],
-  operator: ["dashboard", "orders", "tickets", "followups", "clients"],
+  admin: ["dashboard", "orders", "clients", "tickets", "consultations", "followups", "services", "packages", "subscriptions", "invoices", "content", "reports", "team"],
+  manager: ["dashboard", "orders", "clients", "tickets", "consultations", "followups", "services", "packages", "subscriptions", "invoices", "content", "reports"],
+  operator: ["dashboard", "orders", "tickets", "consultations", "followups", "clients", "invoices"],
   viewer: ["dashboard", "reports"],
 };
 
@@ -26,7 +26,15 @@ const groups: { title: string; items: { key: Section; label: string; icon: React
     title: "المتابعة",
     items: [
       { key: "tickets", label: "التذاكر", icon: <Ticket size={18} /> },
+      { key: "consultations", label: "الاستشارات", icon: <CalendarClock size={18} /> },
       { key: "followups", label: "المتابعات", icon: <RefreshCw size={18} /> },
+    ],
+  },
+  {
+    title: "المالية",
+    items: [
+      { key: "subscriptions", label: "الاشتراكات", icon: <CircleDollarSign size={18} /> },
+      { key: "invoices", label: "الفواتير", icon: <Receipt size={18} /> },
     ],
   },
   {
@@ -34,7 +42,6 @@ const groups: { title: string; items: { key: Section; label: string; icon: React
     items: [
       { key: "services", label: "الخدمات والباقات", icon: <Package size={18} /> },
       { key: "packages", label: "الباقات", icon: <CreditCard size={18} /> },
-      { key: "subscriptions", label: "الاشتراكات", icon: <CircleDollarSign size={18} /> },
       { key: "content", label: "المحتوى", icon: <FileText size={18} /> },
       { key: "reports", label: "التقارير", icon: <BarChart3 size={18} /> },
       { key: "team", label: "الفريق", icon: <UserCog size={18} /> },
@@ -47,10 +54,12 @@ const SECTION_PERMISSION: Record<Section, string> = {
   orders: "view_orders",
   clients: "view_clients",
   tickets: "view_tickets",
+  consultations: "view_consultations",
   followups: "manage_followups",
   services: "manage_services",
   packages: "manage_services",
   subscriptions: "manage_services",
+  invoices: "manage_services",
   content: "manage_content",
   reports: "view_reports",
   team: "manage_team",
@@ -73,7 +82,8 @@ export default function AdminSidebar({ role: propRole, name, email, avatarUrl, n
   const [collapsed, setCollapsed] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [urgentTasks, setUrgentTasks] = useState<{ id: string; title: string; client: string; isLate: boolean }[]>([]);
+  const [notifs, setNotifs] = useState<{ id: string; type: string; title: string; body: string; link: string; is_read: boolean; created_at: string }[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
   const userRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -88,12 +98,52 @@ export default function AdminSidebar({ role: propRole, name, email, avatarUrl, n
 
   function toggleNotif() {
     if (!notifOpen) {
-      fetch("/api/admin/notifications")
+      setNotifLoading(true);
+      fetch("/api/notifications")
         .then(r => r.ok && r.json())
-        .then(d => { if (d) setUrgentTasks(d.urgent || []); })
-        .catch(() => {});
+        .then(d => { if (d) setNotifs(d.notifications || []); })
+        .catch(() => {})
+        .finally(() => setNotifLoading(false));
     }
     setNotifOpen(!notifOpen);
+  }
+
+  function markAllRead() {
+    fetch("/api/notifications", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({}) })
+      .then(() => setNotifs(prev => prev.map(n => ({ ...n, is_read: true }))))
+      .catch(() => {});
+  }
+
+  function markOneRead(id: string) {
+    fetch("/api/notifications", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) })
+      .then(() => setNotifs(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n)))
+      .catch(() => {});
+  }
+
+  function notifIcon(type: string) {
+    if (type === "ticket_reply" || type === "ticket_client_message") return <MessageCircle size={13} />;
+    if (type === "ticket_new") return <Ticket size={13} />;
+    if (type === "rating") return <Star size={13} />;
+    if (type === "order_status") return <ShoppingBag size={13} />;
+    return <AlertCircle size={13} />;
+  }
+
+  function notifColor(type: string) {
+    if (type === "ticket_reply" || type === "ticket_client_message") return { bg: "#eaf4ff", color: "#0875dc" };
+    if (type === "ticket_new") return { bg: "#f0fdf4", color: "#16a34a" };
+    if (type === "rating") return { bg: "#fefce8", color: "#ca8a04" };
+    if (type === "order_status") return { bg: "#f0f4ff", color: "#6366f1" };
+    return { bg: "#fef2f2", color: "#dc2626" };
+  }
+
+  function relativeTime(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "الآن";
+    if (m < 60) return `منذ ${m} د`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `منذ ${h} س`;
+    return `منذ ${Math.floor(h / 24)} ي`;
   }
 
   const currentRole = propRole || "";
@@ -115,7 +165,13 @@ export default function AdminSidebar({ role: propRole, name, email, avatarUrl, n
           <nav className="adm-nav">
             {groups.map((group) => {
               const allowedSections = permissions && permissions.length > 0
-                ? (Object.keys(SECTION_PERMISSION) as Section[]).filter(s => permissions.includes(SECTION_PERMISSION[s]))
+                ? (Object.keys(SECTION_PERMISSION) as Section[]).filter(s => {
+                    const perm = SECTION_PERMISSION[s];
+                    if (perm === "view_consultations") {
+                      return permissions.includes("view_consultations") || permissions.includes("view_consultations_assigned");
+                    }
+                    return permissions.includes(perm);
+                  })
                 : (roleLinks[currentRole] || []);
               const visible = group.items.filter((item) => allowedSections.includes(item.key));
               if (!visible.length) return null;
@@ -150,22 +206,52 @@ export default function AdminSidebar({ role: propRole, name, email, avatarUrl, n
                 <span className="adm-top-name">{name || "admin"}</span>
                 <ChevronDown size={12} style={{ opacity: 0.5, transform: userOpen ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />
               </div>
+              <a href="/" className="adm-topbar-icon-btn" title="العودة للموقع">
+                <Building2 size={15} />
+              </a>
+              <button className="adm-topbar-icon-btn adm-topbar-icon-btn--danger" onClick={onLogout} title="تسجيل خروج">
+                <LogOut size={15} />
+              </button>
               <div className="adm-notif-wrap" ref={notifRef} style={{ cursor: "pointer", position: "relative" }}>
                 <Bell size={16} onClick={toggleNotif} />
                 {notifCount > 0 && <span className="adm-notif-badge">{notifCount > 9 ? "9+" : notifCount}</span>}
                 {notifOpen && (
                   <div className="adm-notif-dropdown">
-                    {urgentTasks.length === 0 ? (
-                      <div className="adm-notif-empty">لا توجد تنبيهات</div>
+                    <div className="adm-notif-header">
+                      <span>الإشعارات</span>
+                      {notifs.some(n => !n.is_read) && (
+                        <button className="adm-notif-mark-all" onClick={markAllRead}>
+                          <CheckCheck size={11} /> تحديد كمقروء
+                        </button>
+                      )}
+                    </div>
+                    {notifLoading ? (
+                      <div className="adm-notif-empty">جاري التحميل...</div>
+                    ) : notifs.length === 0 ? (
+                      <div className="adm-notif-empty">لا توجد إشعارات</div>
                     ) : (
-                      urgentTasks.map(t => (
-                        <a key={t.id} href={`/admin/followups?id=${t.id}`} className="adm-notif-item" onClick={() => setNotifOpen(false)}>
-                          <div className="adm-notif-item-title">{t.title}</div>
-                          <div className="adm-notif-item-client">{t.client}</div>
-                        </a>
-                      ))
+                      <div className="adm-notif-list">
+                        {notifs.map(n => {
+                          const { bg, color } = notifColor(n.type);
+                          return (
+                            <a
+                              key={n.id}
+                              href={n.link || "#"}
+                              className={`adm-notif-item ${n.is_read ? "read" : "unread"}`}
+                              onClick={() => { markOneRead(n.id); setNotifOpen(false); }}
+                            >
+                              <span className="adm-notif-icon" style={{ background: bg, color }}>{notifIcon(n.type)}</span>
+                              <div className="adm-notif-body">
+                                <div className="adm-notif-item-title">{n.title}</div>
+                                {n.body && <div className="adm-notif-item-body">{n.body}</div>}
+                                <div className="adm-notif-item-time">{relativeTime(n.created_at)}</div>
+                              </div>
+                              {!n.is_read && <span className="adm-notif-dot" />}
+                            </a>
+                          );
+                        })}
+                      </div>
                     )}
-                    <a href="/admin/followups" className="adm-notif-view-all" onClick={() => setNotifOpen(false)}>عرض الكل ←</a>
                   </div>
                 )}
               </div>
@@ -184,9 +270,6 @@ export default function AdminSidebar({ role: propRole, name, email, avatarUrl, n
                   <a href="/admin/settings" className="adm-top-dropdown-item" onClick={() => setUserOpen(false)}>
                     <Settings size={14} /> الإعدادات
                   </a>
-                  <button className="adm-top-dropdown-item logout" onClick={onLogout}>
-                    <LogOut size={14} /> تسجيل الخروج
-                  </button>
                 </div>
               )}
             </div>
@@ -323,6 +406,16 @@ export default function AdminSidebar({ role: propRole, name, email, avatarUrl, n
         .adm-top-dropdown-item.logout { color: #dc2626; }
         .adm-top-dropdown-item.logout:hover { background: #fef2f2; }
 
+        .adm-topbar-icon-btn {
+          width: 32px; height: 32px; border-radius: 8px;
+          border: 1px solid #e2e8f0; background: #f4f7fb;
+          color: #4a6583; display: grid; place-items: center;
+          cursor: pointer; text-decoration: none; transition: all .15s; font: inherit;
+        }
+        .adm-topbar-icon-btn:hover { background: #e8f0fa; color: #073766; border-color: #c8d9ef; }
+        .adm-topbar-icon-btn--danger { color: #c0392b; background: #fdf4f4; border-color: #f5c6c6; }
+        .adm-topbar-icon-btn--danger:hover { background: #fee2e2; color: #991b1b; border-color: #f1a1a1; }
+
         .adm-content {
           flex: 1;
           display: flex;
@@ -358,33 +451,57 @@ export default function AdminSidebar({ role: propRole, name, email, avatarUrl, n
           line-height: 1;
         }
         .adm-notif-dropdown {
-          position: absolute; top: calc(100% + 6px); left: 0;
-          min-width: 250px; background: #fff;
-          border: 1px solid #e5ecf3; border-radius: 12px;
-          box-shadow: 0 8px 24px rgba(0,0,0,.12);
-          overflow: hidden; z-index: 50;
+          position: absolute; top: calc(100% + 8px); left: 0;
+          width: 300px; background: #fff;
+          border: 1px solid #e5ecf3; border-radius: 14px;
+          box-shadow: 0 12px 32px rgba(0,0,0,.14);
+          overflow: hidden; z-index: 200;
         }
+        .adm-notif-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 12px 14px 10px;
+          font-size: .7rem; font-weight: 700; color: #1e3a56;
+          border-bottom: 1px solid #f0f4f8;
+        }
+        .adm-notif-mark-all {
+          display: flex; align-items: center; gap: 4px;
+          font-size: .58rem; font-weight: 600; color: #0875dc;
+          background: none; border: none; cursor: pointer; padding: 0;
+        }
+        .adm-notif-mark-all:hover { color: #065fad; }
+        .adm-notif-list { max-height: 360px; overflow-y: auto; }
         .adm-notif-empty {
-          padding: 20px; text-align: center;
+          padding: 24px; text-align: center;
           font-size: .65rem; color: #aab5c3;
         }
         .adm-notif-item {
-          display: block; padding: 10px 14px;
-          text-decoration: none; border-bottom: 1px solid #f0f4f8;
-          transition: background .15s;
+          display: flex; align-items: flex-start; gap: 10px;
+          padding: 11px 14px; text-decoration: none;
+          border-bottom: 1px solid #f5f7fa; transition: background .12s;
+          position: relative;
         }
-        .adm-notif-item:hover { background: #f5f8fc; }
-        .adm-notif-item-title { font-size: .68rem; font-weight: 600; color: #1e3a56; }
-        .adm-notif-item-client { font-size: .55rem; color: #7a8fa6; margin-top: 2px; }
-        .adm-notif-view-all {
-          display: block; padding: 10px 14px; text-align: center;
-          font-size: .62rem; font-weight: 600; color: #0875dc;
-          text-decoration: none; transition: background .15s;
+        .adm-notif-item.unread { background: #f8fbff; }
+        .adm-notif-item:hover { background: #f0f6ff; }
+        .adm-notif-icon {
+          width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+          display: grid; place-items: center;
         }
-        .adm-notif-view-all:hover { background: #f0f7ff; }
+        .adm-notif-body { flex: 1; min-width: 0; }
+        .adm-notif-item-title { font-size: .66rem; font-weight: 700; color: #1e3a56; margin-bottom: 2px; }
+        .adm-notif-item-body {
+          font-size: .6rem; color: #5e7a95;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          max-width: 200px; margin-bottom: 3px;
+        }
+        .adm-notif-item-time { font-size: .55rem; color: #aab5c3; }
+        .adm-notif-dot {
+          width: 7px; height: 7px; border-radius: 50%;
+          background: #0875dc; flex-shrink: 0; margin-top: 4px;
+        }
         .adm-content-inner {
           flex: 1;
           overflow-y: auto;
+          width: 100%;
         }
 
         @media (max-width: 768px) {

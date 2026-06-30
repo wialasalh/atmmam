@@ -1,6 +1,7 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { User, Save, Building2, Camera, Lock, Eye, EyeOff } from "lucide-react";
+import { User, Save, Building2, Camera, Lock, Eye, EyeOff, CheckCircle, AlertCircle } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Profile = { id:string; full_name:string; email:string; phone:string; avatar_url?:string|null; };
@@ -58,14 +59,14 @@ export default function ProfilePage() {
     try {
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.from("profiles").update({ full_name: form.full_name, phone: form.phone }).eq("id", profile.id);
-      if (error) { setMsg("حدث خطأ: " + error.message); }
-      else { setMsg("✅ تم حفظ التغييرات"); setProfile(p => p ? {...p, ...form} : p); }
-    } catch { setMsg("حدث خطأ غير متوقع"); }
+      if (error) { setMsg("error:" + error.message); }
+      else { setMsg("success:تم حفظ التغييرات بنجاح"); setProfile(p => p ? {...p, ...form} : p); }
+    } catch { setMsg("error:حدث خطأ غير متوقع"); }
     setSaving(false);
     setTimeout(() => setMsg(""), 3000);
   }
 
-  if (loading) return <div className="client-dash-page"><div style={{textAlign:"center",padding:60,color:"#8b9dad"}}>جاري التحميل...</div></div>;
+  if (loading) return <PageLoader text="جاري تحميل الملف الشخصي..." />;
 
   return (
     <div className="client-dash-page">
@@ -121,7 +122,18 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {msg && <div style={{marginTop:12,padding:"10px 14px",borderRadius:8,background:msg.startsWith("✅")?"#f0fdf4":"#fef2f2",color:msg.startsWith("✅")?"#15803d":"#dc2626",fontSize:".72rem",fontWeight:600}}>{msg}</div>}
+        {msg && (
+          <div style={{marginTop:14,padding:"11px 14px",borderRadius:10,display:"flex",alignItems:"center",gap:9,
+            background:msg.startsWith("success")?"#f0fdf4":"#fef2f2",
+            border:`1px solid ${msg.startsWith("success")?"#bbf7d0":"#fecaca"}`}}>
+            {msg.startsWith("success")
+              ? <CheckCircle size={16} color="#15803d" style={{flexShrink:0}}/>
+              : <AlertCircle size={16} color="#dc2626" style={{flexShrink:0}}/>}
+            <span style={{fontSize:".72rem",fontWeight:700,color:msg.startsWith("success")?"#15803d":"#dc2626"}}>
+              {msg.replace(/^(success|error):/, "")}
+            </span>
+          </div>
+        )}
 
         <div style={{marginTop:16,display:"flex",justifyContent:"flex-start"}}>
           <button onClick={handleSave} disabled={saving} className="client-dash-primary-btn" style={{gap:6}}>
@@ -157,7 +169,18 @@ export default function ProfilePage() {
         </div>
         <div style={{fontSize:".6rem",color:"#aab5c3",marginTop:8}}>يجب أن تحتوي كلمة المرور الجديدة على 6 أحرف على الأقل.</div>
 
-        {pwMsg && <div style={{marginTop:12,padding:"10px 14px",borderRadius:8,background:pwMsg.includes("✅")?"#f0fdf4":"#fef2f2",color:pwMsg.includes("✅")?"#15803d":"#dc2626",fontSize:".72rem",fontWeight:600}}>{pwMsg}</div>}
+        {pwMsg && (
+          <div style={{marginTop:14,padding:"11px 14px",borderRadius:10,display:"flex",alignItems:"center",gap:9,
+            background:pwMsg.startsWith("success")?"#f0fdf4":"#fef2f2",
+            border:`1px solid ${pwMsg.startsWith("success")?"#bbf7d0":"#fecaca"}`}}>
+            {pwMsg.startsWith("success")
+              ? <CheckCircle size={16} color="#15803d" style={{flexShrink:0}}/>
+              : <AlertCircle size={16} color="#dc2626" style={{flexShrink:0}}/>}
+            <span style={{fontSize:".72rem",fontWeight:700,color:pwMsg.startsWith("success")?"#15803d":"#dc2626"}}>
+              {pwMsg.replace(/^(success|error):/, "")}
+            </span>
+          </div>
+        )}
 
         <div style={{marginTop:16,display:"flex",justifyContent:"flex-start"}}>
           <button onClick={handlePasswordChange} disabled={pwSaving}
@@ -170,8 +193,8 @@ export default function ProfilePage() {
   );
 
   async function handlePasswordChange() {
-    if (pwForm.new.length < 6) { setPwMsg("❌ كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل"); return; }
-    if (pwForm.new !== pwForm.confirm) { setPwMsg("❌ كلمة المرور الجديدة وتأكيدها غير متطابقين"); return; }
+    if (pwForm.new.length < 6) { setPwMsg("error:كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل"); return; }
+    if (pwForm.new !== pwForm.confirm) { setPwMsg("error:كلمة المرور الجديدة وتأكيدها غير متطابقين"); return; }
     setPwSaving(true);
     try {
       const supabase = createSupabaseBrowserClient();
@@ -179,15 +202,15 @@ export default function ProfilePage() {
         email: profile!.email,
         password: pwForm.current,
       });
-      if (signInError) { setPwMsg("❌ كلمة المرور الحالية غير صحيحة"); setPwSaving(false); return; }
+      if (signInError) { setPwMsg("error:كلمة المرور الحالية غير صحيحة"); setPwSaving(false); return; }
 
       const { error } = await supabase.auth.updateUser({ password: pwForm.new });
-      if (error) { setPwMsg("❌ " + error.message); }
+      if (error) { setPwMsg("error:" + error.message); }
       else {
-        setPwMsg("✅ تم تغيير كلمة المرور بنجاح");
+        setPwMsg("success:تم تغيير كلمة المرور بنجاح");
         setPwForm({ current:"", new:"", confirm:"" });
       }
-    } catch { setPwMsg("❌ حدث خطأ غير متوقع"); }
+    } catch { setPwMsg("error:حدث خطأ غير متوقع"); }
     setPwSaving(false);
     setTimeout(() => setPwMsg(""), 4000);
   }

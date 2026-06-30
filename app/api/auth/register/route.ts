@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     const { data, error } = await serviceClient.auth.admin.createUser({
       email,
       password,
-      email_confirm: !!invitationToken,
+      email_confirm: true,
       user_metadata: meta,
     });
 
@@ -73,28 +73,29 @@ export async function POST(request: Request) {
       }, { onConflict: "id" });
 
       if (!invitationToken) {
-        await serviceClient.from("clients").insert({
-          client_type: clientType || "person",
-          name: companyName || fullName,
-          phone,
-          email,
-          user_id: data.user.id,
-          notes: "مسجل تلقائياً",
-        });
-      }
-    }
+        // تحقق أولاً هل أنشأ الـ trigger سجل العميل
+        const { data: existingClient } = await serviceClient
+          .from("clients")
+          .select("id")
+          .eq("user_id", data.user.id)
+          .maybeSingle();
 
-    let confirmationLink: string | undefined;
-    if (!invitationToken) {
-      try {
-        const { data: linkData } = await serviceClient.auth.admin.generateLink({ type: "signup", email, password });
-        if (process.env.NODE_ENV === "development") confirmationLink = linkData?.properties?.action_link;
-      } catch { /* SMTP not configured — skip */ }
+        // أنشئ السجل فقط إذا لم يوجد (لتجنب تعارض مع الـ trigger)
+        if (!existingClient) {
+          await serviceClient.from("clients").insert({
+            client_type: clientType || "person",
+            name: companyName || fullName,
+            phone,
+            email,
+            user_id: data.user.id,
+            notes: "مسجل تلقائياً",
+          });
+        }
+      }
     }
 
     return NextResponse.json({
       data: { id: data.user?.id, email },
-      confirmationLink,
     }, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : JSON.stringify(error);

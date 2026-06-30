@@ -7,7 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard, ClipboardList, FileText, MessageSquare,
   User, LogOut, Menu, X, ChevronLeft, Building2, Building,
-  Bell, MessageCircle, Package, CreditCard, CalendarDays, LayoutGrid
+  Bell, MessageCircle, ShoppingBag, Package, CreditCard, CalendarDays, LayoutGrid, CheckCheck, Headphones, Receipt
 } from "lucide-react";
 
 type ClientRecord = {
@@ -41,8 +41,9 @@ const navItems = [
   { href: "/dashboard/orders", label: "طلباتي", icon: ClipboardList },
   { href: "/dashboard/packages", label: "الباقات", icon: Package },
   { href: "/dashboard/subscriptions", label: "اشتراكاتي", icon: CreditCard },
+  { href: "/dashboard/invoices", label: "فواتيري", icon: Receipt },
   { href: "/dashboard/documents", label: "مستنداتي", icon: FileText },
-  { href: "/dashboard/tickets", label: "الدعم", icon: MessageSquare },
+  { href: "/dashboard/tickets", label: "مركز الدعم", icon: Headphones },
   { href: "/dashboard/companies", label: "المنشآت", icon: Building },
   { href: "/dashboard/profile", label: "الملف الشخصي", icon: User },
 ];
@@ -50,31 +51,37 @@ const navItems = [
 import "./dashboard.css";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<ClientData | null>(null);
-  const [emailConfirmed, setEmailConfirmed] = useState(false);
+  const [emailConfirmed] = useState(true);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [notifTickets, setNotifTickets] = useState<{id:string;title:string;status:string}[]>([]);
+  const [notifs, setNotifs] = useState<{id:string;type:string;title:string;body:string;link:string;is_read:boolean;created_at:string}[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
 
-  // Notification polling
+  // Notification polling + realtime
   useEffect(() => {
     async function fetchNotifs() {
       try {
-        const res = await fetch("/api/dashboard/notifications");
+        const res = await fetch("/api/notifications");
         if (res.ok) {
-          const { count, tickets } = await res.json();
+          const { count, notifications: list } = await res.json();
           setNotifCount(count);
-          setNotifTickets(tickets || []);
+          setNotifs(list || []);
         }
-      } catch { /* non-critical polling — ignore */ }
+      } catch { /* non-critical */ }
     }
     fetchNotifs();
-    const iv = setInterval(fetchNotifs, 30000);
-    return () => clearInterval(iv);
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase
+      .channel("client-notifs")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, () => fetchNotifs())
+      .subscribe();
+    const iv = setInterval(fetchNotifs, 60000);
+    return () => { clearInterval(iv); void supabase.removeChannel(channel); };
   }, []);
 
   // Close notif dropdown on outside click
@@ -90,11 +97,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const supabase = createSupabaseBrowserClient();
     supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
       if (!authUser) { router.replace("/login"); return; }
-      if (!authUser.email_confirmed_at) {
-        setEmailConfirmed(false);
-      } else {
-        setEmailConfirmed(true);
-      }
+
       const res = await fetch("/api/auth/me");
       if (!res.ok) { router.replace("/login"); return; }
       const { data } = await res.json();
@@ -138,33 +141,65 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
           <div style={{display:"flex",alignItems:"center",gap:4}}>
             <div style={{position:"relative"}} ref={notifRef}>
-              <button onClick={() => setShowNotifs(v => !v)} style={{position:"relative",width:30,height:30,border:0,borderRadius:8,background:"transparent",color:"#8b9dad",cursor:"pointer",display:"grid",placeItems:"center",padding:0,transition:"all .15s"}}>
+              <button onClick={() => {
+                if (!showNotifs) {
+                  setNotifLoading(true);
+                  fetch("/api/notifications").then(r=>r.ok&&r.json()).then(d=>{if(d){setNotifs(d.notifications||[]);setNotifCount(d.count||0);}}).catch(()=>{}).finally(()=>setNotifLoading(false));
+                }
+                setShowNotifs(v => !v);
+              }} style={{position:"relative",width:30,height:30,border:0,borderRadius:8,background:"transparent",color:"#8b9dad",cursor:"pointer",display:"grid",placeItems:"center",padding:0,transition:"all .15s"}}>
                 <Bell size={16} />
                 {notifCount > 0 && (
-                  <span style={{position:"absolute",top:-4,right:-4,width:16,height:16,borderRadius:"50%",background:"#dc2626",color:"#fff",fontSize:".45rem",fontWeight:800,display:"grid",placeItems:"center",border:"2px solid #fff"}}>
+                  <span style={{position:"absolute",top:-4,right:-4,minWidth:16,height:16,borderRadius:8,background:"#dc2626",color:"#fff",fontSize:".45rem",fontWeight:800,display:"grid",placeItems:"center",border:"2px solid #fff",padding:"0 3px"}}>
                     {notifCount > 9 ? "9+" : notifCount}
                   </span>
                 )}
               </button>
               {showNotifs && (
-                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,background:"#fff",border:"1px solid #e5eaf0",borderRadius:12,boxShadow:"0 8px 24px rgba(0,0,0,.10)",minWidth:260,zIndex:999,overflow:"hidden"}}>
-                  <div style={{padding:"10px 14px",borderBottom:"1px solid #f0f3f8",fontSize:".68rem",fontWeight:700,color:"#073766"}}>الإشعارات</div>
-                  {notifTickets.length === 0 ? (
-                    <div style={{padding:"20px 14px",textAlign:"center",fontSize:".65rem",color:"#aab5c3"}}>لا توجد إشعارات جديدة</div>
-                  ) : notifTickets.map(t => (
-                    <Link key={t.id} href={`/dashboard/tickets/${t.id}`} onClick={() => setShowNotifs(false)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",textDecoration:"none",borderBottom:"1px solid #f0f3f8",transition:"background .1s"}} onMouseOver={e => e.currentTarget.style.background="#f5f8fc"} onMouseOut={e => e.currentTarget.style.background="transparent"}>
-                      <div style={{width:30,height:30,borderRadius:8,background:"#eaf4ff",display:"grid",placeItems:"center",flexShrink:0}}>
-                        <MessageCircle size={14} color="#0875dc" />
-                      </div>
-                      <div style={{minWidth:0,flex:1}}>
-                        <div style={{fontSize:".62rem",color:"#344d69",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
-                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
-                          <span style={{fontSize:".55rem",color:"#0875dc",fontWeight:600}}>رد جديد من فريق الدعم</span>
-                          <span style={{fontSize:".5rem",color:"#aab5c3",background:"#f5f8fc",padding:"1px 6px",borderRadius:6}}>{t.status}</span>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
+                <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:"#fff",border:"1px solid #e5eaf0",borderRadius:14,boxShadow:"0 12px 32px rgba(0,0,0,.12)",width:290,zIndex:999,overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px 10px",borderBottom:"1px solid #f0f3f8",fontSize:".7rem",fontWeight:700,color:"#073766"}}>
+                    <span>الإشعارات</span>
+                    {notifs.some(n=>!n.is_read) && (
+                      <button onClick={()=>{
+                        fetch("/api/notifications",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({})});
+                        setNotifs(prev=>prev.map(n=>({...n,is_read:true})));
+                        setNotifCount(0);
+                      }} style={{display:"flex",alignItems:"center",gap:4,fontSize:".58rem",fontWeight:600,color:"#0875dc",background:"none",border:"none",cursor:"pointer",padding:0}}>
+                        <CheckCheck size={11} /> تحديد كمقروء
+                      </button>
+                    )}
+                  </div>
+                  <div style={{maxHeight:340,overflowY:"auto"}}>
+                    {notifLoading ? (
+                      <div style={{padding:"20px",textAlign:"center",fontSize:".65rem",color:"#aab5c3"}}>جاري التحميل...</div>
+                    ) : notifs.length === 0 ? (
+                      <div style={{padding:"24px",textAlign:"center",fontSize:".65rem",color:"#aab5c3"}}>لا توجد إشعارات</div>
+                    ) : notifs.map(n => {
+                      const iconMap: Record<string,{icon:React.ReactNode;bg:string;color:string}> = {
+                        ticket_reply: {icon:<MessageCircle size={13}/>,bg:"#eaf4ff",color:"#0875dc"},
+                        order_status: {icon:<ShoppingBag size={13}/>,bg:"#f0f4ff",color:"#6366f1"},
+                      };
+                      const ic = iconMap[n.type] || {icon:<Bell size={13}/>,bg:"#f5f8fc",color:"#5a738e"};
+                      const diff = Date.now()-new Date(n.created_at).getTime();
+                      const m=Math.floor(diff/60000);
+                      const timeStr = m<1?"الآن":m<60?`منذ ${m} د`:m<1440?`منذ ${Math.floor(m/60)} س`:`منذ ${Math.floor(m/1440)} ي`;
+                      return (
+                        <Link key={n.id} href={n.link||"#"} onClick={()=>{
+                          fetch("/api/notifications",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:n.id})});
+                          setNotifs(prev=>prev.map(x=>x.id===n.id?{...x,is_read:true}:x));
+                          setShowNotifs(false);
+                        }} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",textDecoration:"none",borderBottom:"1px solid #f5f7fa",background:n.is_read?"#fff":"#f8fbff",transition:"background .12s",position:"relative"}}>
+                          <div style={{width:30,height:30,borderRadius:8,background:ic.bg,color:ic.color,display:"grid",placeItems:"center",flexShrink:0}}>{ic.icon}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:".64rem",fontWeight:700,color:"#1e3a56",marginBottom:2}}>{n.title}</div>
+                            {n.body&&<div style={{fontSize:".59rem",color:"#5e7a95",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}}>{n.body}</div>}
+                            <div style={{fontSize:".54rem",color:"#aab5c3"}}>{timeStr}</div>
+                          </div>
+                          {!n.is_read&&<span style={{width:7,height:7,borderRadius:"50%",background:"#0875dc",flexShrink:0,marginTop:4}}/>}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -201,10 +236,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        <div className="client-dash-sidebar-footer">
-          <Link href="/" className="client-dash-back-link"><Building2 size={14} /> العودة للموقع</Link>
-          <button className="client-dash-logout-btn" onClick={handleLogout}><LogOut size={14} /> تسجيل خروج</button>
+        {/* Sidebar footer — desktop only */}
+        <div className="client-dash-sidebar-footer-icons">
+          <Link href="/" className="client-dash-sidebar-icon-btn" title="العودة للموقع">
+            <Building2 size={16} />
+          </Link>
+          <button className="client-dash-sidebar-icon-btn client-dash-sidebar-icon-btn--danger" onClick={handleLogout} title="تسجيل خروج">
+            <LogOut size={16} />
+          </button>
         </div>
+
       </aside>
 
       {/* Main content */}
@@ -214,7 +255,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="client-dash-topbar-title">
             {navItems.find((n) => pathname.startsWith(n.href))?.label || "منطقة العميل"}
           </div>
-          <div />
+          <div className="client-dash-topbar-actions">
+            <Link href="/" className="client-dash-topbar-icon-btn">
+              <Building2 size={13} /> الموقع
+            </Link>
+            <button className="client-dash-topbar-icon-btn client-dash-topbar-icon-btn--danger" onClick={handleLogout}>
+              <LogOut size={13} /> خروج
+            </button>
+          </div>
         </header>
         {!emailConfirmed && (
           <div className="client-dash-email-banner">
@@ -225,7 +273,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* Floating action buttons */}
-      <div className="client-dash-floating-actions">
+      <div className="client-dash-floating-actions" style={{ display: /^\/dashboard\/tickets\/[^/]+/.test(pathname) ? "none" : "flex" }}>
         <Link href="/dashboard/tickets/new" className="floating-btn floating-btn-report" title="الإبلاغ عن مشكلة">
           <MessageCircle size={20} />
           <span>الإبلاغ عن مشكلة</span>

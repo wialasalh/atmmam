@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Package, CalendarDays, CreditCard, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Package, CalendarDays, CreditCard, Clock, CheckCircle2, XCircle, AlertCircle, Loader, Search, ChevronLeft } from "lucide-react";
 import Link from "next/link";
+import { formatAppDate } from "@/lib/date-format";
 
 type SubscriptionItem = {
   id: string;
@@ -26,319 +27,268 @@ type SubscriptionItem = {
   } | null;
 };
 
-const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  active: { label: "نشط", color: "#15803d", bg: "#f0fdf4", icon: CheckCircle },
-  pending: { label: "قيد الانتظار", color: "#b45309", bg: "#fef9ee", icon: Clock },
-  cancelled: { label: "ملغي", color: "#dc2626", bg: "#fef2f2", icon: XCircle },
-  expired: { label: "منتهي", color: "#6b7280", bg: "#f3f4f6", icon: AlertCircle },
+const STATUS_CFG: Record<string, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
+  active:    { label: "نشط",              color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0", icon: <CheckCircle2 size={10} /> },
+  pending:   { label: "بانتظار الدفع",    color: "#b45309", bg: "#fef9ee", border: "#fde68a", icon: <Clock size={10} /> },
+  cancelled: { label: "ملغي",             color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: <XCircle size={10} /> },
+  expired:   { label: "منتهي",            color: "#6b7280", bg: "#f3f4f6", border: "#d1d5db", icon: <AlertCircle size={10} /> },
 };
 
-const cycleLabels: Record<string, string> = {
-  monthly: "شهري",
-  yearly: "سنوي",
-  quarterly: "ربع سنوي",
-  "one-time": "مرة واحدة",
+const CYCLE_AR: Record<string, string> = {
+  monthly: "شهري", yearly: "سنوي", quarterly: "ربع سنوي", "one-time": "مرة واحدة",
 };
+
+const PAGE_SIZE = 8;
+
+const fmtDate = formatAppDate;
+
+function getDaysRemaining(endDate: string | null) {
+  if (!endDate) return null;
+  const diff = Math.ceil((new Date(endDate).getTime() - Date.now()) / 86400000);
+  if (diff < 0)  return { days: Math.abs(diff), state: "expired" as const };
+  if (diff <= 30) return { days: diff, state: "soon" as const };
+  return { days: diff, state: "ok" as const };
+}
 
 export default function ClientSubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState("");
+  const [search, setSearch]     = useState("");
+  const [tab, setTab]           = useState<"active" | "all">("active");
+  const [page, setPage]         = useState(1);
 
   useEffect(() => {
     fetch("/api/client/subscriptions")
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.data) setSubscriptions(res.data);
-        else setError(res.error || "فشل تحميل الاشتراكات");
-      })
+      .then(r => r.json())
+      .then(res => { if (res.data) setSubscriptions(res.data); else setError(res.error || "فشل التحميل"); })
       .catch(() => setError("تعذر الاتصال بالخادم"))
       .finally(() => setLoading(false));
   }, []);
 
-  function getDaysRemaining(endDate: string | null): { days: number; status: "ok" | "soon" | "expired" } | null {
-    if (!endDate) return null;
-    const now = new Date();
-    const end = new Date(endDate);
-    const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    if (diff < 0) return { days: Math.abs(diff), status: "expired" };
-    if (diff <= 30) return { days: diff, status: "soon" };
-    return { days: diff, status: "ok" };
-  }
+  const activeCount = subscriptions.filter(s => s.status === "active").length;
+  const totalSpend  = subscriptions.filter(s => s.status === "active").reduce((a, s) => a + s.total_price, 0);
 
-  if (loading) {
-    return (
-      <div className="subs-empty">
-        <Loader2 size={32} className="spin" />
-        <p>جاري تحميل الاشتراكات...</p>
-      </div>
-    );
-  }
+  const filtered = subscriptions
+    .filter(s => tab === "active" ? ["active","pending"].includes(s.status) : true)
+    .filter(s => !search || (s.packages?.title_ar || "").includes(search) || (s.packages?.tier_ar || "").includes(search));
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pageRows   = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const changeTab = (t: typeof tab) => { setTab(t); setPage(1); };
 
   return (
-    <section className="subs-section">
-      <div className="subs-heading">
+    <div style={{ direction: "rtl", maxWidth: 900, margin: "0 auto" }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <p className="eyebrow">اشتراكاتي</p>
-          <h1>باقاتي واشتراكاتي</h1>
-          <span>جميع الباقات التي اشتركت فيها، النشطة والمنتهية</span>
+          <p style={{ margin: "0 0 3px", fontSize: ".63rem", fontWeight: 700, color: "#0875dc", textTransform: "uppercase", letterSpacing: ".04em" }}>اشتراكاتي</p>
+          <h1 style={{ margin: "0 0 3px", fontSize: "1.15rem", fontWeight: 800, color: "#073766" }}>باقاتي واشتراكاتي</h1>
+          <p style={{ margin: 0, fontSize: ".68rem", color: "#8b9dad" }}>جميع الباقات التي اشتركت فيها، النشطة والمنتهية</p>
         </div>
-        <Link href="/dashboard/packages" className="subs-new-btn">
-          <Package size={16} />
-          اشتراك جديد
+        <Link href="/dashboard/packages"
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: ".65rem", fontWeight: 700, color: "#fff", background: "#073766", padding: "8px 16px", borderRadius: 10, textDecoration: "none", boxShadow: "0 2px 8px rgba(7,55,102,.2)" }}>
+          <Package size={13} /> اشتراك جديد
         </Link>
       </div>
 
-      {error ? (
-        <div className="subs-error">{error}</div>
-      ) : null}
-
-      {subscriptions.length === 0 ? (
-        <div className="subs-empty">
-          <Package size={48} />
-          <p>لا توجد اشتراكات حتى الآن</p>
-          <Link href="/dashboard/packages" className="subs-browse-btn">
-            تصفح الباقات
-          </Link>
-        </div>
-      ) : (
-        <div className="subs-list">
-          {subscriptions.map((sub) => {
-            const cfg = statusConfig[sub.status] || statusConfig.expired;
-            const StatusIcon = cfg.icon;
-            const remaining = getDaysRemaining(sub.end_date);
-
-            return (
-              <article className="subs-card" key={sub.id}>
-                <div className="subs-card-header">
-                  <div className="subs-card-title">
-                    <h3>{sub.packages?.title_ar || "باقة غير معروفة"}</h3>
-                    <span className="subs-tier">{sub.packages?.tier_ar}</span>
-                  </div>
-                  <span className="subs-status" style={{ background: cfg.bg, color: cfg.color }}>
-                    <StatusIcon size={14} />
-                    {cfg.label}
-                  </span>
-                </div>
-
-                <div className="subs-card-body">
-                  <div className="subs-info-grid">
-                    <div className="subs-info-item">
-                      <CalendarDays size={16} />
-                      <div>
-                        <small>تاريخ البداية</small>
-                        <strong>{new Date(sub.start_date).toLocaleDateString("ar-SA", {calendar:"gregory"})}</strong>
-                      </div>
-                    </div>
-                    <div className="subs-info-item">
-                      <CalendarDays size={16} />
-                      <div>
-                        <small>تاريخ النهاية</small>
-                        <strong>
-                          {sub.end_date
-                            ? new Date(sub.end_date).toLocaleDateString("ar-SA", {calendar:"gregory"})
-                            : "غير محدد"}
-                        </strong>
-                      </div>
-                    </div>
-                    <div className="subs-info-item">
-                      <CreditCard size={16} />
-                      <div>
-                        <small>المبلغ</small>
-                        <strong>{sub.total_price.toLocaleString("ar-SA")} ر.س</strong>
-                      </div>
-                    </div>
-                    <div className="subs-info-item">
-                      <Clock size={16} />
-                      <div>
-                        <small>دورة الفوترة</small>
-                        <strong>{cycleLabels[sub.billing_cycle] || sub.billing_cycle}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  {remaining ? (
-                    <div
-                      className={`subs-remaining ${
-                        remaining.status === "expired"
-                          ? "is-expired"
-                          : remaining.status === "soon"
-                          ? "is-soon"
-                          : "is-ok"
-                      }`}
-                    >
-                      {remaining.status === "expired"
-                        ? `منذ ${remaining.days} يوم`
-                        : `متبقي ${remaining.days} يوم`}
-                    </div>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
+      {/* Stats */}
+      {subscriptions.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 20 }}>
+          {[
+            { label: "اشتراكات نشطة",   value: activeCount,                          color: "#15803d", bg: "linear-gradient(135deg,#f0fdf4,#dcfce7)", icon: <CheckCircle2 size={16} color="#15803d" /> },
+            { label: "إجمالي الباقات",   value: subscriptions.length,                color: "#0875dc", bg: "linear-gradient(135deg,#eaf4ff,#dbeafe)",  icon: <Package size={16} color="#0875dc" /> },
+            { label: "إجمالي الإنفاق",  value: totalSpend.toLocaleString("ar-SA") + " ر.س", color: "#0f766e", bg: "linear-gradient(135deg,#f0fdfa,#e0f7f4)", icon: <CreditCard size={16} color="#0f766e" /> },
+          ].map(s => (
+            <div key={s.label} style={{ background: "#fff", border: "1px solid #e8edf5", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: s.bg, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                {s.icon}
+              </div>
+              <div>
+                <div style={{ fontSize: typeof s.value === "number" ? "1.35rem" : "1rem", fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                <div style={{ fontSize: ".58rem", color: "#8b9dad", fontWeight: 600, marginTop: 2 }}>{s.label}</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      <style>{`
-        .subs-section {
-          max-width: 900px;
-          margin: 0 auto;
-          padding: 24px;
-        }
-        .subs-heading {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 24px;
-        }
-        .subs-heading .eyebrow {
-          font-size: 12px;
-          color: #0875dc;
-          font-weight: 600;
-          margin: 0;
-        }
-        .subs-heading h1 {
-          font-size: 22px;
-          color: #073766;
-          margin: 4px 0;
-        }
-        .subs-heading span {
-          font-size: 14px;
-          color: #64748b;
-        }
-        .subs-new-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 10px 18px;
-          background: #073766;
-          color: #fff;
-          border-radius: 8px;
-          text-decoration: none;
-          font-size: 13px;
-          font-weight: 600;
-          transition: background .2s;
-        }
-        .subs-new-btn:hover { background: #0a4a8a; }
-        .subs-list {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-        .subs-card {
-          background: #fff;
-          border-radius: 12px;
-          border: 1px solid #e5ecf3;
-          overflow: hidden;
-          transition: box-shadow .2s;
-        }
-        .subs-card:hover {
-          box-shadow: 0 2px 12px rgba(0,0,0,0.05);
-        }
-        .subs-card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 18px 20px;
-          border-bottom: 1px solid #f1f5f9;
-        }
-        .subs-card-title h3 {
-          font-size: 16px;
-          color: #073766;
-          margin: 0;
-        }
-        .subs-tier {
-          font-size: 12px;
-          color: #0875dc;
-          font-weight: 600;
-        }
-        .subs-status {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          padding: 4px 12px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-        .subs-card-body {
-          padding: 18px 20px;
-        }
-        .subs-info-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-          gap: 16px;
-        }
-        .subs-info-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .subs-info-item svg {
-          color: #94a3b8;
-          flex-shrink: 0;
-        }
-        .subs-info-item div {
-          display: flex;
-          flex-direction: column;
-        }
-        .subs-info-item small {
-          font-size: 11px;
-          color: #94a3b8;
-        }
-        .subs-info-item strong {
-          font-size: 14px;
-          color: #334155;
-        }
-        .subs-remaining {
-          margin-top: 12px;
-          padding: 8px 14px;
-          border-radius: 6px;
-          font-size: 13px;
-          font-weight: 600;
-        }
-        .subs-remaining.is-ok {
-          background: #f0fdf4;
-          color: #15803d;
-        }
-        .subs-remaining.is-soon {
-          background: #fef9ee;
-          color: #b45309;
-        }
-        .subs-remaining.is-expired {
-          background: #fef2f2;
-          color: #dc2626;
-        }
-        .subs-empty {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 80px 20px;
-          color: #94a3b8;
-          gap: 12px;
-        }
-        .subs-error {
-          padding: 12px 16px;
-          background: #fef2f2;
-          border: 1px solid #fecaca;
-          border-radius: 8px;
-          color: #dc2626;
-          margin-bottom: 16px;
-          font-size: 13px;
-        }
-        .subs-browse-btn {
-          padding: 10px 20px;
-          background: #073766;
-          color: #fff;
-          border-radius: 8px;
-          text-decoration: none;
-          font-size: 14px;
-          font-weight: 600;
-        }
-        .spin { animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
-    </section>
+      {error && (
+        <div style={{ padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, color: "#dc2626", fontSize: ".65rem", marginBottom: 16 }}>{error}</div>
+      )}
+
+      {/* Pending payment notice */}
+      {subscriptions.some(s => s.status === "pending") && (
+        <div style={{ background: "#fef9ee", border: "1.5px solid #fde68a", borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <Clock size={15} color="#b45309" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <div style={{ fontSize: ".7rem", fontWeight: 800, color: "#b45309", marginBottom: 2 }}>اشتراك بانتظار تأكيد الدفع</div>
+            <div style={{ fontSize: ".63rem", color: "#92400e", lineHeight: 1.6 }}>
+              لديك اشتراك معلق — سيتم تفعيله تلقائياً بمجرد تأكيد الفريق لاستلام الدفع. يمكنك مراجعة الفاتورة في قسم <strong>فواتيري</strong>.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main panel */}
+      <div style={{ background: "#fff", border: "1.5px solid #e0e7ef", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 12px rgba(8,55,102,.04)" }}>
+
+        {/* Tab + search bar */}
+        <div style={{ display: "flex", alignItems: "center", borderBottom: "1.5px solid #e8edf5", padding: "0 16px", background: "#fafbfc", gap: 4 }}>
+          {[
+            { id: "active" as const, label: "النشطة",    count: subscriptions.filter(s => ["active","pending"].includes(s.status)).length },
+            { id: "all"    as const, label: "جميع الباقات", count: subscriptions.length },
+          ].map(t => {
+            const active = tab === t.id;
+            return (
+              <button key={t.id} onClick={() => changeTab(t.id)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "12px 14px", fontSize: ".67rem", fontWeight: active ? 800 : 600, color: active ? "#0875dc" : "#7c8b9b", background: "none", border: "none", cursor: "pointer", borderBottom: active ? "2.5px solid #0875dc" : "2.5px solid transparent", marginBottom: -1.5, transition: "color .15s", whiteSpace: "nowrap" }}>
+                {t.label}
+                <span style={{ fontSize: ".55rem", fontWeight: 700, background: active ? "#eaf4ff" : "#f1f5f9", color: active ? "#0875dc" : "#8b9dad", padding: "1px 7px", borderRadius: 20 }}>
+                  {t.count}
+                </span>
+              </button>
+            );
+          })}
+          <div style={{ flex: 1 }} />
+          {/* Search */}
+          <div style={{ position: "relative", marginLeft: 4 }}>
+            <Search size={12} color="#a0adb8" style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)" }} />
+            <input
+              value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+              placeholder="بحث في الباقات..."
+              style={{ paddingRight: 30, paddingLeft: 10, paddingTop: 6, paddingBottom: 6, fontSize: ".62rem", border: "1.5px solid #e0e7ef", borderRadius: 8, outline: "none", color: "#073766", width: 160, background: "#fff" }}
+            />
+          </div>
+        </div>
+
+        {/* Table */}
+        {loading ? (
+          <div style={{ display: "grid", placeItems: "center", padding: 60 }}>
+            <Loader size={22} color="#0875dc" style={{ animation: "spin .6s linear infinite" }} />
+          </div>
+        ) : pageRows.length === 0 ? (
+          <div style={{ display: "grid", placeItems: "center", padding: "56px 24px", textAlign: "center" }}>
+            <Package size={36} color="#d1dae3" strokeWidth={1.5} />
+            <p style={{ margin: "12px 0 4px", fontSize: ".75rem", fontWeight: 700, color: "#8b9dad" }}>
+              {search ? "لا توجد نتائج للبحث" : "لا توجد اشتراكات بعد"}
+            </p>
+            {!search && (
+              <Link href="/dashboard/packages"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: ".65rem", fontWeight: 700, color: "#fff", background: "#073766", padding: "8px 18px", borderRadius: 10, textDecoration: "none", marginTop: 8 }}>
+                تصفح الباقات
+              </Link>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Header row */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 120px 90px 40px", background: "#f4f7fb", borderBottom: "1.5px solid #e0e7ef" }}>
+              {["الباقة / الخدمة", "الحالة", "دورة الفوترة", "المبلغ", "تاريخ البداية", ""].map((h, i, a) => (
+                <div key={i} style={{ padding: "9px 14px", fontSize: ".58rem", fontWeight: 800, color: "#4a6075", letterSpacing: ".04em", textTransform: "uppercase", borderLeft: i < a.length-1 ? "1px solid #e0e7ef" : "none" }}>{h}</div>
+              ))}
+            </div>
+
+            {pageRows.map((sub, i, arr) => {
+              const cfg = STATUS_CFG[sub.status] || STATUS_CFG.expired;
+              const remaining = getDaysRemaining(sub.end_date);
+              const isLast = i === arr.length - 1;
+              const accentColor = sub.status === "active" ? "#15803d" : sub.status === "pending" ? "#b45309" : "#9ca3af";
+
+              return (
+                <div key={sub.id} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 120px 90px 40px", borderBottom: isLast ? "none" : "1px solid #f0f4f8", borderRight: `3px solid ${accentColor}`, transition: "background .1s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#f7faff"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+
+                  {/* الباقة */}
+                  <div style={{ padding: "14px 14px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, borderLeft: "1px solid #f0f4f8" }}>
+                    <span style={{ fontSize: ".72rem", fontWeight: 800, color: "#073766", lineHeight: 1.3 }}>{sub.packages?.title_ar || "باقة غير معروفة"}</span>
+                    {sub.packages?.tier_ar && (
+                      <span style={{ fontSize: ".58rem", color: "#0875dc", fontWeight: 600 }}>{sub.packages.tier_ar}</span>
+                    )}
+                    {remaining && (
+                      <span style={{
+                        fontSize: ".55rem", fontWeight: 700,
+                        color: remaining.state === "expired" ? "#dc2626" : remaining.state === "soon" ? "#b45309" : "#15803d",
+                        display: "flex", alignItems: "center", gap: 3
+                      }}>
+                        <Clock size={9} />
+                        {remaining.state === "expired" ? `انتهى منذ ${remaining.days} يوم` : `متبقي ${remaining.days} يوم`}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* الحالة */}
+                  <div style={{ padding: "14px 14px", display: "flex", alignItems: "center", borderLeft: "1px solid #f0f4f8" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: ".58rem", fontWeight: 700, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}`, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
+                      {cfg.icon} {cfg.label}
+                    </span>
+                  </div>
+
+                  {/* دورة الفوترة */}
+                  <div style={{ padding: "14px 14px", display: "flex", alignItems: "center", borderLeft: "1px solid #f0f4f8" }}>
+                    <span style={{ fontSize: ".65rem", color: "#526983", fontWeight: 600 }}>
+                      {CYCLE_AR[sub.billing_cycle] || sub.billing_cycle}
+                    </span>
+                  </div>
+
+                  {/* المبلغ */}
+                  <div style={{ padding: "14px 14px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 2, borderLeft: "1px solid #f0f4f8" }}>
+                    <span style={{ fontSize: ".72rem", fontWeight: 800, color: "#073766" }}>
+                      {sub.total_price.toLocaleString("ar-SA")} <span style={{ fontSize: ".58rem", fontWeight: 600, color: "#8b9dad" }}>ر.س</span>
+                    </span>
+                    {sub.tax_amount > 0 && (
+                      <span style={{ fontSize: ".55rem", color: "#a0adb8" }}>شامل ض.ق.م</span>
+                    )}
+                  </div>
+
+                  {/* تاريخ البداية */}
+                  <div style={{ padding: "14px 14px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 2, borderLeft: "1px solid #f0f4f8" }}>
+                    <span style={{ fontSize: ".62rem", color: "#526983", fontWeight: 600 }}>{fmtDate(sub.start_date)}</span>
+                    {sub.end_date && (
+                      <span style={{ fontSize: ".55rem", color: "#a0adb8" }}>← {fmtDate(sub.end_date)}</span>
+                    )}
+                  </div>
+
+                  {/* Arrow */}
+                  <div style={{ padding: "14px 10px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <ChevronLeft size={14} color="#c0cbd8" />
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderTop: "1.5px solid #e8edf5", background: "#fafbfc" }}>
+                <span style={{ fontSize: ".6rem", color: "#8b9dad" }}>
+                  {(page-1)*PAGE_SIZE+1}–{Math.min(page*PAGE_SIZE, filtered.length)} من {filtered.length}
+                </span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={() => setPage(p => Math.max(1,p-1))} disabled={page===1}
+                    style={{ border:"1px solid #e0e7ef", borderRadius:8, padding:"5px 12px", fontSize:".6rem", fontWeight:700, color:page===1?"#c0cbd8":"#526983", background:page===1?"#f8fafc":"#fff", cursor:page===1?"not-allowed":"pointer" }}>
+                    السابق
+                  </button>
+                  {Array.from({length:totalPages},(_,i)=>i+1).map(p=>(
+                    <button key={p} onClick={()=>setPage(p)}
+                      style={{ border:"1px solid "+(p===page?"#0875dc":"#e0e7ef"), borderRadius:8, padding:"5px 11px", fontSize:".6rem", fontWeight:700, color:p===page?"#fff":"#526983", background:p===page?"#0875dc":"#fff", cursor:"pointer", minWidth:32 }}>
+                      {p}
+                    </button>
+                  ))}
+                  <button onClick={() => setPage(p => Math.min(totalPages,p+1))} disabled={page===totalPages}
+                    style={{ border:"1px solid #e0e7ef", borderRadius:8, padding:"5px 12px", fontSize:".6rem", fontWeight:700, color:page===totalPages?"#c0cbd8":"#526983", background:page===totalPages?"#f8fafc":"#fff", cursor:page===totalPages?"not-allowed":"pointer" }}>
+                    التالي
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
   );
 }

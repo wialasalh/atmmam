@@ -7,16 +7,17 @@ import {
   Building2, FileText, Download, ExternalLink, ChevronDown, ChevronUp,
   Briefcase, Users, Lock, X, Zap, Phone, Mail,
   Paperclip, FileCheck, CreditCard, UserCircle,
-  MessageCircle, FolderOpen,
+  MessageCircle, FolderOpen, LayoutGrid, List, Star,
 } from "lucide-react";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { parseTicketDetails } from "@/lib/ticket-details";
+import { formatAppDate, formatAppDateTime } from "@/lib/date-format";
 // CSS loaded via app/admin/layout.tsx
 
 type AdminTicket = {
   id: string; title: string; body?: string; description?: string; category: string; priority: string; status: string;
-  created_at: string; updated_at: string; user_id: string;
+  created_at: string; updated_at: string; user_id: string; rating?: number | null;
   client_id?: string | null; assigned_to?: string | null; files?: string[] | null; archived_at?: string | null;
   profiles?: { full_name: string; email: string; avatar_url?: string } | null;
   clients?: {
@@ -47,23 +48,34 @@ type ActiveSubscription = {
   packages: { id: string; title_ar: string; tier_ar: string; category: string; billing_cycle: string; price: number; features: string[] } | null;
 };
 
-type DetailTab = "chat" | "client" | "sub" | "docs" | "orders";
+type DetailTab = "replies" | "client" | "sub" | "docs" | "orders";
 
 const STATUS_OPTIONS = ["جديدة","قيد المراجعة","بانتظار العميل","تم الحل","مغلقة"];
 
 const STATUS_CFG: Record<string,{color:string;bg:string;border:string;icon:React.ReactNode}> = {
   "جديدة":          {color:"#0875dc",bg:"#eaf4ff",border:"#bddcff",icon:<Clock size={12}/>},
   "قيد المراجعة":   {color:"#b45309",bg:"#fef9ee",border:"#fde68a",icon:<RefreshCw size={12}/>},
-  "بانتظار العميل": {color:"#7c3aed",bg:"#f5f3ff",border:"#ddd6fe",icon:<AlertTriangle size={12}/>},
+  "بانتظار العميل": {color:"#0f766e",bg:"#f0fdfa",border:"#99f6e4",icon:<AlertTriangle size={12}/>},
   "تم الحل":        {color:"#15803d",bg:"#f0fdf4",border:"#bbf7d0",icon:<CheckCircle size={12}/>},
-  "مغلقة":          {color:"#6b7280",bg:"#f3f4f6",border:"#d1d5db",icon:<XCircle size={12}/>},
+  "مغلقة":            {color:"#6b7280",bg:"#f3f4f6",border:"#d1d5db",icon:<XCircle size={12}/>},
+  "مغلقة من العميل": {color:"#0f766e",bg:"#f0fdfa",border:"#99f6e4",icon:<XCircle size={12}/>},
 };
 
+const PRI_MAP: Record<string,string> = {
+  urgent:"عاجلة", high:"مرتفعة", normal:"عادية", low:"عادية",
+  عاجلة:"عاجلة", مرتفعة:"مرتفعة", عادية:"عادية",
+};
 const PRI_CFG: Record<string,{color:string;bg:string}> = {
   "عاجلة":  {color:"#dc2626",bg:"#fef2f2"},
   "مرتفعة": {color:"#ea580c",bg:"#fff7ed"},
   "عادية":  {color:"#64748b",bg:"#f1f5f9"},
 };
+function normPri(p:string){ return PRI_MAP[p]||PRI_MAP[p?.toLowerCase()]||"عادية"; }
+function extractPrice(body?:string):string|null{
+  if(!body) return null;
+  const m=body.match(/(\d[\d,٠-٩]*(?:\.\d+)?)\s*(?:ر\.س|ريال|SAR)/);
+  return m?m[1]:null;
+}
 
 const ENTITY_SIZE_LABELS: Record<string,string> = {micro:"متناهي الصغر",small:"صغير",medium:"متوسط",large:"كبير"};
 const SCOPE_LABELS:       Record<string,string> = {platinum:"البلاتيني",high_green:"الأخضر العالي",medium_green:"الأخضر المتوسط",low_green:"الأخضر المنخفض",red:"الأحمر"};
@@ -85,7 +97,7 @@ function getSLADot(updated_at: string) {
 
 function getSLAPanel(t: AdminTicket) {
   const elapsed=(Date.now()-new Date(t.created_at).getTime())/3600000;
-  const target=t.priority==="عاجلة"?4:t.priority==="مرتفعة"?8:24;
+  const target=normPri(t.priority)==="عاجلة"?4:normPri(t.priority)==="مرتفعة"?8:24;
   const pct=Math.min(100,(elapsed/target)*100);
   const remaining=Math.max(0,target-elapsed);
   const color=pct>=100?"#dc2626":pct>=75?"#ea580c":"#16a34a";
@@ -106,7 +118,7 @@ function isToday(d: string) {
 }
 
 function fmtTime(d: string) {
-  return new Date(d).toLocaleString("ar-SA",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+  return formatAppDateTime(d);
 }
 
 function formatDateLabel(d: string) {
@@ -114,14 +126,14 @@ function formatDateLabel(d: string) {
   yesterday.setDate(yesterday.getDate()-1);
   if(date.toDateString()===today.toDateString()) return "اليوم";
   if(date.toDateString()===yesterday.toDateString()) return "أمس";
-  return date.toLocaleDateString("ar-SA", {calendar:"gregory", weekday:"long",year:"numeric",month:"long",day:"numeric"});
+  return formatAppDate(date);
 }
 
 function isStaffRoleCheck(role?: string) { return ["admin","manager","operator"].includes(role||""); }
 
 const AV_COLORS=[
   ["#dbeafe","#1d4ed8"],["#dcfce7","#15803d"],["#fef9c3","#92400e"],
-  ["#fce7f3","#9d174d"],["#ede9fe","#5b21b6"],["#ffedd5","#c2410c"],
+  ["#fce7f3","#9d174d"],["#e0f7f4","#5b21b6"],["#ffedd5","#c2410c"],
   ["#ccfbf1","#0f766e"],["#e0f2fe","#0369a1"],
 ];
 function avatarStyle(name?: string): React.CSSProperties {
@@ -160,7 +172,7 @@ export default function AdminTicketsPage() {
   const [relatedOrders,   setRelatedOrders]   = useState<RelatedOrder[]>([]);
   const [subscriptions,   setSubscriptions]   = useState<ActiveSubscription[]>([]);
   const [loadingSub,      setLoadingSub]      = useState(false);
-  const [detailTab,       setDetailTab]       = useState<DetailTab>("chat");
+  const [detailTab,       setDetailTab]       = useState<DetailTab>("replies");
   const [adminFiles,      setAdminFiles]      = useState<File[]>([]);
   const [adminUploading,  setAdminUploading]  = useState(false);
   const [cannedResponses, setCannedResponses] = useState<{id:string;title:string;body:string}[]>([]);
@@ -172,6 +184,9 @@ export default function AdminTicketsPage() {
   const [confirmDelete,   setConfirmDelete]   = useState<string|null>(null);
   const [pendingStatus,   setPendingStatus]   = useState("");
   const [statusNote,      setStatusNote]      = useState("");
+  const [viewMode,        setViewMode]        = useState<"list"|"kanban">("list");
+  const [refreshing,      setRefreshing]      = useState(false);
+  const [lastRefreshAt,   setLastRefreshAt]   = useState<string|null>(null);
 
   const msgsEndRef   = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -182,7 +197,8 @@ export default function AdminTicketsPage() {
 
   const filtered = useMemo(()=>tickets.filter(t=>{
     if(showArchived) return !!t.archived_at;
-    if(t.archived_at) return false;
+    // "مغلقة من العميل" stays visible in main list (archived_at set only for auto-delete cron)
+    if(t.archived_at && t.status !== "مغلقة من العميل") return false;
     const q=search.trim().toLowerCase();
     if(q&&!`${t.id.slice(0,8)} ${t.title} ${t.profiles?.full_name??""} ${t.clients?.name??""}`.toLowerCase().includes(q)) return false;
     if(statusFilter   && t.status   !==statusFilter)   return false;
@@ -196,7 +212,7 @@ export default function AdminTicketsPage() {
 
   const stats = useMemo(()=>({
     total:         tickets.length,
-    urgent:        tickets.filter(t=>t.priority==="عاجلة").length,
+    urgent:        tickets.filter(t=>normPri(t.priority)==="عاجلة").length,
     newCount:      tickets.filter(t=>t.status==="جديدة").length,
     resolvedToday: tickets.filter(t=>t.status==="تم الحل"&&isToday(t.updated_at)).length,
   }),[tickets]);
@@ -239,8 +255,8 @@ export default function AdminTicketsPage() {
   useEffect(()=>{
     if(!selected) return;
     setMessages([]);setSignedUrls([]);setIsInternal(false);setShowHistory(false);
-    const load=()=>fetch(`/api/tickets/${selected.id}/messages`).then(async r=>{if(r.ok)setMessages((await r.json()).data||[]);});
-    load();generateSignedUrls(selected);
+    loadSelectedMessages(selected.id);generateSignedUrls(selected);
+    const load=()=>loadSelectedMessages(selected.id);
     const iv=setInterval(load,5000);
     return ()=>{clearInterval(iv);};
   },[selected]);
@@ -257,8 +273,8 @@ export default function AdminTicketsPage() {
 
   useEffect(()=>{msgsEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages]);
 
-  async function loadTickets() {
-    setLoading(true);
+  async function loadTickets(options?: { silent?: boolean }) {
+    if(!options?.silent) setLoading(true);
     try{
       const url=statusFilter?`/api/admin/tickets?status=${statusFilter}`:"/api/admin/tickets";
       const res=await fetch(url);
@@ -266,6 +282,10 @@ export default function AdminTicketsPage() {
         const {data}=await res.json();
         const td=(data||[]) as AdminTicket[];
         setTickets(td);
+        if(selected){
+          const updatedSelected=td.find(t=>t.id===selected.id);
+          if(updatedSelected) setSelected(updatedSelected);
+        }
         setUnreadTickets(prev=>{
           const next=new Set(prev);
           for(const t of td){
@@ -275,16 +295,35 @@ export default function AdminTicketsPage() {
           }
           return next;
         });
+        setLastRefreshAt(new Date().toISOString());
       }
     }catch{}
-    setLoading(false);
+    if(!options?.silent) setLoading(false);
+  }
+
+  async function loadSelectedMessages(ticketId: string) {
+    try{
+      const response=await fetch(`/api/tickets/${ticketId}/messages`);
+      if(response.ok) setMessages((await response.json()).data||[]);
+    }catch{}
+  }
+
+  async function refreshTickets() {
+    if(refreshing) return;
+    setRefreshing(true);
+    await loadTickets({silent:true});
+    if(selected){
+      await loadSelectedMessages(selected.id);
+      generateSignedUrls(selected);
+    }
+    setRefreshing(false);
   }
 
   function selectTicket(t: AdminTicket) {
     lastViewRef.current[t.id]=Date.now();
     setUnreadTickets(prev=>{const next=new Set(prev);next.delete(t.id);return next;});
     setSelected(t);
-    setDetailTab("chat");
+    setDetailTab("replies");
   }
 
   async function loadTeam() {
@@ -400,9 +439,30 @@ export default function AdminTicketsPage() {
       {/* ══ LIST ══ */}
       <aside className="tc-list">
         <div className="tc-list-head">
-          <h1 className="tc-list-title">
-            التذاكر <span className="tc-list-title-badge">{stats.total}</span>
-          </h1>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+            <h1 className="tc-list-title" style={{margin:0}}>
+              التذاكر <span className="tc-list-title-badge">{stats.total}</span>
+            </h1>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <button type="button" onClick={refreshTickets} disabled={refreshing} className="tc-refresh-btn" title="تحديث التذاكر">
+                <RefreshCw size={14} className={refreshing?"spin":""}/>
+                <span>{refreshing?"جار التحديث":"تحديث"}</span>
+              </button>
+              <div style={{display:"flex",gap:4,background:"#f1f5f9",borderRadius:8,padding:3}}>
+              <button onClick={()=>setViewMode("list")} title="عرض قائمة"
+                style={{border:0,borderRadius:6,padding:"5px 8px",cursor:"pointer",background:viewMode==="list"?"#fff":"transparent",color:viewMode==="list"?"#0875dc":"#94a3b8",boxShadow:viewMode==="list"?"0 1px 4px rgba(0,0,0,.1)":"none",transition:"all .15s"}}>
+                <List size={15}/>
+              </button>
+              <button onClick={()=>setViewMode("kanban")} title="عرض لوحة Kanban"
+                style={{border:0,borderRadius:6,padding:"5px 8px",cursor:"pointer",background:viewMode==="kanban"?"#fff":"transparent",color:viewMode==="kanban"?"#0875dc":"#94a3b8",boxShadow:viewMode==="kanban"?"0 1px 4px rgba(0,0,0,.1)":"none",transition:"all .15s"}}>
+                <LayoutGrid size={15}/>
+              </button>
+              </div>
+            </div>
+          </div>
+          <div className="tc-refresh-meta">
+            {lastRefreshAt ? `آخر تحديث ${formatAppDateTime(lastRefreshAt)}` : "يتم التحديث تلقائياً، ويمكنك التحديث يدوياً الآن"}
+          </div>
 
           <div className="tc-stats-row">
             {[
@@ -463,7 +523,8 @@ export default function AdminTicketsPage() {
             {val:"قيد المراجعة", label:"مراجعة"},
             {val:"بانتظار العميل",label:"انتظار"},
             {val:"تم الحل",label:"حُلّ"},
-            {val:"مغلقة",  label:"مغلقة"},
+            {val:"مغلقة",            label:"مغلقة"},
+            {val:"مغلقة من العميل", label:"أغلقها العميل"},
           ].map(s=>(
             <button key={s.val} onClick={()=>{setStatusFilter(s.val);setShowArchived(false);}} className={`tc-tab${!showArchived&&statusFilter===s.val?" on":""}`}>{s.label}</button>
           ))}
@@ -474,33 +535,93 @@ export default function AdminTicketsPage() {
           <div className="tc-results-bar"><strong>{filtered.length}</strong> / {tickets.length} تذكرة</div>
         )}
 
-        <div className="tc-cards">
+        {/* ── KANBAN VIEW ── */}
+        {viewMode==="kanban"&&!loading&&(
+          <div style={{padding:"12px 8px",overflowX:"auto",display:"flex",gap:10,minHeight:0,flex:1}}>
+            {["جديدة","قيد المراجعة","بانتظار العميل","تم الحل","مغلقة"].map(col=>{
+              const colCfg=STATUS_CFG[col]||STATUS_CFG["جديدة"];
+              const colTickets=filtered.filter(t=>t.status===col);
+              return (
+                <div key={col} style={{minWidth:220,flex:"0 0 220px",display:"flex",flexDirection:"column",gap:0}}>
+                  {/* Column header */}
+                  <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",background:colCfg.bg,borderRadius:"10px 10px 0 0",border:`1px solid ${colCfg.border}`,borderBottom:"none"}}>
+                    <span style={{color:colCfg.color}}>{colCfg.icon}</span>
+                    <span style={{fontSize:".68rem",fontWeight:800,color:colCfg.color,flex:1}}>{col}</span>
+                    <span style={{fontSize:".6rem",fontWeight:700,color:colCfg.color,background:"#fff",padding:"1px 7px",borderRadius:20,border:`1px solid ${colCfg.border}`}}>{colTickets.length}</span>
+                  </div>
+                  {/* Column body */}
+                  <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:6,padding:"8px 6px",background:"#f8fafc",border:`1px solid ${colCfg.border}`,borderTop:"none",borderRadius:"0 0 10px 10px",minHeight:120}}>
+                    {colTickets.length===0&&(
+                      <div style={{textAlign:"center",padding:"20px 0",color:"#c0cbd8",fontSize:".62rem"}}>لا توجد تذاكر</div>
+                    )}
+                    {colTickets.map(t=>{
+                      const pri=normPri(t.priority);
+                      const pc=PRI_CFG[pri]||PRI_CFG["عادية"];
+                      const isSel=selected?.id===t.id;
+                      return (
+                        <div key={t.id} onClick={()=>selectTicket(t)} style={{background:"#fff",border:`1.5px solid ${isSel?"#0875dc":"#e8edf5"}`,borderRadius:10,padding:"10px 10px 8px",cursor:"pointer",transition:"all .15s",boxShadow:isSel?"0 0 0 2px #bddcff":"none"}}
+                          onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 3px 12px rgba(8,117,220,.1)";e.currentTarget.style.borderColor="#bddcff";}}
+                          onMouseLeave={e=>{e.currentTarget.style.boxShadow=isSel?"0 0 0 2px #bddcff":"none";e.currentTarget.style.borderColor=isSel?"#0875dc":"#e8edf5";}}>
+                          {/* Priority + ID */}
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                            <span style={{fontSize:".56rem",color:"#b0bcc9",fontFamily:"monospace",fontWeight:600}}>#{t.id.slice(0,7).toUpperCase()}</span>
+                            {pri!=="عادية"&&<span style={{fontSize:".55rem",fontWeight:700,color:pc.color,background:pc.bg,padding:"1px 6px",borderRadius:20}}>{pri}</span>}
+                          </div>
+                          {/* Title */}
+                          <div style={{fontSize:".7rem",fontWeight:700,color:"#073766",lineHeight:1.4,marginBottom:7,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{t.title}</div>
+                          {/* Client */}
+                          <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:6}}>
+                            <Building2 size={10} color="#8b9dad"/>
+                            <span style={{fontSize:".6rem",color:"#526983",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.clients?.name||t.profiles?.full_name||"عميل"}</span>
+                          </div>
+                          {/* Footer: rating + age */}
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                            {t.rating?(
+                              <span style={{display:"inline-flex",alignItems:"center",gap:1}}>
+                                {[1,2,3,4,5].map(s=><Star key={s} size={10} fill={t.rating!>=s?"#f59e0b":"#e2e8f0"} color={t.rating!>=s?"#f59e0b":"#e2e8f0"}/>)}
+                              </span>
+                            ):<span/>}
+                            <span style={{fontSize:".56rem",color:"#b0bcc9"}}>{formatAge(t.created_at)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="tc-cards" style={{display:viewMode==="kanban"?"none":"flex"}}>
           {loading?(
             <div className="tc-empty"><Loader size={28} className="spin"/><p>جاري التحميل...</p></div>
           ):filtered.length===0?(
             <div className="tc-empty"><MessageSquare size={34}/><p>لا توجد تذاكر</p></div>
           ):filtered.map((t,idx)=>{
             const sc   =STATUS_CFG[t.status]||STATUS_CFG["جديدة"];
-            const pc   =PRI_CFG[t.priority]||PRI_CFG["عادية"];
+            const pri  =normPri(t.priority);
+            const pc   =PRI_CFG[pri]||PRI_CFG["عادية"];
             const slac =getSLADot(t.updated_at);
             const isSel=selected?.id===t.id;
             const isHov=hoveredRow===t.id||focusedRow===t.id;
             const quickSt=STATUS_OPTIONS.filter(s=>s!==t.status&&s!=="مغلقة").slice(0,2);
+            const price=extractPrice(t.body||t.description);
             return (
               <div key={t.id} role="button" tabIndex={0}
                 onClick={()=>selectTicket(t)}
                 onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();selectTicket(t);}}}
                 onMouseEnter={()=>setHoveredRow(t.id)} onMouseLeave={()=>setHoveredRow(null)}
                 onFocus={()=>setFocusedRow(t.id)} onBlur={()=>setFocusedRow(null)}
-                className={`tc-card${isSel?" on":""}${t.priority==="عاجلة"?" urgent":""}`}
+                className={`tc-card${isSel?" on":""}${pri==="عاجلة"?" urgent":""}`}
                 style={{animationDelay:`${Math.min(idx*30,240)}ms`}}>
                 <div className="tc-card-header">
                   <span className="tc-card-id">
-                    #{t.id.slice(0,8).toUpperCase()}
-                    {unreadTickets.has(t.id)&&<span className="tc-unread"/>}
+                    <span style={{fontSize:9,color:"#aab8c8",fontWeight:600,fontFamily:"inherit",letterSpacing:".02em"}}>رقم التذكرة</span>
+                    <span style={{display:"block"}}>#{t.id.slice(0,7).toUpperCase()}{unreadTickets.has(t.id)&&<span className="tc-unread" style={{marginRight:4}}/>}</span>
                   </span>
                   <div className="tc-card-badges">
-                    <span className="tc-pri-badge" style={{color:pc.color,background:pc.bg}}>{t.priority}</span>
+                    {pri!=="عادية"&&<span className="tc-pri-badge" style={{color:pc.color,background:pc.bg}}>{pri}</span>}
                     <span className="tc-sla-dot" style={{background:slac,boxShadow:slac!=="#16a34a"?`0 0 6px ${slac}88`:"none"}}/>
                   </div>
                 </div>
@@ -516,7 +637,19 @@ export default function AdminTicketsPage() {
                   <span className="tc-status-badge" style={{color:sc.color,background:sc.bg,borderColor:sc.border}}>
                     {sc.icon} {t.status}
                   </span>
-                  <span className="tc-age">منذ {formatAge(t.created_at)}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    {t.rating && (
+                      <span style={{display:"inline-flex",alignItems:"center",gap:2}}>
+                        {[1,2,3,4,5].map(s=>(
+                          <Star key={s} size={10} fill={t.rating!>=s?"#f59e0b":"#e2e8f0"} color={t.rating!>=s?"#f59e0b":"#e2e8f0"}/>
+                        ))}
+                      </span>
+                    )}
+                    {price
+                      ?<span style={{fontSize:11,fontWeight:800,color:"#0875dc",background:"#eaf4ff",padding:"2px 8px",borderRadius:6,letterSpacing:".01em"}}>{price} ر.س</span>
+                      :<span className="tc-age">منذ {formatAge(t.created_at)}</span>
+                    }
+                  </div>
                 </div>
                 {isHov&&!isSel&&(
                   <div className="tc-card-quick" onClick={e=>e.stopPropagation()}>
@@ -562,17 +695,19 @@ export default function AdminTicketsPage() {
               <div className="tc-chat-head-top">
                 <div style={{flex:1,minWidth:0}}>
                   <div className="tc-ticket-id-row">
-                    <span className="tc-ticket-id-val">#{selected.id.slice(0,8).toUpperCase()}</span>
+                    <span className="tc-ticket-id-val" style={{display:"inline-flex",flexDirection:"column",gap:1}}>
+                      <span style={{fontSize:9,opacity:.55,fontWeight:600,letterSpacing:".03em"}}>رقم التذكرة</span>
+                      #{selected.id.slice(0,8).toUpperCase()}
+                    </span>
                     <span style={{color:"#c8d6e4"}}>·</span>
                     <span>{selected.category}</span>
                     <span style={{color:"#c8d6e4"}}>·</span>
                     <span>منذ {formatAge(selected.created_at)}</span>
-                    {(()=>{const pc=PRI_CFG[selected.priority]||PRI_CFG["عادية"];return <span style={{color:pc.color,background:pc.bg,fontSize:12,padding:"2px 10px",borderRadius:8,fontWeight:800}}>{selected.priority}</span>;})()}
+                    {(()=>{const p=normPri(selected.priority);const pc=PRI_CFG[p]||PRI_CFG["عادية"];return <span style={{color:pc.color,background:pc.bg,fontSize:12,padding:"2px 10px",borderRadius:8,fontWeight:800}}>{p}</span>;})()}
                   </div>
                   <h2 className="tc-ticket-title">{selected.title}</h2>
                 </div>
                 <div className="tc-head-actions">
-                  <span className="tc-live-pill"><span className="tc-live-dot"/> مباشر</span>
                   {selected.archived_at ? (
                     <button onClick={()=>archiveTicket(selected.id,false)} title="إلغاء الأرشفة" style={{padding:"5px 10px",border:"1px solid #d1fae5",background:"#f0fdf4",color:"#15803d",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>إلغاء الأرشفة</button>
                   ) : (
@@ -693,7 +828,7 @@ export default function AdminTicketsPage() {
             {/* Detail tabs */}
             <div className="tc-detail-tabs">
               {([
-                {key:"chat"   as DetailTab, label:"المحادثة",     icon:<MessageCircle size={15}/>, badge:visibleMsgs.length},
+                {key:"replies" as DetailTab, label:"الطلب والرد",  icon:<MessageCircle size={15}/>, badge:visibleMsgs.length},
                 {key:"client" as DetailTab, label:"بيانات العميل",icon:<UserCircle    size={15}/>, badge:0},
                 {key:"sub"    as DetailTab, label:"الباقات",      icon:<CreditCard    size={15}/>, badge:subscriptions.length},
                 {key:"docs"   as DetailTab, label:"المستندات",    icon:<FolderOpen    size={15}/>, badge:signedUrls.length},
@@ -709,9 +844,10 @@ export default function AdminTicketsPage() {
             {/* Tab content */}
             <div className="tc-tab-content">
 
-              {/* ─ CHAT ─ */}
-              {detailTab==="chat"&&(
+              {/* ─ REPLIES ─ */}
+              {detailTab==="replies"&&(
                 <>
+                  {/* Ticket body */}
                   {(()=>{
                     const parsed=parseTicketDetails(selected.body||selected.description);
                     if(!parsed.mainDescription&&!parsed.extraFields.length) return null;
@@ -735,33 +871,47 @@ export default function AdminTicketsPage() {
                     );
                   })()}
 
-                  <div className="tc-msgs">
+                  {/* Messages as cards */}
+                  <div className="tc-msgs" style={{gap:10}}>
                     {visibleMsgs.length===0?(
-                      <div className="tc-msgs-empty"><MessageSquare size={36} color="#c0cbd8"/><p>لا توجد رسائل بعد</p></div>
-                    ):visibleMsgs.map((msg,idx)=>{
+                      <div className="tc-msgs-empty"><MessageSquare size={36} color="#c0cbd8"/><p>لا توجد ردود بعد</p></div>
+                    ):visibleMsgs.map((msg)=>{
                       const isAdmin=isStaffRoleCheck(msg.sender?.role);
                       const isInt=!!msg.is_internal;
                       const roleLabel: Record<string,string>={admin:"مدير النظام",manager:"مدير عمليات",operator:"موظف دعم",viewer:"مشاهد"};
-                      const name=isAdmin?`${msg.sender?.full_name||"فريق الدعم"}${msg.sender?.role?` · ${roleLabel[msg.sender.role]||""}`:""}`:(msg.sender?.full_name||"العميل");
-                      const msgDate=new Date(msg.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"});
-                      const prevDate=idx>0?new Date(visibleMsgs[idx-1].created_at).toLocaleDateString("ar-SA", {calendar:"gregory"}):null;
+                      const name=isAdmin?(msg.sender?.full_name||"فريق الدعم"):(msg.sender?.full_name||"العميل");
+                      const roleStr=isAdmin&&msg.sender?.role?(roleLabel[msg.sender.role]||""):"";
                       return (
-                        <React.Fragment key={msg.id}>
-                          {(idx===0||msgDate!==prevDate)&&<div className="tc-date-sep"><span>{formatDateLabel(msg.created_at)}</span></div>}
-                          <div className={`tc-msg${isAdmin?" admin":""}${isInt?" internal":""}`}>
-                            <div className={`tc-av ${isAdmin?"tc-av-admin":"tc-av-client"}`} style={msg.sender?.avatar_url?{}:avatarStyle(msg.sender?.full_name)}>
-                              {msg.sender?.avatar_url?<img src={msg.sender.avatar_url} alt="" className="tc-av-img"/>:(msg.sender?.full_name||"د")[0].toUpperCase()}
+                        <div key={msg.id} style={{
+                          border:`1px solid ${isInt?"#fde68a":isAdmin?"#bddcff":"#e5eaf0"}`,
+                          borderRight:`4px solid ${isInt?"#f59e0b":isAdmin?"#0875dc":"#94a3b8"}`,
+                          borderRadius:10,
+                          padding:"12px 14px",
+                          background:isInt?"#fefce8":isAdmin?"#f8fbff":"#fafbfc",
+                        }}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                            <div style={{
+                              width:30,height:30,borderRadius:"50%",flexShrink:0,
+                              display:"grid",placeItems:"center",fontSize:13,fontWeight:800,
+                              background:isAdmin?"#dbeafe":"#f1f5f9",
+                              color:isAdmin?"#1d4ed8":"#475569",
+                              ...(!msg.sender?.avatar_url?avatarStyle(msg.sender?.full_name):{}),
+                            }}>
+                              {msg.sender?.avatar_url
+                                ?<img src={msg.sender.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}}/>
+                                :(msg.sender?.full_name||"م")[0].toUpperCase()}
                             </div>
-                            <div className="tc-msg-body">
-                              <div className="tc-msg-meta">
-                                {isInt&&<span className="tc-int-badge"><Lock size={11}/> داخلية</span>}
-                                <strong>{name}</strong>
-                                <small>{fmtTime(msg.created_at)}</small>
+                            <div style={{flex:1}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                <strong style={{fontSize:13,color:"#073766"}}>{name}</strong>
+                                {roleStr&&<span style={{fontSize:11,color:isAdmin?"#0875dc":"#64748b",background:isAdmin?"#eaf4ff":"#f1f5f9",padding:"1px 7px",borderRadius:4,fontWeight:600}}>{roleStr}</span>}
+                                {isInt&&<span style={{fontSize:11,color:"#92400e",background:"#fef9c3",padding:"1px 7px",borderRadius:4,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><Lock size={10}/> داخلية</span>}
                               </div>
-                              <div className={`tc-bubble ${isAdmin?"tc-bubble-admin":"tc-bubble-client"}`}>{msg.body}</div>
+                              <div style={{fontSize:11,color:"#9aafbf",marginTop:1}}>{fmtTime(msg.created_at)}</div>
                             </div>
                           </div>
-                        </React.Fragment>
+                          <div style={{fontSize:13.5,color:"#344d69",lineHeight:1.75,whiteSpace:"pre-wrap",paddingRight:38}}>{msg.body}</div>
+                        </div>
                       );
                     })}
 
@@ -771,14 +921,14 @@ export default function AdminTicketsPage() {
                       </button>
                       {showHistory&&(
                         <div className="tc-history-body">
-                          <div className="tc-hist-row"><span className="tc-hist-dot" style={{background:"#0875dc"}}/><div><div className="tc-hist-ev">تم إنشاء التذكرة</div><div className="tc-hist-t">{new Date(selected.created_at).toLocaleString("ar-SA",{year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div></div></div>
+                          <div className="tc-hist-row"><span className="tc-hist-dot" style={{background:"#0875dc"}}/><div><div className="tc-hist-ev">تم إنشاء التذكرة</div><div className="tc-hist-t">{formatAppDateTime(selected.created_at)}</div></div></div>
                           {historyMsgs.map(m=>{
-                            let dot="#7c3aed",body=m.body;
+                            let dot="#0f766e",body=m.body;
                             if(m.message_type==="revision") dot="#b45309";
                             if(m.message_type==="rating"){dot="#f59e0b";try{const p=JSON.parse(m.body);body=`⭐ تقييم ${p.rating}/5 للمشرف ${p.staff_name}${p.comment?`: ${p.comment}`:""}`;} catch{}}
                             return <div key={m.id} className="tc-hist-row"><span className="tc-hist-dot" style={{background:dot}}/><div><div className="tc-hist-ev">{body}</div><div className="tc-hist-t">{fmtTime(m.created_at)}</div></div></div>;
                           })}
-                          <div className="tc-hist-row"><span className="tc-hist-dot" style={{background:"#15803d"}}/><div><div className="tc-hist-ev">آخر تحديث</div><div className="tc-hist-t">{new Date(selected.updated_at).toLocaleString("ar-SA",{year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div></div></div>
+                          <div className="tc-hist-row"><span className="tc-hist-dot" style={{background:"#15803d"}}/><div><div className="tc-hist-ev">آخر تحديث</div><div className="tc-hist-t">{formatAppDateTime(selected.updated_at)}</div></div></div>
                         </div>
                       )}
                     </div>
@@ -901,7 +1051,7 @@ export default function AdminTicketsPage() {
                       )}
                       {(selected.clients?.email||selected.profiles?.email)&&(
                         <a href={`mailto:${selected.clients?.email||selected.profiles?.email}`} className="tc-contact-link">
-                          <div className="tc-contact-icon" style={{background:"#f5f3ff"}}><Mail size={18} color="#7c3aed"/></div>
+                          <div className="tc-contact-icon" style={{background:"#f0fdfa"}}><Mail size={18} color="#0f766e"/></div>
                           <div><div className="tc-contact-type">البريد</div><div className="tc-contact-val">{selected.clients?.email||selected.profiles?.email}</div></div>
                         </a>
                       )}
@@ -916,18 +1066,18 @@ export default function AdminTicketsPage() {
                       </div>
                       <div className="tc-info-grid">
                         {[
-                          {label:"الرقم الضريبي", value:selected.clients.tax_number||"—"},
-                          {label:"السجل التجاري", value:selected.clients.commercial_number},
+                          {label:"الرقم الضريبي", value:selected.clients.tax_number||"—", always:true},
+                          {label:"السجل التجاري", value:selected.clients.commercial_number||"—", always:true},
                           {label:"المدينة",        value:selected.clients.city},
                           {label:"النشاط",         value:selected.clients.company_activity},
                           {label:"حجم الكيان",     value:selected.clients.entity_size?ENTITY_SIZE_LABELS[selected.clients.entity_size]:null},
                           {label:"النطاق",         value:selected.clients.company_scope?SCOPE_LABELS[selected.clients.company_scope]:null},
                           {label:"الموظفون",       value:selected.clients.employee_count!=null?String(selected.clients.employee_count):null},
                           {label:"العنوان",        value:selected.clients.company_address},
-                        ].filter(r=>r.value).map(r=>(
+                        ].filter(r=>r.always||r.value).map(r=>(
                           <div key={r.label} className="tc-info-cell">
                             <div className="tc-info-lbl">{r.label}</div>
-                            <div className="tc-info-val">{r.value}</div>
+                            <div className="tc-info-val" style={!r.value||r.value==="—"?{color:"#b0bec5",fontStyle:"italic"}:undefined}>{r.value||"—"}</div>
                           </div>
                         ))}
                       </div>
@@ -950,9 +1100,9 @@ export default function AdminTicketsPage() {
                       <p style={{fontSize:15,margin:0}}>لا توجد باقات نشطة</p>
                     </div>
                   )}
-                  {!loadingSub&&subscriptions.filter(s=>!s.end_date||new Date(s.end_date)>=new Date()).length>0&&(
+                  {!loadingSub&&subscriptions.filter(s=>!s.end_date||s.end_date>=new Date().toISOString().slice(0,10)).length>0&&(
                     <div className="tc-sub-grid">
-                      {subscriptions.filter(s=>!s.end_date||new Date(s.end_date)>=new Date()).map(sub=>(
+                      {subscriptions.filter(s=>!s.end_date||s.end_date>=new Date().toISOString().slice(0,10)).map(sub=>(
                         <div key={sub.id} className="tc-sub">
                           <div className="tc-sub-tier">{sub.packages?.tier_ar||sub.packages?.category||"باقة"}</div>
                           <div className="tc-sub-name">{sub.packages?.title_ar||"باقة نشطة"}</div>
@@ -1002,13 +1152,13 @@ export default function AdminTicketsPage() {
                       {clientDocs.length>0&&(
                         <div className="tc-docs-group">
                           <div className="tc-docs-group-head">
-                            <div className="tc-docs-group-head-icon" style={{background:"#f5f3ff"}}><FileText size={18} color="#7c3aed"/></div>
+                            <div className="tc-docs-group-head-icon" style={{background:"#f0fdfa"}}><FileText size={18} color="#0f766e"/></div>
                             <div className="tc-docs-group-title">مستندات المنشأة</div>
                             <span className="tc-docs-group-count">{clientDocs.length}</span>
                           </div>
                           {clientDocs.map((doc,i)=>(
                             <div key={i} className="tc-doc-row">
-                              <div className="tc-doc-icon"><FileText size={18} color="#7c3aed"/></div>
+                              <div className="tc-doc-icon"><FileText size={18} color="#0f766e"/></div>
                               <div className="tc-doc-name">{doc.label}</div>
                               <div className="tc-doc-actions">
                                 <a href={doc.url} target="_blank" rel="noopener noreferrer" className="tc-doc-action" style={{color:"#0875dc",background:"#eaf4ff",borderColor:"#bddcff"}}><ExternalLink size={14}/></a>

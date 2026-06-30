@@ -1,8 +1,10 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
+import { formatAppDate } from "@/lib/date-format";
 import {
   CheckCircle, Lock, ShieldCheck, Trash2,
   UserPlus, UserMinus, KeyRound, UserCog, Mail,
@@ -19,7 +21,7 @@ const AUDIT_CONFIG: Record<string, AuditConfig> = {
   user_created:         { label: "إنشاء حساب جديد",       color: "#15803d", bg: "#f0fdf4", Icon: UserPlus },
   user_invited:         { label: "إرسال دعوة",             color: "#0875dc", bg: "#eff6ff", Icon: Mail },
   invitation_cancelled: { label: "إلغاء دعوة",             color: "#d97706", bg: "#fffbeb", Icon: Mail },
-  password_changed:     { label: "تغيير كلمة المرور",      color: "#7c3aed", bg: "#f5f3ff", Icon: KeyRound },
+  password_changed:     { label: "تغيير كلمة المرور",      color: "#0f766e", bg: "#f0fdfa", Icon: KeyRound },
   profile_updated:      { label: "تعديل بيانات العضو",     color: "#0875dc", bg: "#eff6ff", Icon: UserCog },
   user_deleted:         { label: "حذف حساب",               color: "#dc2626", bg: "#fef2f2", Icon: UserMinus },
   role_changed:         { label: "تغيير الصلاحية",         color: "#d97706", bg: "#fffbeb", Icon: ShieldAlert },
@@ -298,7 +300,7 @@ export default function SettingsPage() {
           const details = buildAuditDetails(log);
           const actor = log.profiles?.full_name ?? "النظام";
           const dt = new Date(log.created_at);
-          const dateStr = dt.toLocaleDateString("ar-SA", { calendar:"gregory", day:"numeric", month:"short", year:"numeric" });
+          const dateStr = formatAppDate(dt);
           const timeStr = dt.toLocaleTimeString("ar-SA", { hour:"2-digit", minute:"2-digit" });
           return (
             <div key={log.id} style={{ display:"grid", gridTemplateColumns:"28px 1fr auto auto", gap:"0 12px", alignItems:"center", padding:"9px 14px", borderBottom: idx < auditLogs.length - 1 ? "1px solid #f0f4f8" : "none", transition:"background .1s" }}
@@ -328,7 +330,7 @@ export default function SettingsPage() {
     panel = <div className="follow-empty">تدار التنبيهات من المتابعات والمواعيد.</div>;
   }
 
-  if (authLoading) return <div className="follow-empty">جاري التحميل...</div>;
+  if (authLoading) return <PageLoader text="جاري تحميل الإعدادات..." />;
   return (
       <><section className="settings-page">
         <div className="settings-heading">

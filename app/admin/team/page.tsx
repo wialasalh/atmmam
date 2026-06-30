@@ -1,3 +1,4 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
 import { ALL_PERMISSIONS, PERMISSION_GROUPS, defaultPermissions, type PermissionKey } from "@/lib/auth/permissions";
+import { formatAppDate, formatAppDateTime } from "@/lib/date-format";
 
 type Role = "admin" | "manager" | "operator" | "viewer";
 type TeamMember = {
@@ -175,8 +177,8 @@ export default function TeamPage() {
     try { const res = await fetch("/api/admin/team/invitations"); if (res.ok) { const payload = await res.json() as { data: Invitation[] }; setInvitations(payload.data); } } catch { }
   }
 
-  if (authLoading) return <section className="team-page"><p className="follow-empty">جاري التحميل...</p></section>;
-  if (loading) return <section className="team-page"><p className="follow-empty">جاري التحميل...</p></section>;
+  if (authLoading) return <PageLoader text="جاري تحميل الفريق..." />;
+  if (loading) return <PageLoader text="جاري تحميل الفريق..." />;
   if (apiError) return <section className="team-page"><div className="follow-empty"><p>{apiError}</p><button className="ops-new" style={{ marginTop: 12 }} onClick={() => { setApiError(""); setLoading(true); fetch("/api/admin/team").then(async res => { if (res.ok) { const p = await res.json(); setMembers(p.members); setCurrentUserId(p.currentUserId); setApiError(""); } else { setApiError("فشل تحميل الفريق"); } }).catch(() => setApiError("فشل الاتصال")).finally(() => setLoading(false)); }}>إعادة المحاولة</button></div></section>;
 
   return <>
@@ -263,7 +265,7 @@ export default function TeamPage() {
                     )}
                   </td>
                   <td><span className={`team-status ${member.active ? "active" : "inactive"}`}>{member.active ? "نشط" : "موقوف"}</span></td>
-                  <td><time>{member.created_at ? new Date(member.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"}) : "—"}</time></td>
+                  <td><time>{member.created_at ? formatAppDate(member.created_at) : "—"}</time></td>
                     <td>
                     <div className="team-row-actions">
                       {!member.super_admin && <button className="team-action-btn" title="الصلاحيات" onClick={() => { setPermMember(member); setPermValues((member.permissions || defaultPermissions(member.role)) as PermissionKey[]); setPermError(""); }}><SlidersHorizontal size={15} /></button>}
@@ -301,8 +303,8 @@ export default function TeamPage() {
                       <td><span className={`team-status ${inv.status === "accepted" ? "active" : inv.status === "pending" ? "pending" : "inactive"}`}>
                         {inv.status === "pending" ? "بانتظار القبول" : inv.status === "accepted" ? "مقبولة" : inv.status === "expired" ? "منتهية" : "ملغية"}
                       </span></td>
-                      <td><time>{new Date(inv.created_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}</time></td>
-                      <td><time>{new Date(inv.expires_at).toLocaleDateString("ar-SA", {calendar:"gregory"})}</time></td>
+                      <td><time>{formatAppDate(inv.created_at)}</time></td>
+                      <td><time>{formatAppDate(inv.expires_at)}</time></td>
                       <td>{inv.status === "pending" && <button className="team-action-btn" title="إلغاء" onClick={() => void handleCancelInvitation(inv.id)}>❌</button>}</td>
                     </tr>
                   ))}
@@ -511,7 +513,7 @@ export default function TeamPage() {
                         </div>
                         {r.comment && <p style={{ margin: "4px 0 0", fontSize: ".62rem", color: "#6f869b", lineHeight: 1.5 }}>"{r.comment}"</p>}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                          <div style={{ fontSize: ".5rem", color: "#aab5c3" }}>{new Date(r.date).toLocaleDateString("ar-SA", {calendar:"gregory",  year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                          <div style={{ fontSize: ".5rem", color: "#aab5c3" }}>{formatAppDateTime(r.date)}</div>
                           {r.ticket_id && <a href={`/admin/tickets?selected=${r.ticket_id}`} style={{ fontSize: ".5rem", color: "#0875dc", textDecoration: "none" }}>عرض التذكرة ←</a>}
                         </div>
                       </div>

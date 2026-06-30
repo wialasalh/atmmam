@@ -1,3 +1,4 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 
 import { useEffect, useState } from "react";
@@ -129,7 +130,7 @@ export default function AdminDashboardPage() {
         <KpiCard icon={<ClipboardList size={20} />} label="إجمالي الطلبات" value={ordStats.total} color="#0875dc" bg="#e8f1fb" />
         <KpiCard icon={<Zap size={20} />} label="قيد التنفيذ" value={ordStats.active} color="#d06418" bg="#fff0e5" />
         <KpiCard icon={<Clock size={20} />} label="بانتظار مستندات" value={ordStats.waiting} color="#ee892e" bg="#fff8e5" />
-        <KpiCard icon={<Ticket size={20} />} label="تذاكر مفتوحة" value={tktOpen} color="#7c3aed" bg="#f3e8ff" />
+        <KpiCard icon={<Ticket size={20} />} label="تذاكر مفتوحة" value={tktOpen} color="#0f766e" bg="#f3e8ff" />
         <KpiCard icon={<AlertTriangle size={20} />} label="مهام متأخرة" value={overdueTasks} color="#dc2626" bg="#fef2f2" />
         <KpiCard icon={<CheckCircle size={20} />} label="مكتمل" value={ordStats.done} color="#13795a" bg="#e2f5ed" />
       </div>
@@ -177,14 +178,16 @@ export default function AdminDashboardPage() {
                   </thead>
                   <tbody>
                     {openTickets.map((t: any) => {
-                      const pColor = t.priority === "عاجلة" ? "#dc2626" : t.priority === "مرتفعة" ? "#d06418" : "#8b9dad";
+                      const PMAP: Record<string,string> = { normal:"عادية", urgent:"عاجلة", high:"مرتفعة", low:"عادية" };
+                      const pri = PMAP[t.priority] ?? t.priority ?? "عادية";
+                      const pColor = pri === "عاجلة" ? "#dc2626" : pri === "مرتفعة" ? "#d06418" : "#8b9dad";
                       return (
                         <tr key={t.id} style={{ borderBottom: "1px solid #f0f3f8" }}>
                           <td style={s.td}><code style={s.code}>{t.ref_number || t.id.slice(0, 8).toUpperCase()}</code></td>
                           <td style={s.td}>{t.client?.name || t.profiles?.full_name || "—"}</td>
                           <td style={{ ...s.td, color: "#526983", fontSize: ".63rem", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</td>
                           <td style={s.td}><OrderStatusBadge status={t.status} /></td>
-                          <td style={{ ...s.td }}><span style={{ fontSize: ".55rem", fontWeight: 700, color: pColor }}>●</span> {t.priority || "—"}</td>
+                          <td style={{ ...s.td }}><span style={{ fontSize: ".55rem", fontWeight: 700, color: pColor }}>●</span> {pri}</td>
                         </tr>
                       );
                     })}
@@ -292,11 +295,11 @@ export default function AdminDashboardPage() {
                 <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#0875dc" }}>{todayTasks}</div>
               </div>
             </div>
-            <div style={{ ...s.statMini, background: "#f5f3ff", borderColor: "#ddd6fe" }}>
-              <div style={s.statMiniIcon}><Users size={18} color="#7c3aed" /></div>
+            <div style={{ ...s.statMini, background: "#f0fdfa", borderColor: "#99f6e4" }}>
+              <div style={s.statMiniIcon}><Users size={18} color="#0f766e" /></div>
               <div>
                 <div style={{ fontSize: ".55rem", color: "#526983", fontWeight: 700 }}>أعضاء الفريق</div>
-                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#7c3aed" }}>{teamCount}</div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#0f766e" }}>{teamCount}</div>
               </div>
             </div>
             <div style={{ ...s.statMini, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
@@ -434,15 +437,10 @@ function OrderStatusBadge({ status }: { status: string }) {
   return <span style={{ fontSize: ".55rem", fontWeight: 700, background: m.bg, color: m.color, padding: "2px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>{m.label}</span>;
 }
 
-const Splash = (
-  <div style={{ display: "grid", placeItems: "center", height: "calc(100vh - 76px)" }}>
-    <div style={{ width: 24, height: 24, border: "2px solid #e5ecf3", borderTopColor: "#073766", borderRadius: "50%", animation: "spin .6s linear infinite" }} />
-    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-  </div>
-);
+const Splash = <PageLoader text="جاري تحميل لوحة التحكم..." />;
 
 const s: Record<string, React.CSSProperties> = {
-  page: { padding: "24px 24px 40px", maxWidth: 1400, margin: "0 auto", direction: "rtl" },
+  page: { padding: "24px 24px 40px", width: "100%", direction: "rtl" },
 
   header: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 20, gap: 16, flexWrap: "wrap" },
   date: { fontSize: ".7rem", color: "#7a8fa6", margin: "0 0 3px" },

@@ -235,42 +235,112 @@
   margin-right: auto;
 }
 
-/* ── Sidebar Footer ── */
-.client-dash-sidebar-footer {
-  padding: 14px 20px;
+/* ── Sidebar footer buttons (desktop) ── */
+.client-dash-sidebar-footer-icons {
+  padding: 12px 14px 16px;
   border-top: 1px solid #e5ecf3;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
+  justify-content: center;
 }
-.client-dash-back-link,
-.client-dash-logout-btn {
+.client-dash-sidebar-icon-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f4f7fb;
+  color: #5a7290;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all .18s;
+  flex-shrink: 0;
+}
+.client-dash-sidebar-icon-btn span {
+  display: none;
+}
+.client-dash-sidebar-icon-btn::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a2d40;
+  color: #fff;
+  font-size: .58rem;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.client-dash-sidebar-icon-btn:hover::after {
+  opacity: 1;
+}
+.client-dash-sidebar-icon-btn:hover {
+  background: #e8f0fa;
+  color: #073766;
+  border-color: #c8d9ef;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(8,117,220,.12);
+}
+.client-dash-sidebar-icon-btn--danger {
+  color: #b94040;
+  background: #fdf6f6;
+  border-color: #f0d0d0;
+}
+.client-dash-sidebar-icon-btn--danger:hover {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #f1a1a1;
+  box-shadow: 0 3px 10px rgba(185,64,64,.15);
+}
+
+/* ── Topbar action icons ── */
+.client-dash-topbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  gap: 6px;
+}
+.client-dash-topbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
   border-radius: 8px;
-  font-size: .65rem;
+  font-size: .62rem;
   font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: #f4f7fb;
+  color: #4a6583;
+  display: grid;
+  place-items: center;
   cursor: pointer;
   text-decoration: none;
   transition: all .15s;
-}
-.client-dash-back-link {
-  color: #6f869b;
-}
-.client-dash-back-link:hover {
-  background: #f0f5fc;
-  color: #2a4a6a;
-}
-.client-dash-logout-btn {
-  border: 0;
-  background: transparent;
-  color: #dc2626;
   font: inherit;
 }
-.client-dash-logout-btn:hover {
-  background: #fef0f0;
+.client-dash-topbar-icon-btn:hover {
+  background: #e8f0fa;
+  color: #073766;
+  border-color: #c8d9ef;
+}
+.client-dash-topbar-icon-btn--danger {
+  color: #c0392b;
+  background: #fdf4f4;
+  border-color: #f5c6c6;
+}
+.client-dash-topbar-icon-btn--danger:hover {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #f1a1a1;
 }
 
 /* ── Main Area ── */

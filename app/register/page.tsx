@@ -68,7 +68,7 @@ function RegisterForm() {
           {isInvite ? (
             <p className="client-auth-sub">تم قبول الدعوة بنجاح. سيتم تحويلك لتسجيل الدخول...</p>
           ) : (
-            <p className="client-auth-sub">يرجى التحقق من بريدك الإلكتروني <strong>{form.email}</strong> وتأكيد الحساب للتمكن من تسجيل الدخول وإرسال تذاكر الدعم ورفع المستندات.</p>
+            <p className="client-auth-sub">تم إنشاء حسابك بنجاح. يمكنك الآن تسجيل الدخول والبدء في استخدام المنصة.</p>
           )}
           {confirmLink && process.env.NODE_ENV === "development" && (
             <div style={{ background: "#f0f7ff", padding: "12px 14px", borderRadius: 10, marginBottom: 16, fontSize: ".65rem", color: "#2a4a6a", wordBreak: "break-all" }}>

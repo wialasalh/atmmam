@@ -1,96 +1,318 @@
+import PageLoader from "@/components/page-loader";
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, useRef } from "react";
-import { AdminOrder, initialAdminOrders, OrderStatus, readAdminOrders, statusTone, writeAdminOrders } from "@/lib/admin-orders";
-import { allowedOrderStatuses, canChangeOrderStatus, filterAdminOrders } from "@/lib/domain/orders";
-import { X, Search, Plus, AlertTriangle, Check, Clock, Flag, User, FileText, Building2, Phone, Mail, Calendar, CheckCircle, MessageSquare, ChevronDown, Layers, ListChecks, ExternalLink, Upload, RefreshCw, Copy, ChevronLeft, AlertCircle } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertCircle,
+  Archive,
+  Building2,
+  Calendar,
+  Check,
+  CheckCircle,
+  ChevronLeft,
+  Clock,
+  Copy,
+  FileText,
+  Flag,
+  Layers,
+  Mail,
+  MessageSquare,
+  Phone,
+  Plus,
+  RefreshCw,
+  Search,
+  Send,
+  ShieldCheck,
+  Trash2,
+  Upload,
+  User,
+  X,
+} from "lucide-react";
+import { AdminOrder, OrderStatus, readAdminOrders, statusTone, writeAdminOrders } from "@/lib/admin-orders";
+import { allowedOrderStatuses, canChangeOrderStatus } from "@/lib/domain/orders";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
+import {
+  formatAppDate,
+  formatAppDateTime,
+  formatAppRelativeTime,
+  fromDateInputValue,
+  fromDateTimeLocalValue,
+} from "@/lib/date-format";
 
-const statusTabs: Array<OrderStatus | "الكل"> = ["الكل", "جديد", "بانتظار المستندات", "قيد التنفيذ", "مكتمل", "ملغي", "معلق"];
 type CatalogItem = { id: string; name?: string; full_name?: string; phone?: string; email?: string; agency_id?: string };
-type RelatedTicket = { id: string; title: string; status: string; priority: string; category: string; client_id?: string };
 type Catalog = { clients: CatalogItem[]; services: CatalogItem[]; agencies: CatalogItem[]; profiles: CatalogItem[] };
-type DatabaseOrder = { id:string; reference_no:string; status:string; next_action_text?:string; next_action_at?:string; updated_at:string; archived_at?:string|null; clients?:CatalogItem|null; services?:CatalogItem|null; agencies?:CatalogItem|null; profiles?:CatalogItem|null; notes?:string|null };
-const statusFromDatabase: Record<string, OrderStatus> = { new:"جديد", waiting_documents:"بانتظار المستندات", in_progress:"قيد التنفيذ", completed:"مكتمل", cancelled:"ملغي", blocked:"معلق" };
-const statusToDatabase: Record<OrderStatus, string> = { "جديد":"new", "بانتظار المستندات":"waiting_documents", "قيد التنفيذ":"in_progress", "مكتمل":"completed", "ملغي":"cancelled", "معلق":"blocked" };
+type RelatedTicket = { id: string; title: string; status: string; priority: string; category: string; client_id?: string };
+type OrderDocument = { name: string; status: string; download_url?: string | null; uploaded_at?: string | null; created_at?: string | null };
+type DatabaseOrder = {
+  id: string;
+  reference_no: string;
+  status: string;
+  priority?: "normal" | "high" | "urgent";
+  due_at?: string | null;
+  next_action_text?: string | null;
+  next_action_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at?: string | null;
+  notes?: string | null;
+  clients?: CatalogItem | null;
+  services?: CatalogItem | null;
+  agencies?: CatalogItem | null;
+  profiles?: CatalogItem | null;
+};
+type OpsOrder = AdminOrder & {
+  priority?: "normal" | "high" | "urgent";
+  dueAtRaw?: string | null;
+  nextActionAtRaw?: string | null;
+  createdAtRaw?: string | null;
+  updatedAtRaw?: string | null;
+};
 
-const priorityLabels: Record<string, string> = { normal: "عادي", high: "مرتفع", urgent: "عاجل" };
-const priorityColors: Record<string, string> = { normal: "#6c757d", high: "#e67e22", urgent: "#dc3545" };
+const statusTabs: Array<OrderStatus | "الكل"> = ["الكل", "جديد", "بانتظار المستندات", "قيد التنفيذ", "معلق", "مكتمل", "ملغي"];
+const statusFromDatabase: Record<string, OrderStatus> = {
+  new: "جديد",
+  waiting_documents: "بانتظار المستندات",
+  in_progress: "قيد التنفيذ",
+  completed: "مكتمل",
+  cancelled: "ملغي",
+  blocked: "معلق",
+};
+const statusToDatabase: Record<OrderStatus, string> = {
+  "جديد": "new",
+  "بانتظار المستندات": "waiting_documents",
+  "قيد التنفيذ": "in_progress",
+  "مكتمل": "completed",
+  "ملغي": "cancelled",
+  "معلق": "blocked",
+};
+const statusMeta: Record<OrderStatus, { label: string; color: string; bg: string; border: string; help: string }> = {
+  "جديد": { label: "جديد", color: "#0875dc", bg: "#eaf4ff", border: "#bddcff", help: "بانتظار الفرز" },
+  "بانتظار المستندات": { label: "بانتظار المستندات", color: "#b45309", bg: "#fef9ee", border: "#fde68a", help: "ينتظر العميل" },
+  "قيد التنفيذ": { label: "قيد التنفيذ", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4", help: "لدى الفريق" },
+  "معلق": { label: "معلق", color: "#c2410c", bg: "#fff7ed", border: "#fed7aa", help: "يحتاج قرار" },
+  "مكتمل": { label: "مكتمل", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0", help: "منجز" },
+  "ملغي": { label: "ملغي", color: "#dc2626", bg: "#fef2f2", border: "#fecaca", help: "متوقف" },
+};
+const priorityMeta: Record<string, { label: string; color: string; bg: string }> = {
+  normal: { label: "عادي", color: "#64748b", bg: "#f1f5f9" },
+  high: { label: "مرتفع", color: "#b45309", bg: "#fef9ee" },
+  urgent: { label: "عاجل", color: "#dc2626", bg: "#fef2f2" },
+};
+const queueFilters = [
+  { value: "all", label: "كل الطلبات" },
+  { value: "needsClient", label: "بانتظار العميل" },
+  { value: "needsTeam", label: "تحتاج إجراء" },
+  { value: "overdue", label: "متأخرة" },
+] as const;
 
-function Agency({ type, name }: { type: AdminOrder["agencyType"]; name: string }) {
-  const src = type === "commerce" ? "/assets/agencies/ministry-commerce.svg" : type === "zatca" ? "/assets/agencies/zatca-official.svg" : null;
-  return <span className="ops-agency">{src ? <img src={src} alt="" /> : <i>ح</i>}<span>{name}</span></span>;
+function agencyType(name?: string): AdminOrder["agencyType"] {
+  if (name?.includes("الزكاة")) return "zatca";
+  if (name?.includes("التجارة")) return "commerce";
+  return "ip";
+}
+
+function initials(name?: string) {
+  return (name || "؟").trim().slice(0, 2);
+}
+
+function isOverdue(order: OpsOrder) {
+  if (!order.nextActionAtRaw || ["مكتمل", "ملغي"].includes(order.status)) return false;
+  return new Date(order.nextActionAtRaw).getTime() < Date.now();
+}
+
+function statusOf(status: OrderStatus) {
+  return statusMeta[status] || statusMeta["جديد"];
+}
+
+function AgencyMark({ order }: { order: OpsOrder }) {
+  const iconBg = order.agencyType === "zatca" ? "#f0fdfa" : order.agencyType === "commerce" ? "#eaf4ff" : "#f8fafc";
+  const iconColor = order.agencyType === "zatca" ? "#0f766e" : order.agencyType === "commerce" ? "#0875dc" : "#64748b";
+  return (
+    <span className="ord-agency">
+      <i style={{ background: iconBg, color: iconColor }}><Building2 size={12} /></i>
+      {order.agency}
+    </span>
+  );
+}
+
+function StatusPill({ status }: { status: OrderStatus }) {
+  const meta = statusOf(status);
+  return <span className="ord-pill" style={{ color: meta.color, background: meta.bg, borderColor: meta.border }}>{meta.label}</span>;
 }
 
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState(initialAdminOrders);
+  const [orders, setOrders] = useState<OpsOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "الكل">("الكل");
-  const [selectedId, setSelectedId] = useState<string|undefined>(undefined);
+  const [queueFilter, setQueueFilter] = useState<(typeof queueFilters)[number]["value"]>("all");
+  const [selectedId, setSelectedId] = useState<string | undefined>();
   const [showCreate, setShowCreate] = useState(false);
   const [notice, setNotice] = useState("");
-  const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>({});
-  const [remoteDocs, setRemoteDocs] = useState<Record<string, Array<{name:string;status:string;download_url?:string|null}>>>({});
   const [databaseMode, setDatabaseMode] = useState(false);
-  const [catalog, setCatalog] = useState<Catalog>({ clients:[], services:[], agencies:[], profiles:[] });
+  const [catalog, setCatalog] = useState<Catalog>({ clients: [], services: [], agencies: [], profiles: [] });
   const [formSubmitted, setFormSubmitted] = useState(false);
-  const [showReasonDialog, setShowReasonDialog] = useState(false);
-  const [confirmDeleteOrder, setConfirmDeleteOrder] = useState<string|null>(null);
+  const [statusDialog, setStatusDialog] = useState<OrderStatus | null>(null);
+  const [confirmDeleteOrder, setConfirmDeleteOrder] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [pendingTargetStatus, setPendingTargetStatus] = useState<OrderStatus | null>(null);
+  const [remoteDocs, setRemoteDocs] = useState<Record<string, OrderDocument[]>>({});
+  const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>({});
   const [relatedTickets, setRelatedTickets] = useState<RelatedTicket[]>([]);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
-  const { role, loading } = useRoleGuard("operator");
+  const { loading } = useRoleGuard("operator");
 
-  async function loadDatabase() {
+  async function loadDatabase(keepSelection = true) {
+    setDataLoading(true);
     const [ordersResponse, catalogResponse] = await Promise.all([fetch("/api/admin/orders"), fetch("/api/admin/catalog")]);
-    if (!ordersResponse.ok || !catalogResponse.ok) return false;
-    const ordersPayload = await ordersResponse.json() as { data: DatabaseOrder[] }; const catalogPayload = await catalogResponse.json() as { data: Catalog };
-    const mapped = ordersPayload.data.map((order):AdminOrder => ({ databaseId:order.id, clientId:order.clients?.id, serviceId:order.services?.id, agencyId:order.agencies?.id, assigneeId:order.profiles?.id, id:order.reference_no, client:order.clients?.name??"عميل غير معروف", service:order.services?.name??"خدمة غير معروفة", agency:order.agencies?.name??"غير محددة", agencyType:order.agencies?.name?.includes("الزكاة")?"zatca":order.agencies?.name?.includes("التجارة")?"commerce":"ip", status:statusFromDatabase[order.status]??"جديد", assignee:order.profiles?.full_name??"غير مسند", updatedAt:new Date(order.updated_at).toLocaleString("ar-SA"), phone:order.clients?.phone??"", email:order.clients?.email??"", nextAction:order.next_action_text??"تحديد الإجراء التالي", nextActionAt:order.next_action_at?new Date(order.next_action_at).toLocaleString("ar-SA"):"غير محدد", statusReason:(order as any).notes || undefined, archivedAt: order.archived_at || null }));
-    setCatalog(catalogPayload.data); setOrders(mapped); setDatabaseMode(true); return true;
+    if (!ordersResponse.ok || !catalogResponse.ok) {
+      setOrdersLoading(false);
+      setDataLoading(false);
+      return false;
+    }
+    const ordersPayload = await ordersResponse.json() as { data: DatabaseOrder[] };
+    const catalogPayload = await catalogResponse.json() as { data: Catalog };
+    const mapped = ordersPayload.data.map((order): OpsOrder => ({
+      databaseId: order.id,
+      clientId: order.clients?.id,
+      serviceId: order.services?.id,
+      agencyId: order.agencies?.id,
+      assigneeId: order.profiles?.id,
+      id: order.reference_no,
+      client: order.clients?.name ?? "عميل غير معروف",
+      service: order.services?.name ?? "خدمة غير معروفة",
+      agency: order.agencies?.name ?? "غير محددة",
+      agencyType: agencyType(order.agencies?.name),
+      status: statusFromDatabase[order.status] ?? "جديد",
+      assignee: order.profiles?.full_name ?? "غير مسند",
+      updatedAt: formatAppDateTime(order.updated_at),
+      phone: order.clients?.phone ?? "",
+      email: order.clients?.email ?? "",
+      nextAction: order.next_action_text ?? "تحديد الإجراء التالي",
+      nextActionAt: order.next_action_at ? formatAppDateTime(order.next_action_at) : "غير محدد",
+      statusReason: order.notes || undefined,
+      archivedAt: order.archived_at || null,
+      priority: order.priority || "normal",
+      dueAtRaw: order.due_at,
+      nextActionAtRaw: order.next_action_at,
+      createdAtRaw: order.created_at,
+      updatedAtRaw: order.updated_at,
+    }));
+    setCatalog(catalogPayload.data);
+    setOrders(mapped);
+    setDatabaseMode(true);
+    if (!keepSelection || (selectedId && !mapped.some(order => order.id === selectedId))) setSelectedId(mapped[0]?.id);
+    else if (!selectedId && mapped.length) setSelectedId(mapped[0].id);
+    setOrdersLoading(false);
+    setDataLoading(false);
+    return true;
   }
 
-  useEffect(() => { const client = new URLSearchParams(window.location.search).get("client"); if (client) setQuery(client); if (process.env.NEXT_PUBLIC_SUPABASE_URL) void loadDatabase(); else setOrders(readAdminOrders()); }, []);
+  useEffect(() => {
+    const client = new URLSearchParams(window.location.search).get("client");
+    if (client) setQuery(client);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      void loadDatabase(false);
+    } else {
+      const fallback = readAdminOrders() as OpsOrder[];
+      setOrders(fallback);
+      setSelectedId(fallback[0]?.id);
+      setOrdersLoading(false);
+    }
+  }, []);
 
-  const filteredOrders = useMemo(() => {
-    const base = showArchived ? orders.filter(o => o.archivedAt) : orders.filter(o => !o.archivedAt);
-    return showArchived ? base : filterAdminOrders(base, query, statusFilter);
-  }, [orders, query, statusFilter, showArchived]);
+  const selected = orders.find(order => order.id === selectedId) ?? null;
 
-  const selected = orders.find((order) => order.id === selectedId) ?? null;
-  useEffect(()=>{if(!databaseMode||!selected?.databaseId)return;void fetch(`/api/admin/orders/${selected.databaseId}/documents`).then(async(response)=>{if(response.ok){const payload=await response.json() as {data:Array<{name:string;status:string;download_url?:string|null}>};setRemoteDocs((current)=>({...current,[selected.id]:payload.data}))}})},[databaseMode,selected?.databaseId,selected?.id]);
+  useEffect(() => {
+    if (!databaseMode || !selected?.databaseId) return;
+    void fetch(`/api/admin/orders/${selected.databaseId}/documents`).then(async response => {
+      if (response.ok) {
+        const payload = await response.json() as { data: OrderDocument[] };
+        setRemoteDocs(current => ({ ...current, [selected.id]: payload.data }));
+      }
+    });
+  }, [databaseMode, selected?.databaseId, selected?.id]);
 
   useEffect(() => {
     if (!selected?.clientId) { setRelatedTickets([]); return; }
     fetch("/api/admin/tickets")
-      .then(r => r.ok ? r.json() : null)
+      .then(response => response.ok ? response.json() : null)
       .then(data => {
         const all = (data?.data ?? []) as RelatedTicket[];
-        setRelatedTickets(all.filter(t => t.client_id === selected.clientId).slice(0, 6));
+        setRelatedTickets(all.filter(ticket => ticket.client_id === selected.clientId).slice(0, 5));
       })
       .catch(() => {});
   }, [selected?.clientId]);
-  const counts = useMemo(() => ({
-    "الكل": orders.length,
-    "جديد": orders.filter((item) => item.status === "جديد").length,
-    "بانتظار المستندات": orders.filter((item) => item.status === "بانتظار المستندات").length,
-    "قيد التنفيذ": orders.filter((item) => item.status === "قيد التنفيذ").length,
-    "مكتمل": orders.filter((item) => item.status === "مكتمل").length,
-    "ملغي": orders.filter((item) => item.status === "ملغي").length,
-    "معلق": orders.filter((item) => item.status === "معلق").length,
-  }), [orders]);
 
-  function persist(nextOrders: AdminOrder[], message: string) {
-    setOrders(nextOrders);
-    writeAdminOrders(nextOrders);
+  const activeOrders = useMemo(() => orders.filter(order => showArchived ? order.archivedAt : !order.archivedAt), [orders, showArchived]);
+  const stats = useMemo(() => {
+    const active = orders.filter(order => !order.archivedAt);
+    return {
+      total: active.length,
+      needsClient: active.filter(order => order.status === "بانتظار المستندات").length,
+      inProgress: active.filter(order => order.status === "قيد التنفيذ").length,
+      overdue: active.filter(isOverdue).length,
+      completed: active.filter(order => order.status === "مكتمل").length,
+    };
+  }, [orders]);
+  const counts = useMemo(() => {
+    const base: Record<OrderStatus | "الكل", number> = {
+      "الكل": orders.filter(order => !order.archivedAt).length,
+      "جديد": 0,
+      "بانتظار المستندات": 0,
+      "قيد التنفيذ": 0,
+      "مكتمل": 0,
+      "ملغي": 0,
+      "معلق": 0,
+    };
+    for (const order of orders) if (!order.archivedAt) base[order.status] += 1;
+    return base;
+  }, [orders]);
+  const visibleOrders = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return activeOrders
+      .filter(order => statusFilter === "الكل" || order.status === statusFilter)
+      .filter(order => {
+        if (queueFilter === "needsClient") return order.status === "بانتظار المستندات";
+        if (queueFilter === "needsTeam") return ["جديد", "قيد التنفيذ", "معلق"].includes(order.status);
+        if (queueFilter === "overdue") return isOverdue(order);
+        return true;
+      })
+      .filter(order => !q || `${order.id} ${order.client} ${order.service} ${order.agency} ${order.assignee}`.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const aTime = new Date(a.nextActionAtRaw || a.updatedAtRaw || a.createdAtRaw || 0).getTime();
+        const bTime = new Date(b.nextActionAtRaw || b.updatedAtRaw || b.createdAtRaw || 0).getTime();
+        return bTime - aTime;
+      });
+  }, [activeOrders, query, queueFilter, statusFilter]);
+
+  function toast(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 2600);
   }
 
+  function persist(nextOrders: OpsOrder[], message: string) {
+    setOrders(nextOrders);
+    writeAdminOrders(nextOrders);
+    toast(message);
+  }
+
+  async function refreshOrders() {
+    if (databaseMode) await loadDatabase(true);
+    else setOrders(readAdminOrders() as OpsOrder[]);
+    toast("تم تحديث الطلبات");
+  }
+
   async function archiveOrder(orderId: string, archive: boolean) {
-    const res = await fetch(`/api/admin/orders/${orderId}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ archive }) });
-    if (res.ok) { await loadDatabase(); setNotice(archive ? "تم أرشفة الطلب" : "تم استعادة الطلب"); setTimeout(() => setNotice(""), 2500); }
-    else setNotice("تعذّر تغيير حالة الأرشيف");
+    const res = await fetch(`/api/admin/orders/${orderId}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ archive }),
+    });
+    if (res.ok) {
+      await loadDatabase();
+      toast(archive ? "تم أرشفة الطلب" : "تم استعادة الطلب");
+    } else toast("تعذر تغيير حالة الأرشيف");
   }
 
   async function deleteOrder(orderId: string) {
@@ -98,25 +320,51 @@ export default function AdminOrdersPage() {
     if (res.ok) {
       setSelectedId(undefined);
       setConfirmDeleteOrder(null);
-      await loadDatabase();
-    } else {
-      setNotice("تعذّر حذف الطلب");
-    }
+      await loadDatabase(false);
+      toast("تم حذف الطلب");
+    } else toast("تعذر حذف الطلب");
   }
 
   async function confirmStatusChange(status: OrderStatus, reason?: string) {
     if (!selected) return;
     if (databaseMode && selected.databaseId) {
-      const response = await fetch(`/api/admin/orders/${selected.databaseId}/status`, { method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify({status:statusToDatabase[status], reason}) });
-      if(!response.ok){const err=await response.json();setNotice(err.error||"تعذر تحديث الحالة");return} await loadDatabase(); setNotice("تم تحديث الحالة وتسجيلها"); return;
+      const response = await fetch(`/api/admin/orders/${selected.databaseId}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: statusToDatabase[status], reason }),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        toast(err.error || "تعذر تحديث الحالة");
+        return;
+      }
+      await loadDatabase();
+      toast("تم تحديث حالة الطلب وتسجيلها");
+      return;
     }
-    persist(orders.map((order) => order.id === selected.id ? { ...order, status, updatedAt: "الآن" } : order), `تم تحديث حالة ${selected.id}`);
+    persist(
+      orders.map(order => order.id === selected.id ? {
+        ...order,
+        status,
+        updatedAt: "الآن",
+        updatedAtRaw: new Date().toISOString(),
+        statusReason: reason || order.statusReason,
+      } : order),
+      `تم تحديث حالة ${selected.id}`,
+    );
   }
 
   function updateStatus(status: OrderStatus) {
-    if (!selected) return;
-    if (!canChangeOrderStatus(selected.status, status)) { setNotice("لا يمكن تنفيذ هذا الانتقال في مسار الطلب"); return; }
-    if (status === "ملغي" || status === "معلق") { setPendingTargetStatus(status); setShowReasonDialog(true); setTimeout(() => reasonRef.current?.focus(), 100); return; }
+    if (!selected || selected.status === status) return;
+    if (!canChangeOrderStatus(selected.status, status)) {
+      toast("لا يمكن تنفيذ هذا الانتقال في مسار الطلب");
+      return;
+    }
+    if (status === "ملغي" || status === "معلق") {
+      setStatusDialog(status);
+      window.setTimeout(() => reasonRef.current?.focus(), 100);
+      return;
+    }
     void confirmStatusChange(status);
   }
 
@@ -124,816 +372,658 @@ export default function AdminOrdersPage() {
     event.preventDefault();
     setFormSubmitted(true);
     const form = new FormData(event.currentTarget);
-    if(databaseMode){
-      const service=catalog.services.find((item)=>item.id===form.get("serviceId"));
-      const client=catalog.clients.find((item)=>item.id===form.get("clientId"));
-      if (!service || !client) { setNotice("يرجى اختيار العميل والخدمة"); setFormSubmitted(false); return; }
-      const response=await fetch("/api/admin/orders",{
-        method:"POST", headers:{"content-type":"application/json"},
-        body:JSON.stringify({
-          clientId:form.get("clientId"),
-          serviceId:form.get("serviceId"),
-          agencyId:form.get("agencyId") || service?.agency_id || undefined,
-          assigneeId:form.get("assigneeId")||undefined,
-          priority:form.get("priority")||"normal",
-          dueAt:form.get("dueAt")?new Date(form.get("dueAt") as string).toISOString():undefined,
-          nextActionText:form.get("nextActionText")||undefined,
-          nextActionAt:form.get("nextActionAt")?new Date(form.get("nextActionAt") as string).toISOString():undefined,
-          notes:form.get("notes")||undefined,
-        })
+    if (databaseMode) {
+      const service = catalog.services.find(item => item.id === form.get("serviceId"));
+      const client = catalog.clients.find(item => item.id === form.get("clientId"));
+      if (!service || !client) {
+        toast("يرجى اختيار العميل والخدمة");
+        setFormSubmitted(false);
+        return;
+      }
+      const response = await fetch("/api/admin/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          clientId: form.get("clientId"),
+          serviceId: form.get("serviceId"),
+          agencyId: form.get("agencyId") || service.agency_id || undefined,
+          assigneeId: form.get("assigneeId") || undefined,
+          priority: form.get("priority") || "normal",
+          dueAt: fromDateInputValue(String(form.get("dueAt") || "")) || undefined,
+          nextActionText: form.get("nextActionText") || undefined,
+          nextActionAt: fromDateTimeLocalValue(String(form.get("nextActionAt") || "")) || undefined,
+          notes: form.get("notes") || undefined,
+        }),
       });
-      if(!response.ok){const err=await response.json(); setNotice(err.error||"تعذر إنشاء الطلب"); setFormSubmitted(false); return;}
-      await loadDatabase(); setShowCreate(false); setNotice("تم إنشاء الطلب بنجاح"); setFormSubmitted(false); return;
+      if (!response.ok) {
+        const err = await response.json();
+        toast(err.error || "تعذر إنشاء الطلب");
+        setFormSubmitted(false);
+        return;
+      }
+      await loadDatabase(false);
+      setShowCreate(false);
+      setFormSubmitted(false);
+      toast("تم إنشاء الطلب بنجاح");
+      return;
     }
     const service = String(form.get("service") ?? "");
     const isTax = service.includes("ضريبة");
-    const next: AdminOrder = {
+    const next: OpsOrder = {
       id: `REQ-${new Date().getFullYear()}-${String(orders.length + 43).padStart(4, "0")}`,
-      client: String(form.get("client") ?? ""), service,
+      client: String(form.get("client") ?? ""),
+      service,
       agency: isTax ? "هيئة الزكاة والضريبة والجمارك" : "وزارة التجارة",
-      agencyType: isTax ? "zatca" : "commerce", status: "جديد",
-      assignee: String(form.get("assignee") ?? ""), updatedAt: "الآن",
-      phone: String(form.get("phone") ?? ""), email: String(form.get("email") ?? ""),
-      nextAction: "مراجعة بيانات الطلب والتواصل مع العميل", nextActionAt: "اليوم",
+      agencyType: isTax ? "zatca" : "commerce",
+      status: "جديد",
+      assignee: String(form.get("assignee") ?? "غير مسند"),
+      updatedAt: "الآن",
+      updatedAtRaw: new Date().toISOString(),
+      phone: String(form.get("phone") ?? ""),
+      email: String(form.get("email") ?? ""),
+      nextAction: "مراجعة بيانات الطلب والتواصل مع العميل",
+      nextActionAt: "اليوم",
+      nextActionAtRaw: new Date().toISOString(),
+      priority: "normal",
     };
-    const nextOrders = [next, ...orders];
-    persist(nextOrders, `تم إنشاء الطلب ${next.id}`);
-    setSelectedId(next.id); setStatusFilter("الكل"); setShowCreate(false); setFormSubmitted(false);
+    persist([next, ...orders], `تم إنشاء الطلب ${next.id}`);
+    setSelectedId(next.id);
+    setShowCreate(false);
+    setFormSubmitted(false);
   }
 
-  async function uploadSupportingDocument(file:File){if(!selected)return;if(databaseMode&&selected.databaseId){const form=new FormData();form.set("name","المستند الداعم");form.set("file",file);const response=await fetch(`/api/admin/orders/${selected.databaseId}/documents`,{method:"POST",body:form});if(!response.ok){setNotice("تعذر رفع المستند؛ تحقق من النوع والحجم والصلاحية");return}const documentsResponse=await fetch(`/api/admin/orders/${selected.databaseId}/documents`);if(documentsResponse.ok){const payload=await documentsResponse.json() as {data:Array<{name:string;status:string;download_url?:string|null}>};setRemoteDocs((current)=>({...current,[selected.id]:payload.data}))}setNotice("تم رفع المستند وتسجيله");return}setUploadedDocs((current)=>({...current,[selected.id]:[...(current[selected.id]??[]),"supporting"]}));setNotice("تمت إضافة المستند إلى الطلب")}
+  async function uploadSupportingDocument(file: File) {
+    if (!selected) return;
+    if (databaseMode && selected.databaseId) {
+      const form = new FormData();
+      form.set("name", file.name || "مستند داعم");
+      form.set("file", file);
+      const response = await fetch(`/api/admin/orders/${selected.databaseId}/documents`, { method: "POST", body: form });
+      if (!response.ok) {
+        toast("تعذر رفع المستند؛ تحقق من النوع والحجم");
+        return;
+      }
+      const documentsResponse = await fetch(`/api/admin/orders/${selected.databaseId}/documents`);
+      if (documentsResponse.ok) {
+        const payload = await documentsResponse.json() as { data: OrderDocument[] };
+        setRemoteDocs(current => ({ ...current, [selected.id]: payload.data }));
+      }
+      toast("تم رفع المستند وتسجيله");
+      return;
+    }
+    setUploadedDocs(current => ({ ...current, [selected.id]: [...(current[selected.id] ?? []), file.name || "supporting"] }));
+    toast("تمت إضافة المستند إلى الطلب");
+  }
 
-  if (loading) return <div style={{display:"grid",placeItems:"center",height:"calc(100vh - 76px)"}}><div style={{width:24,height:24,border:"2px solid #e5ecf3",borderTopColor:"#073766",borderRadius:"50%",animation:"spin .6s linear infinite"}} /></div>;
-  return <>
+  if (loading || ordersLoading) return <PageLoader text="جاري تحميل الطلبات..." />;
 
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: selected ? "minmax(0,1fr) 315px" : "1fr",
-      gap: 16, padding: "28px 24px 24px", maxWidth: 1800, margin: "auto", direction: "rtl",
-    }}>
-      <section className="ops-main">
-        {/* Header: Title + Actions */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 12, marginBottom: 18,
-          padding: "10px 16px", background: "#fff", borderRadius: 10,
-          border: "1px solid #e8edf4",
-        }}>
-          <h1 style={{ margin: 0, fontSize: ".78rem", color: "#073766", fontWeight: 800 }}>إدارة الطلبات</h1>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: "auto" }}>
-            <div style={{ position: "relative" }}>
-              <Search size={14} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#94a7b9", pointerEvents: "none" }} />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="ابحث برقم الطلب، العميل، الخدمة..."
-                style={{
-                  height: 36, width: 260, border: "1px solid #e4ebf3", borderRadius: 8,
-                  padding: "0 34px 0 12px", font: "inherit", fontSize: ".62rem",
-                  color: "#2a4a6a", outline: "none", background: "#f8fafc",
-                  transition: "all .2s",
-                }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = "#0875dc"; e.currentTarget.style.background = "#fff"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(8,117,220,.08)"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "#e4ebf3"; e.currentTarget.style.background = "#f8fafc"; e.currentTarget.style.boxShadow = "none"; }}
-              />
-              {query ? (
-                <button
-                  onClick={() => setQuery("")}
-                  style={{
-                    position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)",
-                    border: 0, background: "none", color: "#94a7b9", cursor: "pointer",
-                    padding: 4, display: "flex",
-                  }}
-                  title="مسح البحث"
-                ><X size={13} /></button>
-              ) : null}
-            </div>
-            <button
-              onClick={() => setShowCreate(true)}
-              style={{
-                height: 34, borderRadius: 8, border: 0, padding: "0 16px",
-                background: "linear-gradient(135deg, #0875dc, #0a5fba)",
-                color: "#fff", font: "inherit", fontWeight: 800, fontSize: ".65rem",
-                display: "inline-flex", alignItems: "center", gap: 6,
-                cursor: "pointer", boxShadow: "0 3px 10px rgba(8,117,220,.2)",
-                transition: "all .2s", whiteSpace: "nowrap",
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-1px)"}
-              onMouseLeave={(e) => e.currentTarget.style.transform = "none"}
-            >
-              <Plus size={15} /> طلب جديد
-            </button>
-          </div>
-        </div>
+  const currentDocs: OrderDocument[] = selected
+    ? databaseMode
+      ? remoteDocs[selected.id] ?? []
+      : (uploadedDocs[selected.id] ?? []).map(name => ({ name, status: "received" }))
+    : [];
 
+  return (
+    <section className="ord-shell" dir="rtl">
+      <style>{`
+        .ord-shell{height:calc(100vh - 60px);display:grid;grid-template-rows:auto 1fr;background:#f4f7fb;color:#173d65;overflow:hidden}
+        .ord-head{padding:20px 24px 14px;border-bottom:1px solid #dfe8f1;background:linear-gradient(180deg,#fff,#f8fbff)}
+        .ord-head-main{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:14px}
+        .ord-eyebrow{margin:0 0 4px;color:#0f766e;font-size:.66rem;font-weight:900}
+        .ord-head h1{margin:0 0 5px;font-size:1.52rem;color:#073766;letter-spacing:0}
+        .ord-head p{margin:0;color:#7f8e9f;font-size:.72rem}
+        .ord-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+        .ord-btn{height:38px;border:1px solid #d7e3ed;border-radius:8px;background:#fff;color:#536a82;padding:0 13px;font:inherit;font-size:.65rem;font-weight:800;display:inline-flex;align-items:center;gap:7px;cursor:pointer;text-decoration:none}
+        .ord-btn.primary{background:#073766;border-color:#073766;color:#fff}
+        .ord-btn.danger{background:#fef2f2;border-color:#fecaca;color:#dc2626}
+        .ord-btn:disabled{opacity:.62;cursor:not-allowed}
+        .ord-kpis{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px}
+        .ord-kpi{border:1px solid #dfe8f1;background:#fff;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;min-width:0}
+        .ord-kpi i{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex-shrink:0}
+        .ord-kpi small,.ord-kpi strong{display:block}.ord-kpi small{font-size:.56rem;color:#8190a1;font-weight:800}.ord-kpi strong{font-size:1.22rem;color:#073766;line-height:1;margin-top:4px}
+        .ord-workspace{min-height:0;display:grid;grid-template-columns:minmax(430px,520px) minmax(0,1fr);gap:14px;padding:14px 16px 18px}
+        .ord-panel{min-height:0;background:#fff;border:1px solid #dfe8f1;border-radius:14px;box-shadow:0 6px 24px rgba(7,55,102,.05);overflow:hidden}
+        .ord-queue{display:grid;grid-template-rows:auto 1fr}
+        .ord-toolbar{padding:14px;border-bottom:1px solid #edf2f7;background:#fff}
+        .ord-tabs{display:flex;gap:6px;overflow:auto;padding-bottom:2px;margin-bottom:12px;scrollbar-width:none}
+        .ord-tabs button{height:34px;border:1px solid #dfe8f1;border-radius:9px;background:#f8fafc;color:#65788c;padding:0 11px;font:inherit;font-size:.61rem;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+        .ord-tabs button.active{background:#eaf4ff;border-color:#bddcff;color:#0875dc}
+        .ord-tools{display:grid;grid-template-columns:1fr;gap:8px}
+        .ord-search{height:38px;border:1px solid #dfe8f1;border-radius:10px;background:#f8fafc;display:flex;align-items:center;gap:8px;padding:0 11px;color:#8b9dad}
+        .ord-search input{border:0;outline:0;background:transparent;font:inherit;font-size:.68rem;width:100%;color:#173d65}
+        .ord-chip-row{display:flex;gap:6px;overflow:auto;margin-top:10px;scrollbar-width:none}
+        .ord-chip-row button{height:32px;border:1px solid #dfe8f1;border-radius:999px;background:#fff;color:#65788c;padding:0 10px;font:inherit;font-size:.59rem;font-weight:800;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
+        .ord-chip-row button.active{color:#073766;background:#f0f7ff;border-color:#bddcff}
+        .ord-list{min-height:0;overflow:auto;padding:10px;background:#f8fafc}
+        .ord-card{width:100%;border:1px solid #dfe8f1;border-radius:12px;background:#fff;padding:12px;text-align:right;cursor:pointer;margin-bottom:9px;transition:border-color .15s,box-shadow .15s,transform .15s,background .15s}
+        .ord-card:hover{border-color:#bddcff;box-shadow:0 8px 24px rgba(8,117,220,.08);transform:translateY(-1px)}
+        .ord-card.active{border-color:#0875dc;background:#f0f8ff;box-shadow:0 8px 24px rgba(8,117,220,.1)}
+        .ord-card.overdue{border-right:4px solid #dc2626}
+        .ord-card-top{display:flex;align-items:flex-start;gap:10px}
+        .ord-avatar{width:40px;height:40px;border-radius:12px;background:#eaf4ff;color:#0875dc;display:grid;place-items:center;font-size:.72rem;font-weight:900;flex-shrink:0}
+        .ord-card-body{flex:1;min-width:0}
+        .ord-ref{font-size:.55rem;color:#8b9dad;font-weight:900;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-bottom:2px}
+        .ord-card h2{margin:0 0 6px;font-size:.78rem;line-height:1.45;color:#173d65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .ord-card-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:#7f8e9f;font-size:.58rem}
+        .ord-card-meta span{display:inline-flex;align-items:center;gap:4px;min-width:0}
+        .ord-card-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+        .ord-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+        .ord-pill,.ord-priority{display:inline-flex;align-items:center;gap:4px;border:1px solid;border-radius:999px;padding:3px 8px;font-size:.55rem;font-weight:900;white-space:nowrap}
+        .ord-time{font-size:.56rem;color:#6f8193;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+        .ord-empty{height:100%;display:grid;place-items:center;text-align:center;color:#8b9dad;padding:30px}
+        .ord-empty div{display:grid;gap:8px;justify-items:center}
+        .ord-detail{min-height:0;display:grid;grid-template-rows:auto 1fr auto;background:#fff}
+        .ord-detail-head{padding:18px 20px 16px;border-bottom:1px solid #edf2f7;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;background:linear-gradient(180deg,#fff,#fbfdff)}
+        .ord-detail-title{display:flex;align-items:flex-start;gap:12px;min-width:0}
+        .ord-detail-icon{width:44px;height:44px;border-radius:12px;background:#eaf4ff;color:#0875dc;display:grid;place-items:center;flex-shrink:0}
+        .ord-detail h2{margin:0 0 7px;font-size:1rem;line-height:1.45;color:#073766}
+        .ord-detail-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.61rem;color:#7f8e9f}
+        .ord-detail-meta span,.ord-detail-meta a{display:inline-flex;align-items:center;gap:4px;color:inherit;text-decoration:none}
+        .ord-close{width:32px;height:32px;border:1px solid #dfe8f1;border-radius:9px;background:#fff;color:#536a82;display:grid;place-items:center;cursor:pointer;flex-shrink:0}
+        .ord-detail-body{min-height:0;overflow:auto;padding:18px 20px 22px}
+        .ord-section{border:1px solid #e4ebf2;border-radius:12px;background:#fff;margin-bottom:14px;overflow:hidden}
+        .ord-section header{min-height:42px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #edf2f7;background:#fbfdff;color:#48617b;font-size:.64rem;font-weight:900}
+        .ord-section-content{padding:14px}
+        .ord-info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+        .ord-info{border:1px solid #edf2f7;border-radius:10px;background:#f8fafc;padding:10px}
+        .ord-info small,.ord-info strong{display:block}.ord-info small{font-size:.55rem;color:#8795a5;font-weight:800;margin-bottom:5px}.ord-info strong{font-size:.69rem;color:#173d65;line-height:1.5;word-break:break-word}
+        .ord-stepper{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+        .ord-step{border:1px solid #e4ebf2;border-radius:10px;padding:10px;background:#f8fafc;color:#8190a1}
+        .ord-step.done{background:#f0fdfa;border-color:#99f6e4;color:#0f766e}.ord-step.active{background:#eaf4ff;border-color:#bddcff;color:#0875dc}
+        .ord-step b{display:block;font-size:.62rem;margin-top:6px}.ord-step span{display:block;font-size:.52rem;color:inherit;opacity:.78;margin-top:2px}
+        .ord-doc-list{display:grid;gap:8px}.ord-doc{border:1px solid #e4ebf2;border-radius:10px;padding:10px;background:#f8fafc;display:flex;align-items:center;gap:9px;font-size:.66rem;color:#173d65;text-decoration:none}.ord-doc small{display:block;color:#8b9dad;font-size:.54rem;margin-top:2px}
+        .ord-ticket-list{display:grid;gap:8px}.ord-ticket{border:1px solid #e4ebf2;border-radius:10px;padding:10px;background:#f8fafc;display:flex;align-items:center;gap:10px;text-decoration:none;color:#173d65}.ord-ticket b{display:block;font-size:.66rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ord-ticket small{display:block;color:#8b9dad;font-size:.54rem;margin-top:2px}
+        .ord-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.ord-field{display:grid;gap:6px;min-width:0}.ord-field.full{grid-column:1/-1}.ord-field span{font-size:.62rem;font-weight:900;color:#48617b}
+        .ord-field input,.ord-field select,.ord-field textarea{width:100%;border:1.5px solid #dfe8f1;border-radius:10px;background:#fff;color:#173d65;font:inherit;font-size:.72rem;outline:none;box-sizing:border-box}
+        .ord-field input,.ord-field select{height:42px;padding:0 12px}.ord-field select{padding-left:40px}.ord-field textarea{min-height:86px;padding:10px 12px;resize:vertical;line-height:1.7}
+        .ord-field input:focus,.ord-field select:focus,.ord-field textarea:focus{border-color:#0875dc;box-shadow:0 0 0 3px rgba(8,117,220,.1)}
+        .ord-footer{border-top:1px solid #edf2f7;padding:12px 16px;background:#fbfdff;display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .ord-footer-note{font-size:.58rem;color:#7f8e9f;display:flex;align-items:center;gap:6px}
+        .ord-agency{display:inline-flex;align-items:center;gap:5px;color:#536a82;font-size:.56rem;font-weight:800;min-width:0}.ord-agency i{width:20px;height:20px;border-radius:7px;display:grid;place-items:center;flex-shrink:0}
+        .ord-blank{height:100%;display:grid;place-items:center;text-align:center;color:#7f8e9f;background:linear-gradient(180deg,#fff,#f8fbff)}.ord-blank-card{max-width:340px;display:grid;gap:10px;justify-items:center}.ord-blank-icon{width:68px;height:68px;border-radius:20px;background:#eaf4ff;color:#0875dc;display:grid;place-items:center}.ord-blank h2{margin:0;color:#073766;font-size:1rem}.ord-blank p{margin:0;font-size:.7rem;line-height:1.8}
+        .ord-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#073766;color:#fff;padding:10px 18px;border-radius:11px;font-size:.72rem;font-weight:800;box-shadow:0 12px 32px rgba(0,0,0,.2);z-index:1000;display:flex;align-items:center;gap:8px}
+        .ord-loading{min-height:calc(100vh - 60px);display:grid;place-items:center;background:#f4f7fb;color:#61748a;font-size:.74rem;font-weight:800}.ord-loading>svg{animation:spin .7s linear infinite;color:#0875dc}
+        @media(max-width:1150px){.ord-kpis{grid-template-columns:repeat(3,1fr)}.ord-workspace{grid-template-columns:390px minmax(0,1fr)}.ord-info-grid{grid-template-columns:1fr 1fr}.ord-stepper{grid-template-columns:1fr 1fr}}
+        @media(max-width:860px){.ord-shell{height:auto;min-height:calc(100vh - 60px);overflow:visible}.ord-head-main{align-items:flex-start;flex-direction:column}.ord-kpis{grid-template-columns:1fr 1fr}.ord-workspace{display:flex;flex-direction:column;overflow:visible}.ord-panel{min-height:420px}.ord-queue{max-height:680px}.ord-info-grid,.ord-form-grid{grid-template-columns:1fr}.ord-detail{min-height:680px}.ord-footer{align-items:flex-start;flex-direction:column}.ord-btn.primary{width:100%;justify-content:center}}
+        @media(max-width:560px){.ord-head{padding:18px 14px 12px}.ord-workspace{padding:10px}.ord-kpis{grid-template-columns:1fr}.ord-card-bottom{align-items:flex-start;flex-direction:column}.ord-detail-head{padding:15px}.ord-detail-body{padding:14px}.ord-section-content{padding:12px}}
+      `}</style>
 
-
-        {/* Status Tabs */}
-        <div style={{
-          display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap",
-        }}>
-          {statusTabs.map((label) => (
-            <button
-              onClick={() => setStatusFilter(label)}
-              key={label}
-              style={{
-                padding: "4px 12px", borderRadius: 16, border: 0,
-                font: "inherit", fontSize: ".62rem", fontWeight: statusFilter === label ? 800 : 600,
-                cursor: "pointer", whiteSpace: "nowrap",
-                background: statusFilter === label ? "#0875dc" : "#f1f5f9",
-                color: statusFilter === label ? "#fff" : "#536a82",
-                boxShadow: statusFilter === label ? "0 2px 8px rgba(8,117,220,.2)" : "none",
-                transition: "all .15s",
-                display: "inline-flex", alignItems: "center", gap: 6,
-              }}
-              onMouseEnter={(e) => { if (statusFilter !== label) e.currentTarget.style.background = "#e8edf5"; }}
-              onMouseLeave={(e) => { if (statusFilter !== label) e.currentTarget.style.background = "#f1f5f9"; }}
-            >
-              {label}
-              <span style={{
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-                minWidth: 18, height: 18, borderRadius: 9,
-                fontSize: ".5rem", fontWeight: 800,
-                background: statusFilter === label ? "rgba(255,255,255,.2)" : "#dfe7ef",
-                color: statusFilter === label ? "#fff" : "#536a82",
-                padding: "0 6px",
-              }}>{counts[label]}</span>
-            </button>
-          ))}
-          <button
-            onClick={() => { setShowArchived(v => !v); setSelectedId(undefined); }}
-            style={{
-              padding: "4px 12px", borderRadius: 16, border: 0,
-              font: "inherit", fontSize: ".62rem", fontWeight: showArchived ? 800 : 600,
-              cursor: "pointer", whiteSpace: "nowrap",
-              background: showArchived ? "#64748b" : "#f1f5f9",
-              color: showArchived ? "#fff" : "#536a82",
-              display: "inline-flex", alignItems: "center", gap: 6,
-              transition: "all .15s",
-            }}
-          >
-            الأرشيف
-            <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", minWidth:18, height:18, borderRadius:9, fontSize:".5rem", fontWeight:800, background: showArchived ? "rgba(255,255,255,.2)" : "#dfe7ef", color: showArchived ? "#fff" : "#536a82", padding:"0 6px" }}>
-              {orders.filter(o => o.archivedAt).length}
-            </span>
-          </button>
-        </div>
-
-        {/* Orders Table */}
-        <div style={{
-          background: "#fff", border: "1px solid #e8edf4", borderRadius: 12,
-          overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,.03)",
-        }}>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc" }}>
-                  <th style={{ width: 36, padding: "8px 6px", fontSize: ".55rem", color: "#6b829b", fontWeight: 700, borderBottom: "1px solid #e8edf4", textAlign: "center" }}></th>
-                  <th style={{ width: "22%", padding: "8px 8px", fontSize: ".55rem", color: "#6b829b", fontWeight: 700, borderBottom: "1px solid #e8edf4", textAlign: "right" }}>العميل</th>
-                  <th style={{ width: "22%", padding: "8px 8px", fontSize: ".55rem", color: "#6b829b", fontWeight: 700, borderBottom: "1px solid #e8edf4", textAlign: "right" }}>الخدمة</th>
-                  <th style={{ width: "16%", padding: "8px 8px", fontSize: ".55rem", color: "#6b829b", fontWeight: 700, borderBottom: "1px solid #e8edf4", textAlign: "right" }}>الجهة</th>
-                  <th style={{ width: "13%", padding: "8px 8px", fontSize: ".55rem", color: "#6b829b", fontWeight: 700, borderBottom: "1px solid #e8edf4", textAlign: "right" }}>الحالة</th>
-                  <th style={{ width: "12%", padding: "8px 8px", fontSize: ".55rem", color: "#6b829b", fontWeight: 700, borderBottom: "1px solid #e8edf4", textAlign: "right" }}>المسؤول</th>
-                  <th style={{ width: "15%", padding: "8px 8px", fontSize: ".55rem", color: "#6b829b", fontWeight: 700, borderBottom: "1px solid #e8edf4", textAlign: "right" }}>آخر تحديث</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.map((order, idx) => (
-                  <tr
-                    key={order.id}
-                    onClick={() => setSelectedId(order.id)}
-                    style={{
-                      cursor: "pointer",
-                      background: selectedId === order.id ? "#f0f7ff" : idx % 2 === 0 ? "#fff" : "#fafcfe",
-                      transition: "background .1s",
-                      borderBottom: "1px solid #f0f4f9",
-                    }}
-                    onMouseEnter={(e) => { if (selectedId !== order.id) e.currentTarget.style.background = "#f5f9ff"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = selectedId === order.id ? "#f0f7ff" : idx % 2 === 0 ? "#fff" : "#fafcfe"; }}
-                  >
-                    <td style={{ padding: "7px 6px", textAlign: "center" }}>
-                      <input type="radio" name="orderSelect" checked={selectedId === order.id} onChange={() => setSelectedId(order.id)} style={{ cursor: "pointer", accentColor: "#0875dc" }} />
-                    </td>
-                    <td style={{ padding: "7px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 0 }} title={order.client}>
-                      <span style={{ fontWeight: 700, color: "#1a3655", fontSize: ".6rem" }}>{order.client}</span>
-                    </td>
-                    <td style={{ padding: "7px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 0, fontSize: ".58rem", color: "#425c76" }} title={order.service}>{order.service}</td>
-                    <td style={{ padding: "7px 8px" }}><Agency type={order.agencyType} name={order.agency} /></td>
-                    <td style={{ padding: "7px 8px" }}><span className={`ops-status ${statusTone[order.status]}`} style={{ fontSize: ".5rem" }}>{order.status}</span></td>
-                    <td style={{ padding: "7px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 0, fontSize: ".56rem", color: "#536a82" }} title={order.assignee}>{order.assignee}</td>
-                    <td style={{ padding: "7px 8px", fontSize: ".52rem", color: "#7c8b9b", direction: "ltr", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 0 }} title={order.updatedAt}>{order.updatedAt}</td>
-                  </tr>
-                ))}
-                {!filteredOrders.length ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: "50px 0", color: "#8b9dad" }}>
-                      <FileText size={28} style={{ display: "block", margin: "0 auto 10px", opacity: 0.2 }} />
-                      <span style={{ fontSize: ".72rem", fontWeight: 600 }}>لا توجد طلبات مطابقة.</span>
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderTop: "1px solid #eef2f7", fontSize: ".55rem", color: "#6b829b" }}>
-            <span>عرض {filteredOrders.length} من {orders.length} طلب</span>
-            {!selected ? <span style={{ marginRight: "auto", fontSize: ".52rem", color: "#0875dc", display: "flex", alignItems: "center", gap: 4 }}>
-              <ChevronLeft size={10} /> اختر طلباً لعرض التفاصيل
-            </span> : null}
-          </div>
-        </div>
-      </section>
-
-      {/* Summary Panel (only when an order is selected) */}
-      {selected ? <aside className="ops-summary">
-        <div className="ops-summary-head">
-          <h2 style={{ fontSize: ".85rem", display: "flex", alignItems: "center", gap: 6 }}>
-            <FileText size={16} style={{ color: "#0875dc" }} /> ملخص الطلب
-          </h2>
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            {selected?.databaseId && !selected?.archivedAt && <button onClick={()=>archiveOrder(selected.databaseId!, true)} style={{padding:"4px 10px",border:"1px solid #e5eaf0",background:"#f5f8fc",color:"#526983",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>أرشفة</button>}
-            {selected?.databaseId && selected?.archivedAt && <button onClick={()=>archiveOrder(selected.databaseId!, false)} style={{padding:"4px 10px",border:"1px solid #bfdbfe",background:"#eff6ff",color:"#1d4ed8",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>استعادة</button>}
-            {selected?.databaseId && <button onClick={()=>setConfirmDeleteOrder(selected.databaseId!)} style={{padding:"4px 10px",border:"1px solid #fecaca",background:"#fef2f2",color:"#dc2626",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>حذف</button>}
-            <button onClick={() => setSelectedId(undefined)} aria-label="إغلاق" style={{ border: 0, background: "#f1f4f7", color: "#536b84", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "grid", placeItems: "center", fontSize: ".9rem" }}><X size={16} /></button>
-          </div>
-        </div>
-
-        {/* Order Info */}
-        <div style={{ padding: "16px 18px", borderBottom: "1px solid #e7edf3" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <span style={{ fontSize: ".6rem", color: "#7c8b9b", fontWeight: 600 }}>رقم الطلب</span>
-            <span style={{ fontSize: ".72rem", fontWeight: 800, color: "#073766", fontFamily: "monospace", direction: "ltr" }}>{selected.id}</span>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 14px" }}>
-            {[
-              { label: "العميل", value: selected.client, icon: <User size={13} /> },
-              { label: "الخدمة", value: selected.service, icon: <Layers size={13} /> },
-              { label: "الجهة", value: <Agency type={selected.agencyType} name={selected.agency} /> },
-              { label: "المسؤول", value: selected.assignee, icon: <User size={13} /> },
-              { label: "آخر تحديث", value: selected.updatedAt, icon: <Clock size={13} /> },
-            ].map((item) => (
-              <div key={item.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <span style={{ fontSize: ".55rem", color: "#8b9dad", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                  {item.icon}{item.label}
-                </span>
-                <span style={{ fontSize: ".68rem", fontWeight: 700, color: "#1a3655" }}>{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Progress Timeline */}
-        {(() => {
-          const stages: Array<{ label: string; color: string }> = [
-            { label: "جديد", color: "#9ca3af" },
-            { label: "قيد التنفيذ", color: "#0875dc" },
-            { label: "بانتظار المستندات", color: "#f59e0b" },
-            { label: "مكتمل", color: "#16a34a" },
-          ];
-          const idxMap: Record<string, number> = { "جديد": 0, "قيد التنفيذ": 1, "بانتظار المستندات": 2, "مكتمل": 3 };
-          const cur = idxMap[selected.status] ?? -1;
-          return (
-            <div style={{ padding: "14px 18px", borderBottom: "1px solid #e7edf3", direction: "rtl" }}>
-              <span style={{ fontSize: ".6rem", color: "#6b829b", fontWeight: 700, display: "block", marginBottom: 10 }}>مسار الطلب</span>
-              <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
-                {stages.flatMap((s, i) => {
-                  const isActive = i === cur;
-                  const isPast = i < cur;
-                  const clr = (isActive || isPast) ? s.color : "#e2e8f0";
-                  const items = [
-                    <div key={`d${i}`} style={{ width: isActive ? 13 : 9, height: isActive ? 13 : 9, borderRadius: "50%", flexShrink: 0, background: clr, boxShadow: isActive ? `0 0 0 3px ${s.color}33` : "none", transition: "all .2s" }} />,
-                  ];
-                  if (i < stages.length - 1) items.push(<div key={`l${i}`} style={{ flex: 1, height: 2, background: i < cur ? stages[i + 1].color : "#e2e8f0", margin: "0 3px", transition: "background .3s" }} />);
-                  return items;
-                })}
-              </div>
-              <div style={{ display: "flex" }}>
-                {stages.map((s, i) => {
-                  const isActive = i === cur;
-                  const isPast = i < cur;
-                  return <span key={i} style={{ flex: 1, fontSize: ".47rem", fontWeight: isActive ? 800 : 500, color: isActive ? s.color : isPast ? "#6b829b" : "#c0ccd8", textAlign: "center", lineHeight: 1.3 }}>{s.label}</span>;
-                })}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Status Change */}
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #e7edf3", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: ".65rem", fontWeight: 700, color: "#425c76", display: "flex", alignItems: "center", gap: 6 }}>
-            <Flag size={14} style={{ color: "#0875dc" }} /> تغيير الحالة
-          </span>
-          <select className={`ops-status-select ${statusTone[selected.status]}`} value={selected.status} onChange={(event) => updateStatus(event.target.value as OrderStatus)} style={{ fontSize: ".65rem", padding: "6px 14px" }}>
-            {allowedOrderStatuses(selected.status).map((status) => <option key={status}>{status}</option>)}
-          </select>
-        </div>
-
-        {/* Documents */}
-        <section className="ops-documents">
-          <header>
-            <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".75rem" }}><FileText size={14} style={{ color: "#0875dc" }} /> المستندات</h3>
-            <span style={{ fontSize: ".6rem", color: "#6b829b" }}>{databaseMode ? (remoteDocs[selected.id]?.length ?? 0) : ((uploadedDocs[selected.id]?.length ?? 0) + 2)} مستندات</span>
-          </header>
+      <header className="ord-head">
+        <div className="ord-head-main">
           <div>
-            {databaseMode ? (
-              <>{(remoteDocs[selected.id] ?? []).map((document, index) => (
-                <p key={`${document.name}-${index}`}>
-                  <Check size={12} style={{ color: "#0a705f", flexShrink: 0 }} />
-                  <span>
-                    {document.download_url ? <a href={document.download_url} target="_blank" rel="noreferrer">{document.name} <ExternalLink size={10} /></a> : document.name}
-                    <small>{document.status === "approved" ? "تمت المراجعة" : "تم الاستلام"}</small>
-                  </span>
-                </p>
-              ))}{!(remoteDocs[selected.id]?.length) ? <p><span style={{ color: "#8b9dad" }}>لا توجد مستندات بعد<small>ابدأ برفع المستند المطلوب</small></span></p> : null}</>
-            ) : (
-              <><p><Check size={12} style={{ color: "#0a705f", flexShrink: 0 }} /><span>السجل التجاري<small>تمت المراجعة</small></span></p><p><Check size={12} style={{ color: "#0a705f", flexShrink: 0 }} /><span>هوية المالك أو الشركاء<small>تمت المراجعة</small></span></p>
-                {uploadedDocs[selected.id]?.includes("supporting") ? <p><Check size={12} style={{ color: "#0a705f", flexShrink: 0 }} /><span>المستند الداعم<small>تم الاستلام الآن</small></span></p> : null}</>
-            )}
-            <label style={{ border: "1px dashed #d0dae5", borderRadius: 8, padding: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: ".68rem", color: "#536a82", fontWeight: 600, marginTop: 6 }}>
-              <Upload size={14} style={{ color: "#0875dc" }} /> رفع مستند
-              <small style={{ fontWeight: 400, color: "#8b9dad" }}>PDF أو صورة</small>
-              <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadSupportingDocument(file); event.target.value = ""; }} style={{ display: "none" }} />
-            </label>
+            <p className="ord-eyebrow">مركز تشغيل الخدمات</p>
+            <h1>إدارة الطلبات</h1>
+            <p>مسار موحّد لمتابعة طلبات العميل من الإنشاء حتى الإغلاق مع المستندات والتذاكر المرتبطة.</p>
           </div>
-        </section>
-
-        {/* Status Reason */}
-        {(selected.status === "ملغي" || selected.status === "معلق") && selected.statusReason ? (
-          <section style={{ background: selected.status === "ملغي" ? "#fef2f2" : "#fffbeb", borderRadius: 8, padding: "10px 12px" }}>
-            <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".7rem", margin: 0 }}>
-              {selected.status === "ملغي" ? <X size={13} style={{ color: "#dc2626" }} /> : <AlertCircle size={13} style={{ color: "#e67e22" }} />}
-              <span style={{ color: selected.status === "ملغي" ? "#dc2626" : "#e67e22", fontWeight: 700 }}>
-                سبب {selected.status === "ملغي" ? "الإلغاء" : "التعليق"}
-              </span>
-            </h3>
-            <p style={{ fontSize: ".68rem", color: "#2a4a6a", margin: "6px 0 0", lineHeight: 1.5 }}>{selected.statusReason}</p>
-          </section>
-        ) : null}
-
-        {/* Next Action */}
-        <section className="ops-next">
-          <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".75rem" }}>
-            <AlertCircle size={14} style={{ color: "#e67e22" }} /> الإجراء التالي
-          </h3>
-          <p style={{ fontSize: ".72rem", fontWeight: 700, color: "#1a3655", margin: "4px 0 2px" }}>{selected.nextAction}</p>
-          <small style={{ fontSize: ".6rem", color: "#8b9dad" }}>موعد الإجراء: {selected.nextActionAt}</small>
-        </section>
-
-        {/* Contact */}
-        <section className="ops-contact">
-          <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".75rem" }}>
-            <Phone size={14} style={{ color: "#0875dc" }} /> تواصل مع العميل
-          </h3>
-          <div style={{ display: "flex", gap: 8 }}>
-            <a href={`tel:+${selected.phone}`} style={{ flex: 1, height: 50, border: "1px solid #e0e7ef", borderRadius: 6, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textDecoration: "none", color: "#0875dc", fontSize: ".75rem", gap: 2 }}>
-              <Phone size={16} /><small style={{ fontSize: ".55rem" }}>اتصال</small>
-            </a>
-            <a href={`https://wa.me/${selected.phone}`} target="_blank" rel="noreferrer" style={{ flex: 1, height: 50, border: "1px solid #e0e7ef", borderRadius: 6, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textDecoration: "none", color: "#25D366", fontSize: ".75rem", gap: 2 }}>
-              <MessageSquare size={16} /><small style={{ fontSize: ".55rem" }}>واتساب</small>
-            </a>
-            <a href={`mailto:${selected.email}`} style={{ flex: 1, height: 50, border: "1px solid #e0e7ef", borderRadius: 6, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textDecoration: "none", color: "#0875dc", fontSize: ".75rem", gap: 2 }}>
-              <Mail size={16} /><small style={{ fontSize: ".55rem" }}>بريد</small>
-            </a>
-          </div>
-        </section>
-
-        {/* Related Tickets */}
-        {relatedTickets.length > 0 && (
-          <section style={{ padding: "14px 18px", borderBottom: "1px solid #e7edf3" }}>
-            <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".75rem", margin: "0 0 10px" }}>
-              <MessageSquare size={14} style={{ color: "#7c3aed" }} /> التذاكر المرتبطة
-              <span style={{ marginRight: "auto", fontSize: ".56rem", color: "#7c3aed", background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 10, padding: "1px 8px", fontWeight: 800 }}>{relatedTickets.length}</span>
-            </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              {relatedTickets.map(t => {
-                const sColor: Record<string,string> = { "جديدة": "#0875dc", "قيد المراجعة": "#b45309", "بانتظار العميل": "#7c3aed", "تم الحل": "#15803d", "مغلقة": "#6b7280" };
-                const sBg:    Record<string,string> = { "جديدة": "#eaf4ff", "قيد المراجعة": "#fef9ee", "بانتظار العميل": "#f5f3ff", "تم الحل": "#f0fdf4", "مغلقة": "#f3f4f6" };
-                return (
-                  <a key={t.id} href="/admin/tickets"
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#f8fafc", border: "1px solid #e5eaf0", borderRadius: 8, textDecoration: "none", transition: "border-color .15s" }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = "#7c3aed"}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = "#e5eaf0"}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: ".65rem", fontWeight: 700, color: "#1e3a56", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
-                      <div style={{ fontSize: ".54rem", color: "#8b9dad", marginTop: 1 }}>{t.category}</div>
-                    </div>
-                    <span style={{ fontSize: ".54rem", fontWeight: 700, padding: "2px 7px", borderRadius: 12, background: sBg[t.status] ?? "#f3f4f6", color: sColor[t.status] ?? "#6b7280", whiteSpace: "nowrap" }}>{t.status}</span>
-                  </a>
-                );
-              })}
-            </div>
-            <a href="/admin/tickets" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: ".62rem", color: "#7c3aed", fontWeight: 600, textDecoration: "none" }}>
-              عرض كل التذاكر <ChevronLeft size={12} />
-            </a>
-          </section>
-        )}
-
-        {/* Timeline */}
-        <section className="ops-timeline">
-          <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".75rem", marginBottom: 12 }}>
-            <RefreshCw size={14} style={{ color: "#6b829b" }} /> الخط الزمني
-          </h3>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#0a705f", marginTop: 4, flexShrink: 0 }}></div>
-            <p style={{ margin: 0, fontSize: ".68rem", color: "#1a3655", fontWeight: 600, lineHeight: 1.5 }}>
-              آخر تحديث للطلب
-              <small style={{ display: "block", fontSize: ".6rem", color: "#8b9dad", fontWeight: 400 }}>{selected.assignee} · {selected.updatedAt}</small>
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 10 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#d0dae5", marginTop: 4, flexShrink: 0 }}></div>
-            <p style={{ margin: 0, fontSize: ".68rem", color: "#536a82", lineHeight: 1.5 }}>
-              تم إنشاء الطلب
-              <small style={{ display: "block", fontSize: ".6rem", color: "#8b9dad" }}>فريق أتمم</small>
-            </p>
-          </div>
-          <a href="/admin/followups" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 12, fontSize: ".65rem", color: "#0875dc", fontWeight: 600, textDecoration: "none" }}>
-            عرض المتابعات المرتبطة <ChevronLeft size={13} />
-          </a>
-        </section>
-      </aside> : null}
-    </div>
-
-    {showCreate ? (
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 100,
-        background: "rgba(4,31,60,.55)", backdropFilter: "blur(3px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20,
-      }} role="presentation" onMouseDown={() => !formSubmitted && setShowCreate(false)}>
-        <section style={{
-          width: "min(760px, 100%)", maxHeight: "calc(100vh - 40px)",
-          background: "#fff", borderRadius: 14, boxShadow: "0 25px 70px rgba(0,25,55,.3)",
-          display: "flex", flexDirection: "column", overflow: "hidden",
-        }} role="dialog" aria-modal="true" aria-labelledby="create-order-title" onMouseDown={(event) => event.stopPropagation()}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "20px 24px", borderBottom: "1px solid #e6ecf2", flexShrink: 0 }}>
-            <div>
-              <h2 id="create-order-title" style={{ fontSize: "1.1rem", margin: "0 0 4px", color: "#073766" }}>إنشاء طلب جديد</h2>
-              <p style={{ fontSize: ".7rem", color: "#7c8b9b", margin: 0 }}>{databaseMode ? "أدخل بيانات الطلب من السجلات المعتمدة." : "أدخل البيانات الأساسية للطلب."}</p>
-            </div>
-            <button onClick={() => setShowCreate(false)} disabled={formSubmitted} style={{ border: 0, background: "#f1f4f7", color: "#536b84", borderRadius: "50%", width: 32, height: 32, fontSize: "1.1rem", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}><X size={20} /></button>
-          </div>
-          <form onSubmit={createOrder} style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <div style={{ flex: 1, overflow: "auto", padding: "20px 24px" }}>
-              {databaseMode ? <CreateOrderForm catalog={catalog} /> : <CreateOrderSimple />}
-            </div>
-            <div style={{
-              padding: "14px 24px", borderTop: "1px solid #eef2f7", background: "#fff",
-              display: "flex", justifyContent: "flex-start", gap: 12, flexShrink: 0,
-            }}>
-              <button type="submit" disabled={formSubmitted} style={{
-                height: 44, borderRadius: 10, padding: "0 28px", fontSize: ".78rem", fontWeight: 800,
-                border: 0, background: "#0875dc", color: "#fff", cursor: "pointer",
-                display: "inline-flex", alignItems: "center", gap: 8,
-                boxShadow: "0 2px 8px rgba(8,117,220,.3)", opacity: formSubmitted ? 0.6 : 1,
-              }}>
-                {formSubmitted ? <><span className="btn-spinner" /> جاري الإنشاء...</> : <><Plus size={18} /> إنشاء الطلب</>}
-              </button>
-              <button type="button" onClick={() => setShowCreate(false)} disabled={formSubmitted} style={{
-                height: 44, borderRadius: 10, padding: "0 28px", fontSize: ".78rem", fontWeight: 700,
-                border: "1.5px solid #dfe7ef", background: "#fff", color: "#5e7489",
-                cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
-                opacity: formSubmitted ? 0.5 : 1,
-              }}>إلغاء</button>
-            </div>
-          </form>
-        </section>
-      </div>
-    ) : null}
-
-    {showReasonDialog && pendingTargetStatus ? (
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 200,
-        background: "rgba(4,31,60,.55)", backdropFilter: "blur(3px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20,
-      }} role="presentation" onMouseDown={() => setShowReasonDialog(false)}>
-        <section style={{
-          width: "min(440px, 100%)", background: "#fff", borderRadius: 14,
-          boxShadow: "0 25px 70px rgba(0,25,55,.3)", padding: "24px 28px",
-        }} role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <AlertTriangle size={22} style={{ color: status === "ملغي" ? "#dc2626" : "#e67e22" }} />
-            <div>
-              <h3 style={{ margin: 0, fontSize: ".85rem", color: "#073766" }}>
-                {pendingTargetStatus === "ملغي" ? "إلغاء الطلب" : "تعليق الطلب"}
-              </h3>
-              <p style={{ margin: "3px 0 0", fontSize: ".65rem", color: "#7c8b9b" }}>
-                الرجاء إدخال سبب {pendingTargetStatus === "ملغي" ? "الإلغاء" : "التعليق"}
-              </p>
-            </div>
-          </div>
-          <textarea
-            ref={reasonRef}
-            dir="rtl"
-            placeholder="اكتب سبب التغيير هنا..."
-            style={{
-              width: "100%", height: 100, resize: "vertical", padding: 12,
-              border: "1.5px solid #dfe7ef", borderRadius: 10, font: "inherit",
-              fontSize: ".72rem", color: "#2a4a6a", outline: "none",
-              boxSizing: "border-box",
-            }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "#0875dc"; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = "#dfe7ef"; }}
-          />
-          <div style={{ display: "flex", justifyContent: "flex-start", gap: 10, marginTop: 16 }}>
-            <button onClick={() => { const reason = reasonRef.current?.value.trim(); if (!reason) { setNotice("السبب مطلوب لهذه الحالة"); return; } setShowReasonDialog(false); void confirmStatusChange(pendingTargetStatus, reason); }} style={{
-              height: 40, borderRadius: 10, padding: "0 22px", fontSize: ".72rem", fontWeight: 800,
-              border: 0, background: pendingTargetStatus === "ملغي" ? "#dc2626" : "#e67e22",
-              color: "#fff", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
-              boxShadow: pendingTargetStatus === "ملغي" ? "0 2px 8px rgba(220,38,38,.3)" : "0 2px 8px rgba(230,126,34,.3)",
-            }}>
-              {pendingTargetStatus === "ملغي" ? <X size={16} /> : <AlertCircle size={16} />}
-              تأكيد {pendingTargetStatus === "ملغي" ? "الإلغاء" : "التعليق"}
+          <div className="ord-actions">
+            <button className="ord-btn" onClick={() => void refreshOrders()} disabled={dataLoading}>
+              <RefreshCw size={14} style={{ animation: dataLoading ? "spin .7s linear infinite" : undefined }} />
+              تحديث
             </button>
-            <button onClick={() => setShowReasonDialog(false)} style={{
-              height: 40, borderRadius: 10, padding: "0 22px", fontSize: ".72rem", fontWeight: 700,
-              border: "1.5px solid #dfe7ef", background: "#fff", color: "#5e7489",
-              cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
-            }}>رجوع</button>
-          </div>
-        </section>
-      </div>
-    ) : null}
-
-    {notice ? <div className="ops-toast" role="status"><CheckCircle size={14} /> {notice}</div> : null}
-
-    {confirmDeleteOrder&&(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:9999,display:"grid",placeItems:"center"}} onClick={()=>setConfirmDeleteOrder(null)}>
-        <div style={{background:"#fff",borderRadius:14,padding:"24px 28px",width:340,boxShadow:"0 8px 32px rgba(0,0,0,.18)"}} onClick={e=>e.stopPropagation()}>
-          <h3 style={{margin:"0 0 8px",color:"#dc2626",fontSize:16}}>حذف الطلب نهائياً</h3>
-          <p style={{margin:"0 0 20px",fontSize:13,color:"#526983"}}>سيتم حذف الطلب بشكل نهائي ولا يمكن التراجع عن هذا الإجراء.</p>
-          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-            <button onClick={()=>setConfirmDeleteOrder(null)} style={{padding:"8px 16px",border:"1px solid #e5eaf0",background:"#f5f8fc",color:"#526983",borderRadius:8,cursor:"pointer",fontWeight:600}}>إلغاء</button>
-            <button onClick={()=>deleteOrder(confirmDeleteOrder)} style={{padding:"8px 16px",background:"#dc2626",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer"}}>حذف نهائي</button>
+            <button className="ord-btn primary" onClick={() => setShowCreate(true)}>
+              <Plus size={14} /> طلب جديد
+            </button>
           </div>
         </div>
+        <div className="ord-kpis">
+          {[
+            { label: "إجمالي الطلبات", value: stats.total, icon: Layers, color: "#073766", bg: "#eaf4ff" },
+            { label: "بانتظار العميل", value: stats.needsClient, icon: User, color: "#b45309", bg: "#fef9ee" },
+            { label: "قيد التنفيذ", value: stats.inProgress, icon: RefreshCw, color: "#0f766e", bg: "#f0fdfa" },
+            { label: "متأخرة", value: stats.overdue, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2" },
+            { label: "مكتملة", value: stats.completed, icon: CheckCircle, color: "#15803d", bg: "#f0fdf4" },
+          ].map(kpi => {
+            const Icon = kpi.icon;
+            return (
+              <article className="ord-kpi" key={kpi.label}>
+                <i style={{ background: kpi.bg, color: kpi.color }}><Icon size={17} /></i>
+                <div><small>{kpi.label}</small><strong>{kpi.value}</strong></div>
+              </article>
+            );
+          })}
+        </div>
+      </header>
+
+      <div className="ord-workspace">
+        <aside className="ord-panel ord-queue">
+          <div className="ord-toolbar">
+            <div className="ord-tabs">
+              {statusTabs.map(status => (
+                <button key={status} className={!showArchived && statusFilter === status ? "active" : ""} onClick={() => { setShowArchived(false); setStatusFilter(status); }}>
+                  {status} <b>{counts[status]}</b>
+                </button>
+              ))}
+              <button className={showArchived ? "active" : ""} onClick={() => { setShowArchived(true); setStatusFilter("الكل"); }}>
+                الأرشيف <b>{orders.filter(order => order.archivedAt).length}</b>
+              </button>
+            </div>
+            <div className="ord-tools">
+              <label className="ord-search">
+                <Search size={13} />
+                <input value={query} onChange={event => setQuery(event.target.value)} placeholder="بحث بالطلب، العميل، الخدمة، المسؤول..." />
+                {query && <button className="ord-close" style={{ width: 24, height: 24 }} onClick={() => setQuery("")} type="button"><X size={12} /></button>}
+              </label>
+            </div>
+            <div className="ord-chip-row">
+              {queueFilters.map(filter => (
+                <button key={filter.value} className={queueFilter === filter.value ? "active" : ""} onClick={() => setQueueFilter(filter.value)}>
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="ord-list">
+            {visibleOrders.length === 0 ? (
+              <div className="ord-empty">
+                <div>
+                  <FileText size={30} />
+                  <strong>لا توجد طلبات مطابقة</strong>
+                  <span>غيّر البحث أو الفلاتر لعرض نتائج أخرى.</span>
+                </div>
+              </div>
+            ) : visibleOrders.map(order => {
+              const active = selected?.id === order.id;
+              const pri = priorityMeta[order.priority || "normal"] || priorityMeta.normal;
+              return (
+                <button key={order.id} className={`ord-card ${active ? "active" : ""} ${isOverdue(order) ? "overdue" : ""}`} onClick={() => setSelectedId(order.id)}>
+                  <div className="ord-card-top">
+                    <span className="ord-avatar">{initials(order.client)}</span>
+                    <div className="ord-card-body">
+                      {/* ref + date */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                        <div className="ord-ref" style={{ fontFamily: "monospace", fontSize: ".6rem", color: "#8b9dad" }}>{order.id}</div>
+                        <span style={{ fontSize: ".57rem", color: "#94a3b8", display: "flex", alignItems: "center", gap: 3 }}>
+                          <Calendar size={9} />
+                          {order.createdAtRaw ? formatAppDate(order.createdAtRaw) : "—"}
+                        </span>
+                      </div>
+                      {/* client name */}
+                      <h2 style={{ margin: "0 0 4px", fontSize: ".8rem", fontWeight: 700, color: "#0b1e36" }}>{order.client}</h2>
+                      {/* service + assignee */}
+                      <div className="ord-card-meta" style={{ marginBottom: 6 }}>
+                        <span><Layers size={10} /> {order.service}</span>
+                        <span><User size={10} /> {order.assignee || "غير محدد"}</span>
+                      </div>
+                      {/* divider */}
+                      <div style={{ borderTop: "1px dashed #e8edf5", paddingTop: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div className="ord-badges">
+                          <StatusPill status={order.status} />
+                          <span className="ord-priority" style={{ color: pri.color, background: pri.bg, borderColor: pri.bg }}>{pri.label}</span>
+                          {isOverdue(order) && <span className="ord-priority" style={{ color: "#dc2626", background: "#fef2f2", borderColor: "#fecaca" }}>متأخر</span>}
+                        </div>
+                        <span className="ord-time" style={{ fontSize: ".57rem", color: "#94a3b8", display: "flex", alignItems: "center", gap: 3 }}>
+                          <RefreshCw size={9} />
+                          {order.updatedAtRaw ? formatAppRelativeTime(order.updatedAtRaw) : "—"}
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronLeft size={14} color="#b7c4d1" style={{ marginTop: 14, flexShrink: 0 }} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <main className="ord-panel ord-detail">
+          {selected ? (
+            <>
+              <div className="ord-detail-head">
+                <div className="ord-detail-title">
+                  <span className="ord-detail-icon"><ShieldCheck size={20} /></span>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="ord-badges" style={{ marginBottom: 8 }}>
+                      <StatusPill status={selected.status} />
+                      {isOverdue(selected) && <span className="ord-priority" style={{ color: "#dc2626", background: "#fef2f2", borderColor: "#fecaca" }}>تجاوز الموعد</span>}
+                    </div>
+                    <h2>{selected.service}</h2>
+                    <div className="ord-detail-meta">
+                      <span><Building2 size={11} /> {selected.client}</span>
+                      <span><Calendar size={11} /> فتح {formatAppDate(selected.createdAtRaw || selected.updatedAtRaw)}</span>
+                      <span><RefreshCw size={11} /> آخر تحديث {formatAppRelativeTime(selected.updatedAtRaw)}</span>
+                      <button className="ord-btn" style={{ height: 26, padding: "0 8px" }} onClick={() => { navigator.clipboard?.writeText(selected.id); toast("تم نسخ رقم الطلب"); }}><Copy size={11} /> {selected.id}</button>
+                    </div>
+                  </div>
+                </div>
+                <button className="ord-close" onClick={() => setSelectedId(undefined)} aria-label="إغلاق التفاصيل"><X size={14} /></button>
+              </div>
+
+              <div className="ord-detail-body">
+                <section className="ord-section">
+                  <header>
+                    <span>مسار التنفيذ</span>
+                    <select value={selected.status} onChange={event => updateStatus(event.target.value as OrderStatus)} className={`ops-status-select ${statusTone[selected.status]}`} style={{ height: 34, border: "1px solid #dfe8f1", borderRadius: 9, font: "inherit", fontSize: ".62rem", fontWeight: 900, padding: "0 12px 0 38px", backgroundColor: "#fff" }}>
+                      {allowedOrderStatuses(selected.status).map(status => <option key={status}>{status}</option>)}
+                    </select>
+                  </header>
+                  <div className="ord-section-content">
+                    <div className="ord-stepper">
+                      {[
+                        { status: "جديد", label: "استلام الطلب", hint: "فرز وربط البيانات" },
+                        { status: "قيد التنفيذ", label: "تنفيذ الخدمة", hint: "إجراء داخلي" },
+                        { status: "بانتظار المستندات", label: "مستندات العميل", hint: "تجهيز/استكمال" },
+                        { status: "مكتمل", label: "التسليم", hint: "إغلاق الطلب" },
+                      ].map((step, index) => {
+                        const orderIndex: Record<string, number> = { "جديد": 0, "قيد التنفيذ": 1, "بانتظار المستندات": 2, "مكتمل": 3 };
+                        const current = orderIndex[selected.status] ?? -1;
+                        const cls = index < current ? "done" : index === current ? "active" : "";
+                        return (
+                          <div className={`ord-step ${cls}`} key={step.status}>
+                            {index < current ? <Check size={15} /> : <Clock size={15} />}
+                            <b>{step.label}</b>
+                            <span>{step.hint}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="ord-section">
+                  <header><span>معلومات الطلب والعميل</span><AgencyMark order={selected} /></header>
+                  <div className="ord-section-content ord-info-grid">
+                    <Info label="العميل" value={selected.client} />
+                    <Info label="الخدمة" value={selected.service} />
+                    <Info label="المسؤول" value={selected.assignee} />
+                    <Info label="تاريخ التسليم المتوقع" value={formatAppDate(selected.dueAtRaw)} />
+                    <Info label="الإجراء التالي" value={selected.nextAction} />
+                    <Info label="موعد الإجراء" value={selected.nextActionAtRaw ? formatAppDateTime(selected.nextActionAtRaw) : "غير محدد"} />
+                  </div>
+                </section>
+
+                <section className="ord-section">
+                  <header>
+                    <span>المستندات</span>
+                    <label className="ord-btn" style={{ height: 30, padding: "0 10px" }}>
+                      <Upload size={13} /> رفع مستند
+                      <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={event => { const file = event.target.files?.[0]; if (file) void uploadSupportingDocument(file); event.target.value = ""; }} />
+                    </label>
+                  </header>
+                  <div className="ord-section-content">
+                    {currentDocs.length ? (
+                      <div className="ord-doc-list">
+                        {currentDocs.map((doc, index) => (
+                          doc.download_url ? (
+                            <a className="ord-doc" href={doc.download_url} target="_blank" rel="noreferrer" key={`${doc.name}-${index}`}>
+                              <FileText size={16} color="#0875dc" />
+                              <span>{doc.name}<small>{doc.status === "approved" ? "تمت المراجعة" : "تم الاستلام"}</small></span>
+                            </a>
+                          ) : (
+                            <div className="ord-doc" key={`${doc.name}-${index}`}>
+                              <FileText size={16} color="#0875dc" />
+                              <span>{doc.name}<small>{doc.status === "approved" ? "تمت المراجعة" : "تم الاستلام"}</small></span>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="ord-empty" style={{ minHeight: 120 }}>
+                        <div><FileText size={26} /><strong>لا توجد مستندات بعد</strong><span>ارفع مستنداً أو اطلبه من العميل عبر التذاكر.</span></div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="ord-section">
+                  <header><span>التواصل والتكامل مع العميل</span></header>
+                  <div className="ord-section-content" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                    <a className="ord-btn" href={`tel:${selected.phone}`}><Phone size={13} /> اتصال</a>
+                    <a className="ord-btn" href={`https://wa.me/${selected.phone}`} target="_blank" rel="noreferrer"><MessageSquare size={13} /> واتساب</a>
+                    <a className="ord-btn" href={`mailto:${selected.email}`}><Mail size={13} /> بريد</a>
+                  </div>
+                </section>
+
+                <section className="ord-section">
+                  <header><span>التذاكر المرتبطة</span><a className="ord-btn" style={{ height: 30, padding: "0 10px" }} href="/admin/tickets"><MessageSquare size={13} /> فتح التذاكر</a></header>
+                  <div className="ord-section-content">
+                    {relatedTickets.length ? (
+                      <div className="ord-ticket-list">
+                        {relatedTickets.map(ticket => (
+                          <a className="ord-ticket" href="/admin/tickets" key={ticket.id}>
+                            <MessageSquare size={16} color="#0f766e" />
+                            <span style={{ minWidth: 0, flex: 1 }}><b>{ticket.title}</b><small>{ticket.category}</small></span>
+                            <span className="ord-pill" style={{ color: statusOf((statusFromDatabase[ticket.status] || ticket.status) as OrderStatus).color, background: "#fff", borderColor: "#e4ebf2" }}>{ticket.status}</span>
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="ord-empty" style={{ minHeight: 110 }}>
+                        <div><MessageSquare size={24} /><strong>لا توجد تذاكر مرتبطة</strong><span>عند وجود تذاكر للعميل ستظهر هنا لربط التشغيل بالدعم.</span></div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                {(selected.status === "ملغي" || selected.status === "معلق") && selected.statusReason ? (
+                  <section className="ord-section">
+                    <header><span>{selected.status === "ملغي" ? "سبب الإلغاء" : "سبب التعليق"}</span></header>
+                    <div className="ord-section-content" style={{ color: "#3d5872", fontSize: ".72rem", lineHeight: 1.8 }}>{selected.statusReason}</div>
+                  </section>
+                ) : null}
+              </div>
+
+              <footer className="ord-footer">
+                <span className="ord-footer-note"><Send size={13} /> أي تغيير في الحالة ينعكس على مسار الطلب في لوحة العميل.</span>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {selected.databaseId && !selected.archivedAt && <button className="ord-btn" onClick={() => archiveOrder(selected.databaseId!, true)}><Archive size={13} /> أرشفة</button>}
+                  {selected.databaseId && selected.archivedAt && <button className="ord-btn" onClick={() => archiveOrder(selected.databaseId!, false)}><Archive size={13} /> استعادة</button>}
+                  {selected.databaseId && <button className="ord-btn danger" onClick={() => setConfirmDeleteOrder(selected.databaseId!)}><Trash2 size={13} /> حذف</button>}
+                </div>
+              </footer>
+            </>
+          ) : (
+            <div className="ord-blank">
+              <div className="ord-blank-card">
+                <span className="ord-blank-icon"><Layers size={30} /></span>
+                <h2>اختر طلباً من القائمة</h2>
+                <p>ستظهر تفاصيل العميل، المستندات، مسار التنفيذ، والتذاكر المرتبطة هنا.</p>
+              </div>
+            </div>
+          )}
+        </main>
       </div>
-    )}
-  </>;
+
+      {showCreate && (
+        <OrderModal
+          catalog={catalog}
+          databaseMode={databaseMode}
+          formSubmitted={formSubmitted}
+          onClose={() => !formSubmitted && setShowCreate(false)}
+          onSubmit={createOrder}
+        />
+      )}
+
+      {statusDialog && (
+        <ReasonDialog
+          status={statusDialog}
+          reasonRef={reasonRef}
+          onClose={() => setStatusDialog(null)}
+          onConfirm={() => {
+            const reason = reasonRef.current?.value.trim();
+            if (!reason) { toast("السبب مطلوب لهذه الحالة"); return; }
+            const status = statusDialog;
+            setStatusDialog(null);
+            void confirmStatusChange(status, reason);
+          }}
+        />
+      )}
+
+      {confirmDeleteOrder && (
+        <ConfirmDelete onClose={() => setConfirmDeleteOrder(null)} onConfirm={() => void deleteOrder(confirmDeleteOrder)} />
+      )}
+
+      {notice && <div className="ord-toast" role="status"><CheckCircle size={14} /> {notice}</div>}
+    </section>
+  );
 }
 
-/* ── Full Create Order Form (Database Mode) ── */
+function Info({ label, value }: { label: string; value: React.ReactNode }) {
+  return <div className="ord-info"><small>{label}</small><strong>{value || "غير محدد"}</strong></div>;
+}
+
+function OrderModal({ catalog, databaseMode, formSubmitted, onClose, onSubmit }: {
+  catalog: Catalog;
+  databaseMode: boolean;
+  formSubmitted: boolean;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(4,31,60,.55)", backdropFilter: "blur(3px)", display: "grid", placeItems: "center", padding: 20 }} onMouseDown={onClose}>
+      <section style={{ width: "min(680px,100%)", maxHeight: "calc(100vh - 40px)", background: "#fff", borderRadius: 16, boxShadow: "0 25px 70px rgba(0,25,55,.3)", display: "grid", gridTemplateRows: "auto 1fr auto", overflow: "hidden" }} onMouseDown={event => event.stopPropagation()}>
+        <header style={{ padding: "18px 22px", borderBottom: "1px solid #e6ecf2", display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <div><h2 style={{ margin: "0 0 4px", fontSize: "1rem", color: "#073766" }}>إنشاء طلب خدمة</h2><p style={{ margin: 0, fontSize: ".66rem", color: "#7c8b9b" }}>اربط الطلب بعميل وخدمة حتى يظهر في لوحة العميل ومسار التشغيل.</p></div>
+          <button className="ord-close" onClick={onClose} disabled={formSubmitted}><X size={14} /></button>
+        </header>
+        <form id="create-order-form" onSubmit={onSubmit} style={{ minHeight: 0, overflow: "auto", padding: 22 }}>
+          {databaseMode ? <CreateOrderForm catalog={catalog} /> : <CreateOrderSimple />}
+        </form>
+        <footer style={{ padding: "14px 22px", borderTop: "1px solid #e6ecf2", background: "#fbfdff", display: "flex", justifyContent: "flex-start", gap: 8 }}>
+          <button className="ord-btn primary" type="submit" form="create-order-form" disabled={formSubmitted}>{formSubmitted ? <RefreshCw size={14} style={{ animation: "spin .7s linear infinite" }} /> : <Plus size={14} />} إنشاء الطلب</button>
+          <button className="ord-btn" type="button" onClick={onClose} disabled={formSubmitted}>إلغاء</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function CreateOrderForm({ catalog }: { catalog: Catalog }) {
   const [clientSearch, setClientSearch] = useState("");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [clientTickets, setClientTickets] = useState<RelatedTicket[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const selectedService = catalog.services.find(service => service.id === selectedServiceId);
+  const selectedClient = catalog.clients.find(client => client.id === selectedClientId);
+  const filteredClients = catalog.clients.filter(client => (client.name || "").toLowerCase().includes(clientSearch.toLowerCase())).slice(0, 20);
 
   useEffect(() => {
-    if (!selectedClientId) { setClientTickets([]); return; }
-    fetch("/api/admin/tickets")
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        const all = (data?.data ?? []) as RelatedTicket[];
-        setClientTickets(all.filter(t => t.client_id === selectedClientId && !["تم الحل","مغلقة"].includes(t.status)));
-      })
-      .catch(() => {});
-  }, [selectedClientId]);
-
-  const selectedService = catalog.services.find((s) => s.id === selectedServiceId);
-  const selectedClient = catalog.clients.find((c) => c.id === selectedClientId);
-
-  const filteredClients = catalog.clients.filter((c) =>
-    (c.name || "").toLowerCase().includes(clientSearch.toLowerCase())
-  );
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownOpen(false);
+    function close(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setDropdownOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
   }, []);
 
-  const fStyle: Record<string, React.CSSProperties> = {
-    label: { display: "block", marginBottom: 14 },
-    labelText: { display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 6 },
-    field: { width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".7rem", color: "#2a4a6a", background: "#fff", boxSizing: "border-box", outline: "none", transition: "border-color .2s, box-shadow .2s" },
-    textarea: { width: "100%", minHeight: 80, border: "1px solid #dfe7ef", borderRadius: 10, padding: "10px 14px", font: "inherit", fontSize: ".7rem", color: "#2a4a6a", background: "#fff", boxSizing: "border-box", outline: "none", resize: "vertical" as const, transition: "border-color .2s, box-shadow .2s" },
-    select: { width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".7rem", color: "#2a4a6a", background: "#fff url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='6'%3E%3Cpath d='M0 0l5.5 6 5.5-6z' fill='%23536a82'/%3E%3C/svg%3E\") no-repeat left 14px center", cursor: "pointer", boxSizing: "border-box", outline: "none", appearance: "none" as const },
-    row: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-  };
-  const chipStyle = (color: string, bg: string): React.CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, fontSize: ".65rem", fontWeight: 700, cursor: "pointer", border: `2px solid ${color}`, background: bg, color, transition: "all .15s" });
-
-  function onFieldFocus(e: React.FocusEvent<HTMLElement>) {
-    e.currentTarget.style.borderColor = "#0875dc";
-    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(8,117,220,.1)";
-  }
-  function onFieldBlur(e: React.FocusEvent<HTMLElement>) {
-    e.currentTarget.style.borderColor = "#dfe7ef";
-    e.currentTarget.style.boxShadow = "none";
-  }
-
   return (
-    <div className="ops-form-grid" style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 4 }}>
-      {/* Client Selection (Dropdown) */}
-      <label style={fStyle.label}>
-        <span style={fStyle.labelText}><Building2 size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> العميل <span style={{ color: "#dc2626" }}>*</span></span>
+    <div className="ord-form-grid">
+      <label className="ord-field full">
+        <span>العميل *</span>
         <div ref={dropdownRef} style={{ position: "relative" }}>
           <input
-            name="clientDisplay"
             required
-            placeholder="ابحث عن عميل..."
             value={selectedClient ? selectedClient.name : clientSearch}
-            onChange={(e) => { setClientSearch(e.target.value); setSelectedClientId(""); setDropdownOpen(true); }}
-            onFocus={(e) => { setDropdownOpen(true); onFieldFocus(e); }}
-            onBlur={onFieldBlur}
-            style={fStyle.field}
+            onChange={event => { setClientSearch(event.target.value); setSelectedClientId(""); setDropdownOpen(true); }}
+            onFocus={() => setDropdownOpen(true)}
+            placeholder="ابحث باسم العميل"
           />
           <input type="hidden" name="clientId" value={selectedClientId} />
-          {dropdownOpen && filteredClients.length > 0 && !selectedClientId && (
-            <div style={{
-              position: "absolute", top: "calc(100% + 4px)", right: 0, left: 0,
-              background: "#fff", border: "1px solid #e5ecf3", borderRadius: 10,
-              boxShadow: "0 8px 24px rgba(0,0,0,.12)", zIndex: 100, maxHeight: 220, overflow: "auto",
-            }}>
-              {filteredClients.map((c) => (
-                <div key={c.id} onClick={() => { setSelectedClientId(c.id); setClientSearch(c.name || ""); setDropdownOpen(false); }}
-                  style={{ padding: "10px 14px", cursor: "pointer", fontSize: ".68rem", color: "#2a4a6a", borderBottom: "1px solid #f0f4f8", transition: "background .15s" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "#f5f9ff"}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                >
-                  <strong style={{ display: "block", fontSize: ".7rem" }}>{c.name}</strong>
-                  <small style={{ color: "#8b9dad" }}>{c.phone || c.email || ""}</small>
-                </div>
-              ))}
+          {dropdownOpen && !selectedClientId && (
+            <div style={{ position: "absolute", top: "calc(100% + 5px)", right: 0, left: 0, zIndex: 30, background: "#fff", border: "1px solid #dfe8f1", borderRadius: 12, boxShadow: "0 16px 42px rgba(7,55,102,.14)", maxHeight: 230, overflow: "auto" }}>
+              {filteredClients.length ? filteredClients.map(client => (
+                <button key={client.id} type="button" onClick={() => { setSelectedClientId(client.id); setClientSearch(client.name || ""); setDropdownOpen(false); }} style={{ width: "100%", border: 0, borderBottom: "1px solid #edf2f7", background: "#fff", padding: "10px 12px", textAlign: "right", cursor: "pointer" }}>
+                  <strong style={{ display: "block", fontSize: ".72rem", color: "#173d65" }}>{client.name}</strong>
+                  <small style={{ color: "#8b9dad" }}>{client.phone || client.email || "بدون بيانات تواصل"}</small>
+                </button>
+              )) : <div style={{ padding: 14, color: "#8b9dad", fontSize: ".7rem" }}>لا توجد نتائج</div>}
             </div>
           )}
         </div>
       </label>
-
-      {/* Service + Agency */}
-      <div style={fStyle.row}>
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}><Layers size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> الخدمة <span style={{ color: "#dc2626" }}>*</span></span>
-          <select
-            name="serviceId"
-            required
-            value={selectedServiceId}
-            onChange={(e) => setSelectedServiceId(e.target.value)}
-            style={fStyle.select}
-            onFocus={onFieldFocus}
-            onBlur={onFieldBlur}
-          >
-            <option value="">اختر الخدمة</option>
-            {catalog.services.map((item) => (
-              <option value={item.id} key={item.id}>{item.name}</option>
-            ))}
-          </select>
-        </label>
-
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}><Building2 size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> الجهة</span>
-          <select
-            name="agencyId"
-            value={selectedService?.agency_id || ""}
-            onChange={() => {}}
-            style={{ ...fStyle.select, color: selectedService?.agency_id ? "#2a4a6a" : "#8b9dad" }}
-            onFocus={onFieldFocus}
-            onBlur={onFieldBlur}
-          >
-            {selectedService?.agency_id ? (
-              <option value={selectedService.agency_id}>
-                {catalog.agencies.find((a) => a.id === selectedService.agency_id)?.name || "تلقائي"}
-              </option>
-            ) : (
-              <option value="">تحدد تلقائياً من الخدمة</option>
-            )}
-            {catalog.agencies.map((a) => (
-              <option value={a.id} key={a.id}>{a.name}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {/* Priority + Assignee */}
-      <div style={fStyle.row}>
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}><Flag size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> الأولوية</span>
-          <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-            {(["normal", "high", "urgent"] as const).map((p) => (
-              <label key={p} style={{ ...chipStyle(priorityColors[p], "#fff"), cursor: "pointer", userSelect: "none" } as React.CSSProperties}>
-                <input type="radio" name="priority" value={p} defaultChecked={p === "normal"} style={{ display: "none" }}
-                  onChange={(e) => {
-                    const parent = e.currentTarget.closest("label");
-                    if (parent) parent.style.background = priorityColors[p] + "18";
-                  }}
-                />
-                {priorityLabels[p]}
-              </label>
-            ))}
-          </div>
-        </label>
-
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}><User size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> المسؤول</span>
-          <select name="assigneeId" style={fStyle.select} onFocus={onFieldFocus} onBlur={onFieldBlur}>
-            <option value="">غير مسند</option>
-            {catalog.profiles.map((item) => (
-              <option value={item.id} key={item.id}>{item.full_name}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {/* Due Date + Next Action Date */}
-      <div style={fStyle.row}>
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}><Calendar size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> تاريخ التسليم المتوقع</span>
-          <input type="date" name="dueAt" style={fStyle.field} onFocus={onFieldFocus} onBlur={onFieldBlur} />
-        </label>
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}><Clock size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> موعد الإجراء التالي</span>
-          <input type="datetime-local" name="nextActionAt" style={fStyle.field} onFocus={onFieldFocus} onBlur={onFieldBlur} />
-        </label>
-      </div>
-
-      {/* Next Action Text */}
-      <label style={fStyle.label}>
-        <span style={fStyle.labelText}><MessageSquare size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> الإجراء التالي</span>
-        <input name="nextActionText" placeholder="مثال: التواصل مع العميل لتأكيد البيانات" style={fStyle.field} onFocus={onFieldFocus} onBlur={onFieldBlur} />
+      <label className="ord-field">
+        <span>الخدمة *</span>
+        <select name="serviceId" required value={selectedServiceId} onChange={event => setSelectedServiceId(event.target.value)}>
+          <option value="">اختر الخدمة</option>
+          {catalog.services.map(service => <option value={service.id} key={service.id}>{service.name}</option>)}
+        </select>
       </label>
-
-      {/* Notes */}
-      <label style={fStyle.label}>
-        <span style={fStyle.labelText}><FileText size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> ملاحظات</span>
-        <textarea name="notes" placeholder="ملاحظات إضافية عن الطلب..." style={fStyle.textarea} onFocus={onFieldFocus} onBlur={onFieldBlur} />
+      <label className="ord-field">
+        <span>الجهة</span>
+        <select name="agencyId" defaultValue={selectedService?.agency_id || ""}>
+          <option value="">تحدد تلقائياً من الخدمة</option>
+          {catalog.agencies.map(agency => <option value={agency.id} key={agency.id}>{agency.name}</option>)}
+        </select>
       </label>
-
-      {/* Linked Ticket (optional) — shown only when the selected client has open tickets */}
-      {clientTickets.length > 0 && (
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}><MessageSquare size={13} style={{ verticalAlign: "middle", marginLeft: 4 }} /> التذكرة المرتبطة <span style={{ color: "#8b9dad", fontWeight: 400 }}>(اختياري)</span></span>
-          <select name="relatedTicketId" style={fStyle.select} onFocus={onFieldFocus} onBlur={onFieldBlur}>
-            <option value="">— لا يوجد ربط بتذكرة —</option>
-            {clientTickets.map(t => (
-              <option key={t.id} value={t.id}>{t.title} ({t.status})</option>
-            ))}
-          </select>
-        </label>
-      )}
+      <label className="ord-field">
+        <span>الأولوية</span>
+        <select name="priority" defaultValue="normal">
+          <option value="normal">عادي</option>
+          <option value="high">مرتفع</option>
+          <option value="urgent">عاجل</option>
+        </select>
+      </label>
+      <label className="ord-field">
+        <span>المسؤول</span>
+        <select name="assigneeId">
+          <option value="">غير مسند</option>
+          {catalog.profiles.map(profile => <option value={profile.id} key={profile.id}>{profile.full_name}</option>)}
+        </select>
+      </label>
+      <label className="ord-field">
+        <span>تاريخ التسليم المتوقع</span>
+        <input type="date" name="dueAt" />
+      </label>
+      <label className="ord-field">
+        <span>موعد الإجراء التالي</span>
+        <input type="datetime-local" name="nextActionAt" />
+      </label>
+      <label className="ord-field full">
+        <span>الإجراء التالي</span>
+        <input name="nextActionText" placeholder="مثال: التواصل مع العميل لتأكيد البيانات" />
+      </label>
+      <label className="ord-field full">
+        <span>ملاحظات داخلية</span>
+        <textarea name="notes" placeholder="ملاحظات تشغيلية تظهر للفريق فقط..." />
+      </label>
     </div>
   );
 }
 
-/* ── Simple Create Order Form (Non-Database Mode) ── */
 function CreateOrderSimple() {
-  const fStyle: Record<string, React.CSSProperties> = {
-    label: { display: "block", marginBottom: 14 },
-    labelText: { display: "block", fontSize: ".65rem", fontWeight: 700, color: "#425c76", marginBottom: 6 },
-    field: { width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".7rem", color: "#2a4a6a", background: "#fff", boxSizing: "border-box", outline: "none", transition: "border-color .2s, box-shadow .2s" },
-    select: { width: "100%", height: 42, border: "1px solid #dfe7ef", borderRadius: 10, padding: "0 14px", font: "inherit", fontSize: ".7rem", color: "#2a4a6a", background: "#fff url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='6'%3E%3Cpath d='M0 0l5.5 6 5.5-6z' fill='%23536a82'/%3E%3C/svg%3E\") no-repeat left 14px center", cursor: "pointer", boxSizing: "border-box", outline: "none", appearance: "none" as const },
-    row: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-  };
-
-  function onFieldFocus(e: React.FocusEvent<HTMLElement>) {
-    e.currentTarget.style.borderColor = "#0875dc";
-    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(8,117,220,.1)";
-  }
-  function onFieldBlur(e: React.FocusEvent<HTMLElement>) {
-    e.currentTarget.style.borderColor = "#dfe7ef";
-    e.currentTarget.style.boxShadow = "none";
-  }
-
   return (
-    <div className="ops-form-grid" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <div style={fStyle.row}>
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}>اسم العميل <span style={{ color: "#dc2626" }}>*</span></span>
-          <input name="client" required placeholder="مثال: شركة أتمم الأعمال" style={fStyle.field} onFocus={onFieldFocus} onBlur={onFieldBlur} />
-        </label>
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}>الخدمة <span style={{ color: "#dc2626" }}>*</span></span>
-          <select name="service" required style={fStyle.select} onFocus={onFieldFocus} onBlur={onFieldBlur}>
-            <option>تأسيس شركة ذات مسؤولية محدودة</option>
-            <option>إصدار سجل تجاري</option>
-            <option>تعديل عقد شركة</option>
-            <option>تسجيل علامة تجارية</option>
-            <option>ضريبة القيمة المضافة</option>
-          </select>
-        </label>
+    <div className="ord-form-grid">
+      <label className="ord-field"><span>اسم العميل *</span><input name="client" required placeholder="مثال: شركة أتمم الأعمال" /></label>
+      <label className="ord-field"><span>الخدمة *</span><select name="service" required><option>تأسيس شركة ذات مسؤولية محدودة</option><option>إصدار سجل تجاري</option><option>تعديل عقد شركة</option><option>تسجيل علامة تجارية</option><option>ضريبة القيمة المضافة</option></select></label>
+      <label className="ord-field"><span>رقم الجوال *</span><input name="phone" inputMode="tel" required placeholder="9665xxxxxxxx" /></label>
+      <label className="ord-field"><span>البريد الإلكتروني *</span><input name="email" type="email" required placeholder="name@company.com" /></label>
+      <label className="ord-field full"><span>المسؤول</span><select name="assignee"><option>مدير النظام</option><option>مدير عمليات</option><option>موظف عمليات</option></select></label>
+    </div>
+  );
+}
+
+function ReasonDialog({ status, reasonRef, onClose, onConfirm }: {
+  status: OrderStatus;
+  reasonRef: React.RefObject<HTMLTextAreaElement | null>;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(4,31,60,.55)", backdropFilter: "blur(3px)", display: "grid", placeItems: "center", padding: 20 }} onMouseDown={onClose}>
+      <section style={{ width: "min(460px,100%)", background: "#fff", borderRadius: 16, boxShadow: "0 25px 70px rgba(0,25,55,.3)", padding: 24 }} onMouseDown={event => event.stopPropagation()}>
+        <h3 style={{ margin: "0 0 6px", color: "#073766", fontSize: "1rem" }}>{status === "ملغي" ? "إلغاء الطلب" : "تعليق الطلب"}</h3>
+        <p style={{ margin: "0 0 14px", color: "#7f8e9f", fontSize: ".7rem" }}>اكتب سبباً واضحاً حتى يظهر في سجل التشغيل.</p>
+        <textarea ref={reasonRef} className="ord-field" placeholder="اكتب السبب هنا..." style={{ width: "100%", minHeight: 110, border: "1.5px solid #dfe8f1", borderRadius: 12, padding: 12, font: "inherit", fontSize: ".74rem", outline: 0, resize: "vertical", boxSizing: "border-box" }} />
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button className="ord-btn primary" onClick={onConfirm}>تأكيد</button>
+          <button className="ord-btn" onClick={onClose}>إلغاء</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ConfirmDelete({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9999, display: "grid", placeItems: "center" }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", width: 340, boxShadow: "0 8px 32px rgba(0,0,0,.18)" }} onClick={event => event.stopPropagation()}>
+        <h3 style={{ margin: "0 0 8px", color: "#dc2626", fontSize: 16 }}>حذف الطلب نهائياً</h3>
+        <p style={{ margin: "0 0 20px", fontSize: 13, color: "#526983" }}>سيتم حذف الطلب بشكل نهائي ولا يمكن التراجع عن هذا الإجراء.</p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="ord-btn" onClick={onClose}>إلغاء</button>
+          <button className="ord-btn danger" onClick={onConfirm}>حذف نهائي</button>
+        </div>
       </div>
-      <div style={fStyle.row}>
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}>رقم الجوال <span style={{ color: "#dc2626" }}>*</span></span>
-          <input name="phone" inputMode="tel" required placeholder="9665xxxxxxxx" style={fStyle.field} onFocus={onFieldFocus} onBlur={onFieldBlur} />
-        </label>
-        <label style={fStyle.label}>
-          <span style={fStyle.labelText}>البريد الإلكتروني <span style={{ color: "#dc2626" }}>*</span></span>
-          <input name="email" type="email" required placeholder="name@company.com" style={fStyle.field} onFocus={onFieldFocus} onBlur={onFieldBlur} />
-        </label>
-      </div>
-      <label style={fStyle.label}>
-        <span style={fStyle.labelText}>المسؤول</span>
-        <select name="assignee" style={fStyle.select} onFocus={onFieldFocus} onBlur={onFieldBlur}>
-          <option>مدير النظام</option>
-          <option>مدير عمليات</option>
-          <option>موظف عمليات</option>
-        </select>
-      </label>
     </div>
   );
 }
