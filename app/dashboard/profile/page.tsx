@@ -1,5 +1,5 @@
-import PageLoader from "@/components/page-loader";
 "use client";
+import PageLoader from "@/components/page-loader";
 import { useEffect, useState, useRef } from "react";
 import { User, Save, Building2, Camera, Lock, Eye, EyeOff, CheckCircle, AlertCircle } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";

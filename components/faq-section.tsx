@@ -1,14 +1,27 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { faqs } from "@/data/site";
+import { faqs as staticFaqs } from "@/data/site";
 import { faqsEn } from "@/data/site-en";
 import { useLocale } from "@/lib/language-context";
+import { useEffect, useState } from "react";
+
+type FaqItem = { question: string; answer: string };
 
 export function FaqSection() {
   const { locale } = useLocale();
   const isAr = locale === "ar";
-  const data = isAr ? faqs : faqsEn;
+  const [dbFaqs, setDbFaqs] = useState<FaqItem[] | null>(null);
+
+  useEffect(() => {
+    if (!isAr) return;
+    fetch("/api/admin/content")
+      .then(r => r.json())
+      .then(j => { if (Array.isArray(j.data?.faq?.data)) setDbFaqs(j.data.faq.data); })
+      .catch(() => {});
+  }, [isAr]);
+
+  const data = isAr ? (dbFaqs ?? staticFaqs) : faqsEn;
   const visibleFaqs = data.slice(0, 3);
 
   return (

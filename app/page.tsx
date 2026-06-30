@@ -6,6 +6,7 @@ import { FreeToolsSection } from "@/components/free-tools-section";
 import { Header } from "@/components/header";
 import { HomeGrowthSections } from "@/components/home-growth-sections";
 import { HeroSection } from "@/components/hero-section";
+import { SiteBanner } from "@/components/site-banner";
 import { PackagesSection } from "@/components/packages-section";
 import { ServicesSection } from "@/components/services-section";
 import { TestimonialsSection } from "@/components/testimonials-section";
@@ -13,6 +14,7 @@ import { TestimonialsSection } from "@/components/testimonials-section";
 export default function HomePage() {
   return (
     <>
+      <SiteBanner />
       <Header />
       <main>
         <HeroSection />

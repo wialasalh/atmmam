@@ -1,5 +1,5 @@
-import PageLoader from "@/components/page-loader";
 "use client";
+import PageLoader from "@/components/page-loader";
 
 import { useEffect, useRef, useState } from "react";
 import {

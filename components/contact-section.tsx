@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { ChevronDown, MessageCircle, Phone, Send } from "lucide-react";
 import { useLocale } from "@/lib/language-context";
 
@@ -11,7 +11,17 @@ export function ContactSection() {
   const ar = locale === "ar";
   const phoneDisplay = "+966 59 269 3456";
   const phoneInternational = "966592693456";
-  const contactEmail = "info@atmmam.com.sa";
+  const [contactEmail, setContactEmail] = useState("info@atmmam.com.sa");
+
+  useEffect(() => {
+    fetch("/api/admin/content")
+      .then(r => r.json())
+      .then(j => {
+        const email = j.data?.settings_contact?.data?.email;
+        if (email) setContactEmail(email);
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

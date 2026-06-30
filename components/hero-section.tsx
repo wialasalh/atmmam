@@ -1,14 +1,35 @@
 "use client";
 
-import { hero } from "@/data/site";
+import { hero as staticHero } from "@/data/site";
 import { heroEn } from "@/data/site-en";
 import { useLocale } from "@/lib/language-context";
 import { ArrowLeft, Building2, CircleEllipsis, Clock3, FileCheck2, Layers3, MonitorCog, ShieldCheck, Smile, Store, UsersRound } from "lucide-react";
+import { useEffect, useState } from "react";
+
+type HeroData = {
+  eyebrow: string; body: string;
+  primaryCta: { label: string; href: string };
+  secondaryCta: { label: string; href: string };
+  assurances: string[];
+  badges: { value: string; label: string }[];
+};
 
 export function HeroSection() {
   const { locale } = useLocale();
   const isAr = locale === "ar";
-  const h = isAr ? hero : heroEn;
+  const [dbHero, setDbHero] = useState<HeroData | null>(null);
+
+  useEffect(() => {
+    if (!isAr) return;
+    fetch("/api/admin/content")
+      .then(r => r.json())
+      .then(j => { if (j.data?.hero?.data) setDbHero(j.data.hero.data); })
+      .catch(() => {});
+  }, [isAr]);
+
+  const h = isAr ? (dbHero ?? staticHero) : heroEn;
+  const badges = isAr && dbHero?.badges ? dbHero.badges : null;
+  const assurances = isAr && dbHero?.assurances ? dbHero.assurances : null;
 
   return (
     <section className="hero section">
@@ -17,9 +38,11 @@ export function HeroSection() {
         <h1 className="hero-title">{isAr ? "نرتّب إجراءات منشأتك بلا تشتت" : "Your business procedures, no scattered effort."}</h1>
         <p className="hero-text">{h.body}</p>
         <div className="hero-assurances" aria-label={isAr ? "مزايا متابعة الطلب" : "Request follow-up benefits"}>
-          <span>{isAr ? "فهم سريع لطلبك" : "Quick request diagnosis"}</span>
-          <span>{isAr ? "متابعة شفافة" : "Transparent follow-up"}</span>
-          <span>{isAr ? "نتيجة موثقة" : "Documented outcome"}</span>
+          {assurances ? assurances.map((a, i) => <span key={i}>{a}</span>) : <>
+            <span>{isAr ? "فهم سريع لطلبك" : "Quick request diagnosis"}</span>
+            <span>{isAr ? "متابعة شفافة" : "Transparent follow-up"}</span>
+            <span>{isAr ? "نتيجة موثقة" : "Documented outcome"}</span>
+          </>}
         </div>
         <div className="hero-actions">
           <a className="button primary" href={isAr ? h.primaryCta.href : `/en${h.primaryCta.href}`}>
@@ -66,12 +89,16 @@ export function HeroSection() {
         <span><b>4</b><strong>{isAr ? "النتيجة" : "Outcome"}</strong><small>{isAr ? "تسليم واضح وموثق" : "Clear documented handoff"}</small></span>
       </div>
       <div className="hero-badges" aria-label={isAr ? "أرقام أتمم" : "Atmmam Numbers"}>
-        <span className="hero-badge"><Layers3 aria-hidden="true" /><strong dir="ltr">+300</strong><small>{isAr ? "خدمة نقدمها بمختلف الجهات والقطاعات" : "Services across authorities and sectors"}</small></span>
-        <span className="hero-badge"><Building2 aria-hidden="true" /><strong dir="ltr">+120</strong><small>{isAr ? "جهة حكومية وشبه حكومية" : "Government and semi-government entities"}</small></span>
-        <span className="hero-badge"><Smile aria-hidden="true" /><strong dir="ltr">98%</strong><small>{isAr ? "رضا العملاء عن خدماتنا" : "Customer satisfaction"}</small></span>
-        <span className="hero-badge"><Clock3 aria-hidden="true" /><strong dir="ltr">24–72</strong><small>{isAr ? "ساعة متوسط إنجاز الطلب" : "Hours average completion"}</small></span>
-        <span className="hero-badge"><UsersRound aria-hidden="true" /><strong dir="ltr">+50,000</strong><small>{isAr ? "عميل من مختلف المنشآت" : "Customers across businesses"}</small></span>
-        <span className="hero-badge hero-trust-badge"><ShieldCheck aria-hidden="true" /><strong>{isAr ? "معتمدون وموثوقون" : "Accredited & trusted"}</strong><small>{isAr ? "نحافظ على أعلى معايير الامتثال وأمن المعلومات" : "High standards of compliance and information security"}</small></span>
+        {badges ? badges.map((b, i) => (
+          <span key={i} className="hero-badge"><Layers3 aria-hidden="true" /><strong dir="ltr">{b.value}</strong><small>{b.label}</small></span>
+        )) : <>
+          <span className="hero-badge"><Layers3 aria-hidden="true" /><strong dir="ltr">+300</strong><small>{isAr ? "خدمة نقدمها بمختلف الجهات والقطاعات" : "Services across authorities and sectors"}</small></span>
+          <span className="hero-badge"><Building2 aria-hidden="true" /><strong dir="ltr">+120</strong><small>{isAr ? "جهة حكومية وشبه حكومية" : "Government and semi-government entities"}</small></span>
+          <span className="hero-badge"><Smile aria-hidden="true" /><strong dir="ltr">98%</strong><small>{isAr ? "رضا العملاء عن خدماتنا" : "Customer satisfaction"}</small></span>
+          <span className="hero-badge"><Clock3 aria-hidden="true" /><strong dir="ltr">24–72</strong><small>{isAr ? "ساعة متوسط إنجاز الطلب" : "Hours average completion"}</small></span>
+          <span className="hero-badge"><UsersRound aria-hidden="true" /><strong dir="ltr">+50,000</strong><small>{isAr ? "عميل من مختلف المنشآت" : "Customers across businesses"}</small></span>
+          <span className="hero-badge hero-trust-badge"><ShieldCheck aria-hidden="true" /><strong>{isAr ? "معتمدون وموثوقون" : "Accredited & trusted"}</strong><small>{isAr ? "نحافظ على أعلى معايير الامتثال وأمن المعلومات" : "High standards of compliance and information security"}</small></span>
+        </>}
       </div>
     </section>
   );

@@ -1,14 +1,27 @@
 "use client";
 
-import { testimonials } from "@/data/site";
+import { testimonials as staticTestimonials } from "@/data/site";
 import { testimonialsEn } from "@/data/site-en";
 import { useLocale } from "@/lib/language-context";
 import { Quote } from "lucide-react";
+import { useEffect, useState } from "react";
+
+type Testimonial = { quote: string; name: string; role: string };
 
 export function TestimonialsSection() {
   const { locale } = useLocale();
   const isAr = locale === "ar";
-  const data = isAr ? testimonials : testimonialsEn;
+  const [dbData, setDbData] = useState<Testimonial[] | null>(null);
+
+  useEffect(() => {
+    if (!isAr) return;
+    fetch("/api/admin/content")
+      .then(r => r.json())
+      .then(j => { if (j.data?.testimonials?.data) setDbData(j.data.testimonials.data); })
+      .catch(() => {});
+  }, [isAr]);
+
+  const data = isAr ? (dbData ?? staticTestimonials) : testimonialsEn;
 
   const getInitials = (name: string) =>
     name

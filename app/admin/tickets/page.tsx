@@ -8,6 +8,7 @@ import {
   Briefcase, Users, Lock, X, Zap, Phone, Mail,
   Paperclip, FileCheck, CreditCard, UserCircle,
   MessageCircle, FolderOpen, LayoutGrid, List, Star,
+  Tag, Timer, GitMerge, CheckSquare, Square, Trash2, UserCheck,
 } from "lucide-react";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -15,10 +16,15 @@ import { parseTicketDetails } from "@/lib/ticket-details";
 import { formatAppDate, formatAppDateTime } from "@/lib/date-format";
 // CSS loaded via app/admin/layout.tsx
 
+type TicketTag = { id: string; name: string; color: string };
+type TimeLog   = { id: string; minutes: number; note?: string; logged_at: string; profiles?: { full_name: string } };
+
 type AdminTicket = {
   id: string; title: string; body?: string; description?: string; category: string; priority: string; status: string;
-  created_at: string; updated_at: string; user_id: string; rating?: number | null;
+  created_at: string; updated_at: string; sla_due_at?: string | null; user_id: string; rating?: number | null;
   client_id?: string | null; assigned_to?: string | null; files?: string[] | null; archived_at?: string | null;
+  merged_into?: string | null;
+  ticket_tags?: { tags: TicketTag }[];
   profiles?: { full_name: string; email: string; avatar_url?: string } | null;
   clients?: {
     id: string; name: string; client_type: string;
@@ -90,19 +96,24 @@ const DOC_FIELDS = [
   {field:"national_address_doc",   label:"العنوان الوطني"},
 ];
 
-function getSLADot(updated_at: string) {
-  const h=(Date.now()-new Date(updated_at).getTime())/3600000;
-  return h>24?"#dc2626":h>12?"#ea580c":"#16a34a";
+const SLA_TARGET: Record<string, number> = { عاجلة: 4, مرتفعة: 24, عادية: 72 };
+
+function getSLADot(t: AdminTicket) {
+  if (["تم الحل","مغلقة","مغلقة من العميل"].includes(t.status)) return "#16a34a";
+  const due = t.sla_due_at ? new Date(t.sla_due_at).getTime() : new Date(t.created_at).getTime() + (SLA_TARGET[normPri(t.priority)] || 72) * 3600000;
+  const remaining = (due - Date.now()) / 3600000;
+  return remaining < 0 ? "#dc2626" : remaining < 2 ? "#ea580c" : "#16a34a";
 }
 
 function getSLAPanel(t: AdminTicket) {
-  const elapsed=(Date.now()-new Date(t.created_at).getTime())/3600000;
-  const target=normPri(t.priority)==="عاجلة"?4:normPri(t.priority)==="مرتفعة"?8:24;
-  const pct=Math.min(100,(elapsed/target)*100);
-  const remaining=Math.max(0,target-elapsed);
-  const color=pct>=100?"#dc2626":pct>=75?"#ea580c":"#16a34a";
-  const rLabel=pct>=100?"تجاوز SLA":remaining<1?"< ساعة":`${Math.round(remaining)}س متبقية`;
-  return {pct,color,rLabel,overdue:pct>=100};
+  const target = SLA_TARGET[normPri(t.priority)] || 72;
+  const due    = t.sla_due_at ? new Date(t.sla_due_at).getTime() : new Date(t.created_at).getTime() + target * 3600000;
+  const elapsed = (Date.now() - new Date(t.created_at).getTime()) / 3600000;
+  const pct     = Math.min(100, (elapsed / target) * 100);
+  const remaining = Math.max(0, (due - Date.now()) / 3600000);
+  const color = pct >= 100 ? "#dc2626" : pct >= 75 ? "#ea580c" : "#16a34a";
+  const rLabel = pct >= 100 ? "تجاوز SLA" : remaining < 1 ? "< ساعة" : `${Math.round(remaining)}س متبقية`;
+  return { pct, color, rLabel, overdue: pct >= 100 };
 }
 
 function formatAge(d: string) {
@@ -188,6 +199,23 @@ export default function AdminTicketsPage() {
   const [refreshing,      setRefreshing]      = useState(false);
   const [lastRefreshAt,   setLastRefreshAt]   = useState<string|null>(null);
 
+  // ── New features ──
+  const [bulkSelected,    setBulkSelected]    = useState<Set<string>>(new Set());
+  const [bulkMode,        setBulkMode]        = useState(false);
+  const [allTags,         setAllTags]         = useState<TicketTag[]>([]);
+  const [ticketTags,      setTicketTags]      = useState<TicketTag[]>([]);
+  const [showTagMenu,     setShowTagMenu]     = useState(false);
+  const [showMergeModal,  setShowMergeModal]  = useState(false);
+  const [mergeTarget,     setMergeTarget]     = useState("");
+  const [merging,         setMerging]         = useState(false);
+  const [timeLogs,        setTimeLogs]        = useState<TimeLog[]>([]);
+  const [totalMinutes,    setTotalMinutes]    = useState(0);
+  const [showTimeModal,   setShowTimeModal]   = useState(false);
+  const [timeMinutes,     setTimeMinutes]     = useState("");
+  const [timeNote,        setTimeNote]        = useState("");
+  const [loggingTime,     setLoggingTime]     = useState(false);
+  const [collidingAgents, setCollidingAgents] = useState<string[]>([]);
+
   const msgsEndRef   = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastViewRef  = useRef<Record<string,number>>({});
@@ -236,6 +264,41 @@ export default function AdminTicketsPage() {
   useEffect(()=>{void loadTickets();},[statusFilter]);
   useEffect(()=>{void loadTeam();},[]);
   useEffect(()=>{fetch("/api/admin/canned-responses").then(async r=>{if(r.ok){const d=await r.json();setCannedResponses(d.data||[]);}});},[]);
+
+  // Load all tags once
+  useEffect(()=>{
+    fetch("/api/admin/tags").then(r=>r.json()).then(d=>{ if(d.tags) setAllTags(d.tags); }).catch(()=>{});
+  },[]);
+
+  // Load ticket tags + time logs when a ticket is selected
+  useEffect(()=>{
+    if(!selected) return;
+    // Tags
+    fetch(`/api/admin/tags?ticket_id=${selected.id}`).then(r=>r.json()).then(()=>{
+      const tags = (selected.ticket_tags||[]).map(tt=>tt.tags).filter(Boolean);
+      setTicketTags(tags);
+    }).catch(()=>{});
+    const tags = (selected.ticket_tags||[]).map(tt=>tt.tags).filter(Boolean);
+    setTicketTags(tags);
+    // Time logs
+    fetch(`/api/admin/ticket-time?ticket_id=${selected.id}`)
+      .then(r=>r.json()).then(d=>{ setTimeLogs(d.logs||[]); setTotalMinutes(d.total_minutes||0); }).catch(()=>{});
+    // Collision detection via Supabase Realtime presence
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase.channel(`ticket-presence-${selected.id}`, { config: { presence: { key: selected.id } } });
+    channel.on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState();
+      const others = Object.values(state).flat().map((p: any) => p.name).filter(Boolean);
+      setCollidingAgents(others);
+    }).subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        const profile = teamMembers[0];
+        await channel.track({ name: profile?.full_name || "موظف" });
+      }
+    });
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[selected?.id]);
   useEffect(()=>{
     if(statusFilter) return;
     const iv=setInterval(()=>fetch("/api/admin/tickets").then(async r=>{if(r.ok){const d=await r.json();setTickets(d.data||[]);}}),15000);
@@ -406,6 +469,48 @@ export default function AdminTicketsPage() {
 
   function clearFilters(){setSearch("");setPriorityFilter("");setCategoryFilter("");setAssignedFilter("");setDateFrom("");setDateTo("");setStatusFilter("");}
 
+  // ── Bulk actions ──
+  function toggleBulk(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setBulkSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  async function bulkStatusChange(status: string) {
+    const ids = [...bulkSelected];
+    await Promise.all(ids.map(id => fetch("/api/admin/tickets", { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ ticketId: id, status }) })));
+    setTickets(prev => prev.map(t => bulkSelected.has(t.id) ? { ...t, status } : t));
+    setBulkSelected(new Set()); setBulkMode(false);
+  }
+
+  // ── Tags ──
+  async function toggleTag(tagId: string) {
+    if (!selected) return;
+    const has = ticketTags.some(t => t.id === tagId);
+    const res = await fetch("/api/admin/tags", { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ ticketId: selected.id, tagId, action: has ? "remove" : "add" }) });
+    const d = await res.json();
+    if (d.tags) setTicketTags(d.tags);
+  }
+
+  // ── Merge ──
+  async function doMerge() {
+    if (!selected || !mergeTarget.trim()) return;
+    setMerging(true);
+    await fetch("/api/admin/ticket-merge", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ source_id: mergeTarget.trim(), target_id: selected.id }) });
+    setMerging(false); setShowMergeModal(false); setMergeTarget("");
+    void loadTickets();
+  }
+
+  // ── Time tracking ──
+  async function logTime() {
+    if (!selected || !timeMinutes) return;
+    setLoggingTime(true);
+    await fetch("/api/admin/ticket-time", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ ticket_id: selected.id, minutes: Number(timeMinutes), note: timeNote }) });
+    const d = await fetch(`/api/admin/ticket-time?ticket_id=${selected.id}`).then(r=>r.json());
+    setTimeLogs(d.logs||[]); setTotalMinutes(d.total_minutes||0);
+    setTimeMinutes(""); setTimeNote(""); setShowTimeModal(false); setLoggingTime(false);
+  }
+
+  function fmtMins(m: number) { return m >= 60 ? `${Math.floor(m/60)}س ${m%60}د` : `${m}د`; }
+
   async function addCannedResponse(){
     if(!newCannedBody.trim()) return;
     setAddingCanned(true);
@@ -434,6 +539,7 @@ export default function AdminTicketsPage() {
   const clientInitial = clientName[0]?.toUpperCase() || "م";
 
   return (
+    <>
     <div className="tc-shell">
 
       {/* ══ LIST ══ */}
@@ -593,6 +699,22 @@ export default function AdminTicketsPage() {
           </div>
         )}
 
+        {/* Bulk action bar */}
+        {bulkMode && (
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#073766",borderRadius:10,margin:"0 0 8px",color:"#fff",fontSize:".66rem",fontWeight:700,flexWrap:"wrap"}}>
+            <span style={{marginLeft:"auto"}}>{bulkSelected.size} تذكرة محددة</span>
+            {STATUS_OPTIONS.filter(s=>!["مغلقة"].includes(s)).map(s=>(
+              <button key={s} onClick={()=>bulkStatusChange(s)} style={{border:"1px solid rgba(255,255,255,.3)",borderRadius:7,background:"rgba(255,255,255,.1)",color:"#fff",font:"inherit",fontSize:".62rem",fontWeight:700,cursor:"pointer",padding:"4px 10px"}}>{s}</button>
+            ))}
+            <button onClick={()=>{setBulkMode(false);setBulkSelected(new Set());}} style={{border:"none",background:"rgba(255,255,255,.15)",color:"#fff",font:"inherit",fontSize:".62rem",cursor:"pointer",borderRadius:7,padding:"4px 10px",marginRight:"auto"}}>إلغاء</button>
+          </div>
+        )}
+        {!bulkMode && (
+          <button onClick={()=>setBulkMode(true)} style={{display:"flex",alignItems:"center",gap:5,marginBottom:8,border:"1px solid #dfe8f1",borderRadius:8,background:"#fff",color:"#526983",font:"inherit",fontSize:".62rem",fontWeight:700,cursor:"pointer",padding:"5px 10px"}}>
+            <CheckSquare size={13}/> تحديد متعدد
+          </button>
+        )}
+
         <div className="tc-cards" style={{display:viewMode==="kanban"?"none":"flex"}}>
           {loading?(
             <div className="tc-empty"><Loader size={28} className="spin"/><p>جاري التحميل...</p></div>
@@ -602,7 +724,7 @@ export default function AdminTicketsPage() {
             const sc   =STATUS_CFG[t.status]||STATUS_CFG["جديدة"];
             const pri  =normPri(t.priority);
             const pc   =PRI_CFG[pri]||PRI_CFG["عادية"];
-            const slac =getSLADot(t.updated_at);
+            const slac =getSLADot(t);
             const isSel=selected?.id===t.id;
             const isHov=hoveredRow===t.id||focusedRow===t.id;
             const quickSt=STATUS_OPTIONS.filter(s=>s!==t.status&&s!=="مغلقة").slice(0,2);
@@ -616,15 +738,31 @@ export default function AdminTicketsPage() {
                 className={`tc-card${isSel?" on":""}${pri==="عاجلة"?" urgent":""}`}
                 style={{animationDelay:`${Math.min(idx*30,240)}ms`}}>
                 <div className="tc-card-header">
+                  {bulkMode && (
+                    <span onClick={e=>toggleBulk(t.id,e)} style={{marginLeft:6,cursor:"pointer",color:bulkSelected.has(t.id)?"#0875dc":"#c4cdd6",flexShrink:0}}>
+                      {bulkSelected.has(t.id)?<CheckSquare size={16}/>:<Square size={16}/>}
+                    </span>
+                  )}
                   <span className="tc-card-id">
                     <span style={{fontSize:9,color:"#aab8c8",fontWeight:600,fontFamily:"inherit",letterSpacing:".02em"}}>رقم التذكرة</span>
                     <span style={{display:"block"}}>#{t.id.slice(0,7).toUpperCase()}{unreadTickets.has(t.id)&&<span className="tc-unread" style={{marginRight:4}}/>}</span>
                   </span>
                   <div className="tc-card-badges">
                     {pri!=="عادية"&&<span className="tc-pri-badge" style={{color:pc.color,background:pc.bg}}>{pri}</span>}
+                    {slac==="#dc2626"&&<span style={{fontSize:9,fontWeight:800,color:"#dc2626",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:5,padding:"1px 5px"}}>SLA ⚠</span>}
                     <span className="tc-sla-dot" style={{background:slac,boxShadow:slac!=="#16a34a"?`0 0 6px ${slac}88`:"none"}}/>
                   </div>
                 </div>
+                {/* Tag chips on card */}
+                {(t.ticket_tags||[]).length > 0 && (
+                  <div style={{display:"flex",flexWrap:"wrap",gap:3,margin:"3px 0 2px"}}>
+                    {(t.ticket_tags||[]).map(tt=>tt.tags&&(
+                      <span key={tt.tags.id} style={{fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:5,background:tt.tags.color+"18",color:tt.tags.color,border:`1px solid ${tt.tags.color}30`}}>
+                        {tt.tags.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="tc-card-title">{t.title}</div>
                 <div className="tc-card-meta">
                   {t.clients?.name
@@ -750,14 +888,64 @@ export default function AdminTicketsPage() {
               </div>
 
               {detailSLA&&(
-                <div className="tc-sla-bar">
+                <div className="tc-sla-bar" style={{background:detailSLA.overdue?"#fef2f2":"undefined"}}>
                   <Zap size={15} color={detailSLA.color}/>
-                  <span className="tc-sla-label" style={{color:detailSLA.color}}>{detailSLA.overdue?"تجاوز SLA":"SLA نشط"}</span>
+                  <span className="tc-sla-label" style={{color:detailSLA.color}}>{detailSLA.overdue?"⚠ تجاوز SLA":"SLA نشط"}</span>
                   <div className="tc-sla-track"><div className="tc-sla-fill" style={{width:`${detailSLA.pct}%`,background:detailSLA.color}}/></div>
                   <span className="tc-sla-meta">{detailSLA.rLabel}</span>
                   <span className="tc-sla-pct" style={{color:detailSLA.color}}>{Math.round(detailSLA.pct)}%</span>
                 </div>
               )}
+
+              {/* Collision alert */}
+              {collidingAgents.length > 0 && (
+                <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:20,fontSize:".58rem",fontWeight:700,color:"#b45309",margin:"4px 0"}}>
+                  <UserCheck size={11}/> يشاهدها أيضاً: {collidingAgents.join("، ")}
+                </div>
+              )}
+
+              {/* Tags panel */}
+              <div style={{padding:"8px 0 4px",borderTop:"1px solid #f0f4f8",marginTop:4}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                  <Tag size={13} color="#526983"/>
+                  <span style={{fontSize:".6rem",fontWeight:800,color:"#526983"}}>الوسوم</span>
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:5}}>
+                  {ticketTags.map(tag=>(
+                    <span key={tag.id} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:".62rem",fontWeight:800,padding:"3px 8px",borderRadius:7,background:tag.color+"15",color:tag.color,border:`1px solid ${tag.color}30`}}>
+                      {tag.name}
+                      <button onClick={()=>toggleTag(tag.id)} style={{border:"none",background:"none",cursor:"pointer",color:tag.color,padding:0,display:"grid",placeItems:"center",opacity:.7}}><X size={10}/></button>
+                    </span>
+                  ))}
+                  <div style={{position:"relative"}}>
+                    <button onClick={()=>setShowTagMenu(v=>!v)} style={{border:"1px dashed #c4cdd6",borderRadius:7,background:"transparent",color:"#8b9dad",font:"inherit",fontSize:".6rem",fontWeight:700,cursor:"pointer",padding:"3px 9px",display:"flex",alignItems:"center",gap:4}}>
+                      <Tag size={10}/> إضافة وسم
+                    </button>
+                    {showTagMenu&&(
+                      <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:"#fff",border:"1px solid #dfe8f1",borderRadius:10,boxShadow:"0 8px 20px rgba(0,0,0,.12)",zIndex:50,minWidth:160,padding:6}}>
+                        {allTags.map(tag=>(
+                          <button key={tag.id} onClick={()=>{toggleTag(tag.id);setShowTagMenu(false);}}
+                            style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 8px",border:"none",background:ticketTags.some(t=>t.id===tag.id)?"#f0f7ff":"transparent",borderRadius:7,cursor:"pointer",font:"inherit",fontSize:".65rem",color:"#1a2d40"}}>
+                            <span style={{width:8,height:8,borderRadius:"50%",background:tag.color,flexShrink:0}}/>
+                            {tag.name}
+                            {ticketTags.some(t=>t.id===tag.id)&&<Check size={11} style={{marginRight:"auto",color:"#0875dc"}}/>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Time tracking + Merge buttons */}
+              <div style={{display:"flex",gap:6,marginTop:6,paddingTop:6,borderTop:"1px solid #f0f4f8"}}>
+                <button onClick={()=>setShowTimeModal(true)} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,border:"1px solid #dfe8f1",borderRadius:8,background:"#f8fafc",color:"#526983",font:"inherit",fontSize:".62rem",fontWeight:700,cursor:"pointer",padding:"7px"}}>
+                  <Timer size={13}/> تسجيل وقت {totalMinutes>0&&<span style={{color:"#0875dc"}}>({fmtMins(totalMinutes)})</span>}
+                </button>
+                <button onClick={()=>setShowMergeModal(true)} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,border:"1px solid #dfe8f1",borderRadius:8,background:"#f8fafc",color:"#526983",font:"inherit",fontSize:".62rem",fontWeight:700,cursor:"pointer",padding:"7px"}}>
+                  <GitMerge size={13}/> دمج تذكرة
+                </button>
+              </div>
             </div>
 
             {/* Status modal */}
@@ -1223,5 +1411,72 @@ export default function AdminTicketsPage() {
       </div>
 
     </div>
+
+    {/* ── Time tracking modal ── */}
+    {showTimeModal&&(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:200,display:"grid",placeItems:"center"}} onClick={()=>setShowTimeModal(false)}>
+        <div style={{background:"#fff",borderRadius:16,padding:24,width:340,boxShadow:"0 20px 60px rgba(0,0,0,.2)"}} onClick={e=>e.stopPropagation()} dir="rtl">
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+            <Timer size={18} color="#073766"/><strong style={{fontSize:".9rem",color:"#073766"}}>تسجيل وقت</strong>
+            {totalMinutes>0&&<span style={{marginRight:"auto",fontSize:".65rem",color:"#0875dc",fontWeight:800}}>إجمالي: {fmtMins(totalMinutes)}</span>}
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:".63rem",fontWeight:700,color:"#425c76",marginBottom:4}}>الوقت (بالدقائق) *</div>
+            <input value={timeMinutes} onChange={e=>setTimeMinutes(e.target.value)} type="number" min="1" placeholder="30"
+              style={{width:"100%",border:"1.5px solid #dfe8f1",borderRadius:9,padding:"8px 12px",font:"inherit",fontSize:".73rem",boxSizing:"border-box"}}/>
+          </div>
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:".63rem",fontWeight:700,color:"#425c76",marginBottom:4}}>ملاحظة (اختياري)</div>
+            <input value={timeNote} onChange={e=>setTimeNote(e.target.value)} placeholder="مراجعة المستندات..."
+              style={{width:"100%",border:"1.5px solid #dfe8f1",borderRadius:9,padding:"8px 12px",font:"inherit",fontSize:".73rem",boxSizing:"border-box"}}/>
+          </div>
+          {timeLogs.length>0&&(
+            <div style={{background:"#f8fafc",border:"1px solid #e4ebf2",borderRadius:10,padding:"8px 10px",marginBottom:12,maxHeight:120,overflowY:"auto"}}>
+              {timeLogs.map(l=>(
+                <div key={l.id} style={{display:"flex",justifyContent:"space-between",fontSize:".6rem",color:"#526983",padding:"3px 0",borderBottom:"1px solid #f0f4f8"}}>
+                  <span>{l.profiles?.full_name} — {l.note||"—"}</span>
+                  <span style={{fontWeight:800,color:"#073766"}}>{fmtMins(l.minutes)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setShowTimeModal(false)} style={{flex:1,border:"1px solid #dfe8f1",borderRadius:9,background:"#f4f7fb",color:"#526983",font:"inherit",fontSize:".7rem",fontWeight:700,cursor:"pointer",padding:"9px"}}>إلغاء</button>
+            <button onClick={logTime} disabled={loggingTime||!timeMinutes} style={{flex:2,border:0,borderRadius:9,background:"#073766",color:"#fff",font:"inherit",fontSize:".7rem",fontWeight:700,cursor:"pointer",padding:"9px",opacity:loggingTime||!timeMinutes?1:.5}}>
+              {loggingTime?"جاري الحفظ...":"تسجيل"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Merge modal ── */}
+    {showMergeModal&&(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:200,display:"grid",placeItems:"center"}} onClick={()=>setShowMergeModal(false)}>
+        <div style={{background:"#fff",borderRadius:16,padding:24,width:380,boxShadow:"0 20px 60px rgba(0,0,0,.2)"}} onClick={e=>e.stopPropagation()} dir="rtl">
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <GitMerge size={18} color="#073766"/><strong style={{fontSize:".9rem",color:"#073766"}}>دمج تذكرة</strong>
+          </div>
+          <p style={{fontSize:".65rem",color:"#7f8e9f",marginBottom:16,lineHeight:1.6}}>
+            ادخل رقم التذكرة التي تريد دمجها <strong>في</strong> هذه التذكرة (<code>#{selected?.id.slice(0,7).toUpperCase()}</code>). سيتم نقل رسائلها هنا وإغلاقها.
+          </p>
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:".63rem",fontWeight:700,color:"#425c76",marginBottom:4}}>رقم التذكرة المصدر *</div>
+            <input value={mergeTarget} onChange={e=>setMergeTarget(e.target.value)} placeholder="xxxxxxx"
+              style={{width:"100%",border:"1.5px solid #dfe8f1",borderRadius:9,padding:"8px 12px",font:"inherit",fontSize:".73rem",boxSizing:"border-box",direction:"ltr"}}/>
+          </div>
+          <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 12px",fontSize:".62rem",color:"#b45309",marginBottom:16}}>
+            ⚠ هذه العملية لا يمكن التراجع عنها
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setShowMergeModal(false)} style={{flex:1,border:"1px solid #dfe8f1",borderRadius:9,background:"#f4f7fb",color:"#526983",font:"inherit",fontSize:".7rem",fontWeight:700,cursor:"pointer",padding:"9px"}}>إلغاء</button>
+            <button onClick={doMerge} disabled={merging||!mergeTarget.trim()} style={{flex:2,border:0,borderRadius:9,background:"#073766",color:"#fff",font:"inherit",fontSize:".7rem",fontWeight:700,cursor:"pointer",padding:"9px",opacity:merging||!mergeTarget.trim()?1:.5}}>
+              {merging?"جاري الدمج...":"دمج الآن"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

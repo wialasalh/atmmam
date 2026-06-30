@@ -34,6 +34,26 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
+  // ── Maintenance mode check ──
+  const isPublicPage = !path.startsWith("/admin") && !path.startsWith("/api") && !path.startsWith("/dashboard") && path !== "/maintenance";
+  if (isPublicPage) {
+    try {
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (serviceKey) {
+        const res = await fetch(`${url}/rest/v1/site_content?key=eq.settings_general&select=data`, {
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Accept: "application/json" },
+          next: { revalidate: 30 },
+        });
+        if (res.ok) {
+          const rows = await res.json() as { data: { maintenanceMode?: boolean } }[];
+          if (rows?.[0]?.data?.maintenanceMode === true) {
+            return NextResponse.redirect(new URL("/maintenance", request.url));
+          }
+        }
+      }
+    } catch {}
+  }
+
   // Admin page protection (fast: auth check only — role enforced by useRoleGuard + API routes)
   if (path.startsWith("/admin") && !isLoginPage && !user)
     return NextResponse.redirect(new URL("/admin/login", request.url));
@@ -69,4 +89,4 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ["/admin/:path*", "/api/admin/:path*", "/api/client/:path*", "/api/tickets/:path*", "/dashboard/:path*", "/dashboard", "/login", "/register", "/api/auth/:path*"] };
+export const config = { matcher: ["/", "/services/:path*", "/packages/:path*", "/faq/:path*", "/about/:path*", "/contact/:path*", "/en/:path*", "/admin/:path*", "/api/admin/:path*", "/api/client/:path*", "/api/tickets/:path*", "/dashboard/:path*", "/dashboard", "/login", "/register", "/api/auth/:path*"] };

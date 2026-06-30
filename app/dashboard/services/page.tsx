@@ -1,5 +1,5 @@
-import PageLoader from "@/components/page-loader";
 "use client";
+import PageLoader from "@/components/page-loader";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";

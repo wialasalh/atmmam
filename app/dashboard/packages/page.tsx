@@ -1,5 +1,5 @@
-import PageLoader from "@/components/page-loader";
 "use client";
+import PageLoader from "@/components/page-loader";
 
 import { useEffect, useState } from "react";
 import { Check, Loader2, CreditCard, Users, X, ArrowLeftRight, CheckCircle } from "lucide-react";

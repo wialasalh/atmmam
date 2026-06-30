@@ -1,5 +1,5 @@
-import PageLoader from "@/components/page-loader";
 "use client";
+import PageLoader from "@/components/page-loader";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -481,32 +481,32 @@ export default function AdminOrdersPage() {
         .ord-kpi{border:1px solid #dfe8f1;background:#fff;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;min-width:0}
         .ord-kpi i{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex-shrink:0}
         .ord-kpi small,.ord-kpi strong{display:block}.ord-kpi small{font-size:.56rem;color:#8190a1;font-weight:800}.ord-kpi strong{font-size:1.22rem;color:#073766;line-height:1;margin-top:4px}
-        .ord-workspace{min-height:0;display:grid;grid-template-columns:minmax(430px,520px) minmax(0,1fr);gap:14px;padding:14px 16px 18px}
+        .ord-workspace{min-height:0;display:grid;grid-template-columns:minmax(320px,460px) minmax(0,1fr);gap:14px;padding:14px 16px 18px}
         .ord-panel{min-height:0;background:#fff;border:1px solid #dfe8f1;border-radius:14px;box-shadow:0 6px 24px rgba(7,55,102,.05);overflow:hidden}
-        .ord-queue{display:grid;grid-template-rows:auto 1fr}
-        .ord-toolbar{padding:14px;border-bottom:1px solid #edf2f7;background:#fff}
-        .ord-tabs{display:flex;gap:6px;overflow:auto;padding-bottom:2px;margin-bottom:12px;scrollbar-width:none}
-        .ord-tabs button{height:34px;border:1px solid #dfe8f1;border-radius:9px;background:#f8fafc;color:#65788c;padding:0 11px;font:inherit;font-size:.61rem;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+        .ord-queue{display:grid;grid-template-rows:auto 1fr;min-width:0}
+        .ord-toolbar{padding:10px 12px;border-bottom:1px solid #edf2f7;background:#fff}
+        .ord-tabs{display:flex;gap:4px;flex-wrap:wrap;padding-bottom:4px;margin-bottom:10px}
+        .ord-tabs button{height:28px;border:1px solid #dfe8f1;border-radius:7px;background:#f8fafc;color:#65788c;padding:0 8px;font:inherit;font-size:.57rem;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;cursor:pointer}
         .ord-tabs button.active{background:#eaf4ff;border-color:#bddcff;color:#0875dc}
         .ord-tools{display:grid;grid-template-columns:1fr;gap:8px}
         .ord-search{height:38px;border:1px solid #dfe8f1;border-radius:10px;background:#f8fafc;display:flex;align-items:center;gap:8px;padding:0 11px;color:#8b9dad}
         .ord-search input{border:0;outline:0;background:transparent;font:inherit;font-size:.68rem;width:100%;color:#173d65}
-        .ord-chip-row{display:flex;gap:6px;overflow:auto;margin-top:10px;scrollbar-width:none}
-        .ord-chip-row button{height:32px;border:1px solid #dfe8f1;border-radius:999px;background:#fff;color:#65788c;padding:0 10px;font:inherit;font-size:.59rem;font-weight:800;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
+        .ord-chip-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
+        .ord-chip-row button{height:26px;border:1px solid #dfe8f1;border-radius:999px;background:#fff;color:#65788c;padding:0 8px;font:inherit;font-size:.56rem;font-weight:800;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
         .ord-chip-row button.active{color:#073766;background:#f0f7ff;border-color:#bddcff}
-        .ord-list{min-height:0;overflow:auto;padding:10px;background:#f8fafc}
-        .ord-card{width:100%;border:1px solid #dfe8f1;border-radius:12px;background:#fff;padding:12px;text-align:right;cursor:pointer;margin-bottom:9px;transition:border-color .15s,box-shadow .15s,transform .15s,background .15s}
-        .ord-card:hover{border-color:#bddcff;box-shadow:0 8px 24px rgba(8,117,220,.08);transform:translateY(-1px)}
-        .ord-card.active{border-color:#0875dc;background:#f0f8ff;box-shadow:0 8px 24px rgba(8,117,220,.1)}
-        .ord-card.overdue{border-right:4px solid #dc2626}
-        .ord-card-top{display:flex;align-items:flex-start;gap:10px}
-        .ord-avatar{width:40px;height:40px;border-radius:12px;background:#eaf4ff;color:#0875dc;display:grid;place-items:center;font-size:.72rem;font-weight:900;flex-shrink:0}
-        .ord-card-body{flex:1;min-width:0}
-        .ord-ref{font-size:.55rem;color:#8b9dad;font-weight:900;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-bottom:2px}
-        .ord-card h2{margin:0 0 6px;font-size:.78rem;line-height:1.45;color:#173d65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .ord-card-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:#7f8e9f;font-size:.58rem}
-        .ord-card-meta span{display:inline-flex;align-items:center;gap:4px;min-width:0}
-        .ord-card-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+        .ord-list{min-height:0;overflow:auto;padding:10px;background:#f8fafc;min-width:0}
+        .ord-card{width:100%;border:1px solid #dfe8f1;border-radius:10px;background:#fff;padding:10px 12px;text-align:right;cursor:pointer;margin-bottom:7px;transition:border-color .15s,box-shadow .15s,background .15s;box-sizing:border-box}
+        .ord-card:hover{border-color:#bddcff;box-shadow:0 4px 14px rgba(8,117,220,.08)}
+        .ord-card.active{border-color:#0875dc;background:#f0f8ff;box-shadow:0 4px 14px rgba(8,117,220,.1)}
+        .ord-card.overdue{border-right:3px solid #dc2626}
+        .ord-card-top{display:flex;gap:8px;align-items:flex-start;direction:rtl}
+        .ord-avatar{width:34px;height:34px;border-radius:9px;background:#eaf4ff;color:#0875dc;display:grid;place-items:center;font-size:.65rem;font-weight:900;flex-shrink:0}
+        .ord-card-body{flex:1;min-width:0;overflow:hidden}
+        .ord-ref{font-size:.54rem;color:#8b9dad;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .ord-card h2{margin:0 0 4px;font-size:.72rem;line-height:1.4;color:#173d65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .ord-card-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;color:#7f8e9f;font-size:.56rem}
+        .ord-card-meta span{display:inline-flex;align-items:center;gap:3px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .ord-card-bottom{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:8px}
         .ord-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
         .ord-pill,.ord-priority{display:inline-flex;align-items:center;gap:4px;border:1px solid;border-radius:999px;padding:3px 8px;font-size:.55rem;font-weight:900;white-space:nowrap}
         .ord-time{font-size:.56rem;color:#6f8193;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
@@ -543,7 +543,7 @@ export default function AdminOrdersPage() {
         .ord-blank{height:100%;display:grid;place-items:center;text-align:center;color:#7f8e9f;background:linear-gradient(180deg,#fff,#f8fbff)}.ord-blank-card{max-width:340px;display:grid;gap:10px;justify-items:center}.ord-blank-icon{width:68px;height:68px;border-radius:20px;background:#eaf4ff;color:#0875dc;display:grid;place-items:center}.ord-blank h2{margin:0;color:#073766;font-size:1rem}.ord-blank p{margin:0;font-size:.7rem;line-height:1.8}
         .ord-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#073766;color:#fff;padding:10px 18px;border-radius:11px;font-size:.72rem;font-weight:800;box-shadow:0 12px 32px rgba(0,0,0,.2);z-index:1000;display:flex;align-items:center;gap:8px}
         .ord-loading{min-height:calc(100vh - 60px);display:grid;place-items:center;background:#f4f7fb;color:#61748a;font-size:.74rem;font-weight:800}.ord-loading>svg{animation:spin .7s linear infinite;color:#0875dc}
-        @media(max-width:1150px){.ord-kpis{grid-template-columns:repeat(3,1fr)}.ord-workspace{grid-template-columns:390px minmax(0,1fr)}.ord-info-grid{grid-template-columns:1fr 1fr}.ord-stepper{grid-template-columns:1fr 1fr}}
+        @media(max-width:1150px){.ord-kpis{grid-template-columns:repeat(3,1fr)}.ord-workspace{grid-template-columns:minmax(280px,360px) minmax(0,1fr)}.ord-info-grid{grid-template-columns:1fr 1fr}.ord-stepper{grid-template-columns:1fr 1fr}}
         @media(max-width:860px){.ord-shell{height:auto;min-height:calc(100vh - 60px);overflow:visible}.ord-head-main{align-items:flex-start;flex-direction:column}.ord-kpis{grid-template-columns:1fr 1fr}.ord-workspace{display:flex;flex-direction:column;overflow:visible}.ord-panel{min-height:420px}.ord-queue{max-height:680px}.ord-info-grid,.ord-form-grid{grid-template-columns:1fr}.ord-detail{min-height:680px}.ord-footer{align-items:flex-start;flex-direction:column}.ord-btn.primary{width:100%;justify-content:center}}
         @media(max-width:560px){.ord-head{padding:18px 14px 12px}.ord-workspace{padding:10px}.ord-kpis{grid-template-columns:1fr}.ord-card-bottom{align-items:flex-start;flex-direction:column}.ord-detail-head{padding:15px}.ord-detail-body{padding:14px}.ord-section-content{padding:12px}}
       `}</style>
@@ -630,35 +630,25 @@ export default function AdminOrdersPage() {
                   <div className="ord-card-top">
                     <span className="ord-avatar">{initials(order.client)}</span>
                     <div className="ord-card-body">
-                      {/* ref + date */}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-                        <div className="ord-ref" style={{ fontFamily: "monospace", fontSize: ".6rem", color: "#8b9dad" }}>{order.id}</div>
-                        <span style={{ fontSize: ".57rem", color: "#94a3b8", display: "flex", alignItems: "center", gap: 3 }}>
-                          <Calendar size={9} />
-                          {order.createdAtRaw ? formatAppDate(order.createdAtRaw) : "—"}
-                        </span>
-                      </div>
-                      {/* client name */}
-                      <h2 style={{ margin: "0 0 4px", fontSize: ".8rem", fontWeight: 700, color: "#0b1e36" }}>{order.client}</h2>
-                      {/* service + assignee */}
-                      <div className="ord-card-meta" style={{ marginBottom: 6 }}>
+                      <div className="ord-ref">{order.id}</div>
+                      <h2>{order.client}</h2>
+                      <div className="ord-card-meta">
                         <span><Layers size={10} /> {order.service}</span>
                         <span><User size={10} /> {order.assignee || "غير محدد"}</span>
                       </div>
-                      {/* divider */}
-                      <div style={{ borderTop: "1px dashed #e8edf5", paddingTop: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div className="ord-card-bottom">
                         <div className="ord-badges">
                           <StatusPill status={order.status} />
                           <span className="ord-priority" style={{ color: pri.color, background: pri.bg, borderColor: pri.bg }}>{pri.label}</span>
                           {isOverdue(order) && <span className="ord-priority" style={{ color: "#dc2626", background: "#fef2f2", borderColor: "#fecaca" }}>متأخر</span>}
                         </div>
-                        <span className="ord-time" style={{ fontSize: ".57rem", color: "#94a3b8", display: "flex", alignItems: "center", gap: 3 }}>
-                          <RefreshCw size={9} />
-                          {order.updatedAtRaw ? formatAppRelativeTime(order.updatedAtRaw) : "—"}
+                        <span className="ord-time">
+                          <Clock size={10} />
+                          {order.updatedAtRaw ? formatAppRelativeTime(order.updatedAtRaw) : order.createdAtRaw ? formatAppDate(order.createdAtRaw) : "—"}
                         </span>
                       </div>
                     </div>
-                    <ChevronLeft size={14} color="#b7c4d1" style={{ marginTop: 14, flexShrink: 0 }} />
+                    <ChevronLeft size={14} color="#b7c4d1" style={{ marginTop: 12, flexShrink: 0 }} />
                   </div>
                 </button>
               );

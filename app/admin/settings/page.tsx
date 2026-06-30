@@ -1,355 +1,504 @@
-import PageLoader from "@/components/page-loader";
 "use client";
-
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import PageLoader from "@/components/page-loader";
+import { useEffect, useState } from "react";
 import { useRoleGuard } from "@/lib/auth/use-role-guard";
-import { formatAppDate } from "@/lib/date-format";
 import {
-  CheckCircle, Lock, ShieldCheck, Trash2,
-  UserPlus, UserMinus, KeyRound, UserCog, Mail,
-  ShieldAlert, RefreshCw, LogIn, LogOut, Eye,
+  Save, RefreshCw, CheckCircle, AlertCircle,
+  Globe, Mail, MessageSquare,
+  Settings2, ExternalLink, MailPlus,
 } from "lucide-react";
 
+/* ── social SVG icons (monochrome) ── */
+const IC = "#526983";
+const SOCIAL_PLATFORMS = [
+  {
+    key: "twitter", label: "X (Twitter)", placeholder: "https://x.com/atmmam",
+    logo: `<svg width="15" height="15" viewBox="0 0 24 24" fill="${IC}"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.741l7.73-8.835L1.254 2.25H8.08l4.258 5.63 5.906-5.63Zm-1.161 17.52h1.833L7.084 4.126H5.117Z"/></svg>`,
+  },
+  {
+    key: "instagram", label: "Instagram", placeholder: "https://instagram.com/atmmam",
+    logo: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${IC}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>`,
+  },
+  {
+    key: "linkedin", label: "LinkedIn", placeholder: "https://linkedin.com/company/atmmam",
+    logo: `<svg width="15" height="15" viewBox="0 0 24 24" fill="${IC}"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>`,
+  },
+  {
+    key: "youtube", label: "YouTube", placeholder: "https://youtube.com/@atmmam",
+    logo: `<svg width="15" height="15" viewBox="0 0 24 24" fill="${IC}"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`,
+  },
+  {
+    key: "snapchat", label: "Snapchat", placeholder: "https://snapchat.com/add/atmmam",
+    logo: `<svg width="15" height="15" viewBox="0 0 24 24" fill="${IC}"><path d="M12.166.001c.18 0 1.834.047 2.987 1.321.778.872.988 1.989 1.043 2.83.02.327.014.647.012.836l.004.19c.554.288 1.33.23 1.81.168a.5.5 0 0 1 .067-.005c.185 0 .378.11.44.31.07.227-.07.47-.396.611-.046.02-1.124.476-1.124 1.302 0 .104.012.207.037.31.48 1.924 1.928 3.206 3.218 3.776.17.075.253.262.2.44-.031.104-.12.196-.25.232-.656.183-1.376.284-2.142.3-.036.196-.043.42-.09.652-.085.423-.372.667-.727.667-.157 0-.327-.046-.503-.14-1.01-.55-1.948-.83-2.834-.83-.52 0-1.016.105-1.48.306l-.003.003c-.484.211-.938.318-1.35.318-.963 0-1.614-.545-1.726-1.099-.043-.21-.053-.436-.088-.65-.77-.016-1.49-.117-2.146-.3-.13-.036-.218-.128-.25-.232-.053-.178.03-.365.2-.44 1.29-.57 2.737-1.852 3.218-3.776a1.22 1.22 0 0 0 .037-.31c0-.832-1.085-1.289-1.128-1.307-.32-.138-.457-.38-.39-.607.063-.2.257-.312.44-.312a.51.51 0 0 1 .07.005c.48.063 1.257.12 1.812-.168l.004-.19c-.002-.189-.009-.509.011-.836.056-.841.266-1.958 1.043-2.83C10.335.047 11.987.001 12.166.001Z"/></svg>`,
+  },
+  {
+    key: "tiktok", label: "TikTok", placeholder: "https://tiktok.com/@atmmam",
+    logo: `<svg width="15" height="15" viewBox="0 0 24 24" fill="${IC}"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.34 6.34 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07z"/></svg>`,
+  },
+];
 
-type Role = "admin" | "manager" | "operator" | "viewer";
-type TeamMember = { id?: string; full_name: string; contact: string; role: Role; active: boolean; avatar_url?: string | null };
-type AuditLog = { id: number; entity_type: string; entity_id: string; action: string; created_at: string; metadata?: Record<string, unknown> | null; profiles?: { full_name?: string } | null };
-
-type AuditConfig = { label: string; color: string; bg: string; Icon: React.ComponentType<{size?:number;color?:string}> };
-const AUDIT_CONFIG: Record<string, AuditConfig> = {
-  user_created:         { label: "إنشاء حساب جديد",       color: "#15803d", bg: "#f0fdf4", Icon: UserPlus },
-  user_invited:         { label: "إرسال دعوة",             color: "#0875dc", bg: "#eff6ff", Icon: Mail },
-  invitation_cancelled: { label: "إلغاء دعوة",             color: "#d97706", bg: "#fffbeb", Icon: Mail },
-  password_changed:     { label: "تغيير كلمة المرور",      color: "#0f766e", bg: "#f0fdfa", Icon: KeyRound },
-  profile_updated:      { label: "تعديل بيانات العضو",     color: "#0875dc", bg: "#eff6ff", Icon: UserCog },
-  user_deleted:         { label: "حذف حساب",               color: "#dc2626", bg: "#fef2f2", Icon: UserMinus },
-  role_changed:         { label: "تغيير الصلاحية",         color: "#d97706", bg: "#fffbeb", Icon: ShieldAlert },
-  account_suspended:    { label: "إيقاف الحساب",           color: "#dc2626", bg: "#fef2f2", Icon: UserMinus },
-  account_activated:    { label: "تفعيل الحساب",           color: "#15803d", bg: "#f0fdf4", Icon: UserPlus },
-  login:                { label: "تسجيل دخول",             color: "#0875dc", bg: "#eff6ff", Icon: LogIn },
-  logout:               { label: "تسجيل خروج",             color: "#526983", bg: "#f8fafc", Icon: LogOut },
+/* ── types ── */
+type GeneralSettings = {
+  siteName: string;
+  logoUrl: string;
+  faviconUrl: string;
+  defaultLang: "ar" | "en";
+  maintenanceMode: boolean;
 };
-const AUDIT_DEFAULT: AuditConfig = { label: "حدث في النظام", color: "#526983", bg: "#f8fafc", Icon: Eye };
+type ContactSettings = {
+  email: string;
+  supportEmail: string;
+  phone: string;
+  whatsapp: string;
+  address: string;
+  workingHours: string;
+  twitter: string;
+  instagram: string;
+  linkedin: string;
+  youtube: string;
+  snapchat: string;
+  tiktok: string;
+};
+type SeoSettings = {
+  siteDescription: string;
+  keywords: string;
+  ogImage: string;
+  googleAnalytics: string;
+  googleTagManager: string;
+};
 
-function buildAuditDetails(log: AuditLog): string[] {
-  const meta = log.metadata;
-  const details: string[] = [];
-  if (!meta) return details;
+type TabKey = "general" | "contact" | "seo" | "emails";
+type EmailTemplate = { id: string; trigger_event: string; label_ar: string; subject_ar: string; body_ar: string; enabled: boolean; updated_at: string };
 
-  const name = (meta.full_name || meta.fullName) as string | undefined;
-  const email = meta.email as string | undefined;
-  const role = meta.role as Role | undefined;
-  const phone = meta.phone as string | undefined;
+const TABS: { key: TabKey; label: string; sub: string; Icon: React.ComponentType<{size?:number}> }[] = [
+  { key: "general", label: "الإعدادات العامة",  sub: "اسم الموقع، اللغة، الصيانة", Icon: Settings2 },
+  { key: "contact", label: "بيانات التواصل",    sub: "البريد، الجوال، السوشيال",   Icon: Mail     },
+  { key: "seo",     label: "SEO والتحليلات",    sub: "الوصف، الكلمات، Google",     Icon: Globe    },
+  { key: "emails",  label: "قوالب البريد",      sub: "رسائل إشعارات العملاء التلقائية", Icon: MailPlus },
+];
 
-  if (name)  details.push(`العضو: ${name}`);
-  if (email) details.push(`البريد: ${email}`);
-  if (role)  details.push(`الصلاحية: ${roleLabels[role] ?? role}`);
-  if (phone) details.push(`الجوال: ${phone}`);
-  if (meta.avatar_url) details.push("تم تحديث الصورة الشخصية");
-  if (meta.active === true  && !details.length) details.push("الحالة: نشط");
-  if (meta.active === false && !details.length) details.push("الحالة: موقوف");
-  return details;
+const FIELD: React.CSSProperties = {
+  width: "100%", border: "1.5px solid #dfe8f1", borderRadius: 9,
+  padding: "8px 12px", font: "inherit", fontSize: ".73rem",
+  color: "#1a2d40", background: "#fff", outline: "none", boxSizing: "border-box",
+};
+function Inp({ value, onChange, placeholder, type, dir }: {
+  value: string; onChange: (v: string) => void;
+  placeholder?: string; type?: string; dir?: string;
+}) {
+  return <input value={value} onChange={e => onChange(e.target.value)}
+    placeholder={placeholder} type={type} dir={dir}
+    style={{ ...FIELD, height: 38 }} />;
+}
+function Textarea({ value, onChange, placeholder, rows }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; rows?: number;
+}) {
+  return <textarea value={value} onChange={e => onChange(e.target.value)}
+    placeholder={placeholder} rows={rows || 3}
+    style={{ ...FIELD, resize: "vertical", lineHeight: 1.6 }} />;
+}
+function Lbl({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: ".6rem", fontWeight: 700, color: "#425c76", marginBottom: 4 }}>{children}</div>;
+}
+function FG({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 14, ...style }}>{children}</div>;
+}
+function Hint({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: ".59rem", color: "#a0adb8", marginTop: 4, lineHeight: 1.5 }}>{children}</div>;
+}
+function Row({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>{children}</div>;
+}
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #dfe8f1", borderRadius: 14, overflow: "hidden", marginBottom: 16 }}>
+      <div style={{ padding: "11px 16px", borderBottom: "1px solid #f0f4f8", fontSize: ".72rem", fontWeight: 800, color: "#0b1e36" }}>{title}</div>
+      <div style={{ padding: "16px" }}>{children}</div>
+    </div>
+  );
 }
 
-function resolveAuditConfig(log: AuditLog): AuditConfig {
-  if (AUDIT_CONFIG[log.action]) return AUDIT_CONFIG[log.action];
-  const meta = log.metadata;
-  if (log.action === "profile_updated" && meta) {
-    if (meta.active === false) return AUDIT_CONFIG.account_suspended;
-    if (meta.active === true)  return AUDIT_CONFIG.account_activated;
-    if (meta.role)             return AUDIT_CONFIG.role_changed;
+const DEF_GENERAL: GeneralSettings = { siteName: "أتمم", logoUrl: "", faviconUrl: "", defaultLang: "ar", maintenanceMode: false };
+const DEF_CONTACT: ContactSettings = { email: "info@atmmam.com.sa", supportEmail: "support@atmmam.com.sa", phone: "", whatsapp: "", address: "", workingHours: "الأحد – الخميس، 9 ص – 6 م", twitter: "", instagram: "", linkedin: "", youtube: "", snapchat: "", tiktok: "" };
+const DEF_SEO: SeoSettings = { siteDescription: "", keywords: "", ogImage: "", googleAnalytics: "", googleTagManager: "" };
+
+export default function AdminSettingsPage() {
+  const { loading: authLoading } = useRoleGuard("admin");
+  const [loading, setLoading]   = useState(true);
+  const [saving,  setSaving]    = useState<TabKey | null>(null);
+  const [tab,     setTab]       = useState<TabKey>("general");
+  const [toast,   setToast]     = useState<{ msg: string; type: "ok"|"err" } | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Record<string, string>>({});
+
+  const [general, setGeneral] = useState<GeneralSettings>(DEF_GENERAL);
+  const [contact, setContact] = useState<ContactSettings>(DEF_CONTACT);
+  const [seo,     setSeo]     = useState<SeoSettings>(DEF_SEO);
+
+  const [templates,       setTemplates]       = useState<EmailTemplate[]>([]);
+  const [activeTemplate,  setActiveTemplate]  = useState<string | null>(null);
+  const [savingTemplate,  setSavingTemplate]  = useState(false);
+
+  function notify(msg: string, type: "ok"|"err" = "ok") {
+    setToast({ msg, type }); setTimeout(() => setToast(null), 3000);
   }
-  return AUDIT_DEFAULT;
-}
-type CurrentUser = { id: string; full_name: string; email: string; phone: string; role: string; avatar_url?: string };
 
-const roleLabels: Record<Role, string> = { admin: "مدير النظام", manager: "مدير عمليات", operator: "موظف عمليات", viewer: "مشاهد" };
-const fallbackTeam: TeamMember[] = [{ full_name: "admin", contact: "admin@atmmam.com.sa", role: "admin", active: true }];
-
-export default function SettingsPage() {
-  const { loading: authLoading } = useRoleGuard("viewer");
-  const [tab, setTab] = useState("الملف الشخصي");
-  const [team, setTeam] = useState(fallbackTeam);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [databaseMode, setDatabaseMode] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [profileForm, setProfileForm] = useState({ full_name: "", phone: "" });
-  const [currentUserRole, setCurrentUserRole] = useState("");
-  const avatarInputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
-
-  const tabs = ["الملف الشخصي", "الأمان وسجل الدخول"];
-  if (currentUserRole === "admin") tabs.push("الفريق والصلاحيات");
-
-  async function loadTeam() {
-    const [teamRes, meRes] = await Promise.all([
-      fetch("/api/admin/team"),
-      fetch("/api/auth/me"),
-    ]);
-    if (!teamRes.ok) return false;
-    const payload = await teamRes.json();
-    const meData = meRes.ok ? (await meRes.json())?.data : null;
-    const list: any[] = Array.isArray(payload?.members) ? payload.members : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
-    if (!list.length) return false;
-    const uid: string | null = payload?.currentUserId ?? null;
-    const me = list.find((m) => m.id === uid) ?? list[0];
-    const email = meData?.email || me?.email || "";
-    if (me) {
-      setCurrentUser({ id: me.id, full_name: me.full_name || "", email, phone: me.phone || "", role: me.role || "admin", avatar_url: me.avatar_url || "" });
-      setProfileForm({ full_name: me.full_name || "", phone: me.phone || "" });
-      setCurrentUserRole(me.role || "");
+  async function loadTemplates() {
+    const res = await fetch("/api/admin/email-templates");
+    const json = await res.json();
+    if (json.templates) {
+      setTemplates(json.templates);
+      if (!activeTemplate && json.templates.length) setActiveTemplate(json.templates[0].id);
     }
-    setTeam(list.map((member) => ({ id: member.id, full_name: member.full_name || "admin", contact: member.email || member.phone || "", role: member.role || "admin", active: member.active !== false, avatar_url: member.avatar_url })));
-    setDatabaseMode(true);
-    return true;
   }
 
-  useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      setCurrentUser({ id: "", full_name: "admin", email: "admin@atmmam.com.sa", phone: "", role: "admin", avatar_url: "" });
-      setProfileForm({ full_name: "admin", phone: "" });
-      setCurrentUserRole("admin");
-      setTeam([{ full_name: "admin", contact: "admin@atmmam.com.sa", role: "admin", active: true }]);
-      return;
-    }
-    void loadTeam().then((ok) => {
-      if (!ok) {
-        fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
-          if (d?.data) {
-            const u = d.data;
-            setCurrentUser({ id: u.id || "", full_name: u.full_name || u.email?.split("@")[0] || "", email: u.email || "", phone: u.phone || "", role: u.role || "admin", avatar_url: u.avatar_url || "" });
-            setProfileForm({ full_name: u.full_name || u.email?.split("@")[0] || "", phone: u.phone || "" });
-            setCurrentUserRole(u.role || "admin");
-          }
-        });
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (tab === "الأمان وسجل الدخول" && databaseMode) {
-      void fetch("/api/admin/audit?limit=50").then(async (r) => {
-        if (r.ok) { const payload = (await r.json()) as { data: AuditLog[] }; setAuditLogs(payload.data); }
-      });
-    }
-  }, [tab, databaseMode]);
-
-  async function saveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    if (!currentUser?.id) return;
-    setSavingProfile(true);
-    const response = await fetch("/api/admin/team", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ profileId: currentUser.id, fullName: profileForm.full_name, phone: profileForm.phone }) });
-    setSavingProfile(false);
-    if (!response.ok) { let msg = "تعذر حفظ الملف الشخصي"; try { const err = await response.json(); if (err.error) msg = err.error; } catch {} setNotice(msg); return; }
-    setCurrentUser(prev => prev ? { ...prev, full_name: profileForm.full_name, phone: profileForm.phone } : null);
-    setNotice("تم حفظ التغييرات بنجاح");
-    window.setTimeout(() => setNotice(""), 2500);
-  }
-
-  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !currentUser?.id) return;
-    setUploadingAvatar(true);
-    const formData = new FormData();
-    formData.set("file", file);
-    const response = await fetch("/api/admin/team/avatar", { method: "POST", body: formData });
-    setUploadingAvatar(false);
-    if (!response.ok) { const err = await response.json(); setNotice(`تعذر رفع الصورة: ${err.error}`); return; }
-    const { avatar_url } = await response.json();
-    setCurrentUser(prev => prev ? { ...prev, avatar_url } : null);
-    setNotice("تم تحديث الصورة بنجاح");
-    window.setTimeout(() => setNotice(""), 2500);
-  }
-
-  async function changeRole(member: TeamMember, role: Role) {
-    if (!databaseMode || !member.id) { setTeam((c) => c.map((i) => (i === member ? { ...i, role } : i))); return; }
-    const response = await fetch("/api/admin/team", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ profileId: member.id, role }) });
-    if (!response.ok) { setNotice("تعذر تحديث الصلاحية"); return; }
-    await loadTeam();
-    setNotice("تم تحديث الصلاحية");
-    window.setTimeout(() => setNotice(""), 2200);
-  }
-
-  async function deleteMember(member: TeamMember) {
-    if (!member.id) return;
-    if (!confirm(`حذف ${member.full_name} نهائياً؟ لا يمكن التراجع.`)) return;
-    const res = await fetch("/api/admin/team/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ profileId: member.id }) });
-    const data = await res.json();
-    if (!res.ok) { setNotice(data.error || "فشل الحذف"); setTimeout(() => setNotice(""), 3000); return; }
-    setNotice("تم حذف العضو");
-    setTimeout(() => setNotice(""), 2500);
-    await loadTeam();
-  }
-
-
-  const [pwForm, setPwForm] = useState({ new: "", confirm: "" });
-  const [pwSaving, setPwSaving] = useState(false);
-  const [pwError, setPwError] = useState("");
-
-  async function handlePasswordChange(e: React.FormEvent) {
-    e.preventDefault();
-    setPwError("");
-    if (pwForm.new !== pwForm.confirm) { setPwError("كلمتا المرور غير متطابقتين"); return; }
-    if (pwForm.new.length < 6) { setPwError("كلمة المرور يجب أن تكون 6 أحرف على الأقل"); return; }
-    setPwSaving(true);
+  async function saveTemplate(t: EmailTemplate) {
+    setSavingTemplate(true);
     try {
-      const supabase = (await import("@/lib/supabase/client")).createSupabaseBrowserClient();
-      const { error } = await supabase.auth.updateUser({ password: pwForm.new });
-      if (error) throw new Error(error.message);
-      setNotice("تم تغيير كلمة المرور بنجاح");
-      setPwForm({ new: "", confirm: "" });
-    } catch (err: any) {
-      setPwError(err.message || "فشل تغيير كلمة المرور");
-    } finally {
-      setPwSaving(false);
-    }
+      const res = await fetch("/api/admin/email-templates", {
+        method: "PATCH", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: t.id, subject_ar: t.subject_ar, body_ar: t.body_ar, enabled: t.enabled }),
+      });
+      if (!res.ok) throw new Error();
+      notify("تم حفظ القالب ✓");
+    } catch { notify("تعذر الحفظ، حاول مجدداً", "err"); }
+    finally { setSavingTemplate(false); }
   }
 
-  let panel: React.ReactNode;
-  if (tab === "الملف الشخصي") {
-    panel = currentUser ? (
-      <>
-        <form onSubmit={saveProfile} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-            <div style={{ width: "88px", height: "88px", borderRadius: "50%", overflow: "hidden", background: "#e2e8f0", border: "2px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem", color: "#94a3b8" }}>
-              {currentUser.avatar_url
-                ? <img src={currentUser.avatar_url} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { const img = e.currentTarget; img.style.display = "none"; img.parentElement!.textContent = currentUser.full_name?.charAt(0) || "م"; }} />
-                : currentUser.full_name?.charAt(0) || "م"}
-            </div>
-            <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarChange} />
-            <button type="button" onClick={() => avatarInputRef.current?.click()} disabled={uploadingAvatar} style={{ background: "#f1f5f9", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "0.4rem 1rem", fontSize: "0.85rem", fontWeight: 500, cursor: uploadingAvatar ? "not-allowed" : "pointer", opacity: uploadingAvatar ? 0.7 : 1 }}>
-              {uploadingAvatar ? "جارٍ الرفع..." : "تغيير الصورة"}
+  async function load() {
+    setLoading(true);
+    try {
+      const res  = await fetch("/api/admin/content");
+      const json = await res.json();
+      const d    = json.data || {};
+      if (d.settings_general?.data) setGeneral(d.settings_general.data);
+      if (d.settings_contact?.data) setContact(d.settings_contact.data);
+      if (d.settings_seo?.data)     setSeo(d.settings_seo.data);
+      const ts: Record<string, string> = {};
+      for (const k of ["settings_general", "settings_contact", "settings_seo"])
+        if (d[k]?.updated_at) ts[k] = d[k].updated_at;
+      setUpdatedAt(ts);
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => { void load(); void loadTemplates(); }, []);
+
+  async function save(key: string, data: unknown, tabKey: TabKey) {
+    setSaving(tabKey);
+    try {
+      const res = await fetch("/api/admin/content", {
+        method: "PATCH", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key, data }),
+      });
+      if (!res.ok) throw new Error();
+      setUpdatedAt(p => ({ ...p, [key]: new Date().toISOString() }));
+      notify("تم حفظ الإعدادات ✓");
+    } catch { notify("تعذر الحفظ، حاول مجدداً", "err"); }
+    finally { setSaving(null); }
+  }
+
+  function fmtDate(iso?: string) {
+    if (!iso) return "لم يُعدَّل بعد";
+    return new Date(iso).toLocaleString("ar-SA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function SaveBtn({ tabKey, dataKey, data }: { tabKey: TabKey; dataKey: string; data: unknown }) {
+    const isSaving = saving === tabKey;
+    return (
+      <button className="sg-save" onClick={() => save(dataKey, data, tabKey)} disabled={isSaving}>
+        {isSaving
+          ? <><span style={{ width:13,height:13,border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 1s linear infinite",display:"inline-block" }} /> جاري الحفظ...</>
+          : <><Save size={13} /> حفظ التغييرات</>}
+      </button>
+    );
+  }
+
+  if (authLoading || loading) return <PageLoader text="جاري تحميل الإعدادات..." />;
+
+  const tabKeys: Record<TabKey, string> = { general: "settings_general", contact: "settings_contact", seo: "settings_seo", emails: "" };
+  const tabData: Record<TabKey, unknown> = { general, contact, seo, emails: null };
+
+  return (
+    <div dir="rtl" style={{ height: "calc(100vh - 60px)", display: "grid", gridTemplateRows: "auto 1fr", background: "#f4f7fb", overflow: "hidden" }}>
+      <style>{`
+        .sg-head{padding:18px 24px 0;background:linear-gradient(180deg,#fff,#f8fbff);border-bottom:1px solid #dfe8f1}
+        .sg-eyebrow{margin:0 0 3px;color:#0f766e;font-size:.63rem;font-weight:900;letter-spacing:.04em}
+        .sg-h1{margin:0 0 12px;font-size:1.5rem;color:#073766;line-height:1}
+        .sg-tabs{display:flex;gap:2px;border-top:1px solid #f0f4f8;margin-top:6px}
+        .sg-tab{display:flex;align-items:center;gap:8px;padding:12px 16px;border:none;background:none;font:inherit;font-size:.7rem;font-weight:700;color:#7f8e9f;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;white-space:nowrap}
+        .sg-tab:hover{color:#073766}
+        .sg-tab.active{color:#073766;border-bottom-color:#073766}
+        .sg-tab small{display:none}
+        .sg-body{overflow-y:auto;padding:22px 24px}
+        .sg-panel-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;gap:12px}
+        .sg-panel-title{font-size:1rem;font-weight:800;color:#073766;margin:0 0 3px}
+        .sg-panel-meta{font-size:.59rem;color:#a0adb8}
+        .sg-save{height:36px;border:0;border-radius:9px;background:#073766;color:#fff;font:inherit;font-size:.65rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:0 16px;flex-shrink:0}
+        .sg-save:hover{background:#0a4a8a}
+        .sg-save:disabled{background:#c5d2de;cursor:not-allowed}
+        .sg-social-row{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:center;margin-bottom:10px}
+        .sg-social-ico{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:#f4f7fb;color:#526983;flex-shrink:0}
+        .sg-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f0f4f8}
+        .sg-toggle-row:last-child{border-bottom:0}
+        .sg-toggle-lbl{font-size:.72rem;font-weight:700;color:#1a2d40}
+        .sg-toggle-sub{font-size:.6rem;color:#8b9dad;margin-top:2px}
+        .sg-track{width:40px;height:22px;border-radius:20px;background:#e5eaf0;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+        .sg-track.on{background:#073766}
+        .sg-thumb{width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:3px;right:3px;transition:right .2s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+        .sg-track.on .sg-thumb{right:calc(100% - 19px)}
+        .sg-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);padding:11px 22px;border-radius:12px;font-size:.7rem;font-weight:700;display:flex;align-items:center;gap:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);z-index:1000;animation:sgUp .2s;white-space:nowrap}
+        .sg-toast.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d}
+        .sg-toast.err{background:#fef2f2;border:1px solid #fecaca;color:#dc2626}
+        @keyframes sgUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+      `}</style>
+
+      {/* ── Header ── */}
+      <div className="sg-head">
+        <p className="sg-eyebrow">إعدادات النظام</p>
+        <h1 className="sg-h1">الإعدادات العامة</h1>
+        <div className="sg-tabs">
+          {TABS.map(t => (
+            <button key={t.key} className={`sg-tab${tab === t.key ? " active" : ""}`} onClick={() => setTab(t.key)}>
+              <t.Icon size={14} />
+              {t.label}
             </button>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-              <span style={{ fontSize: "0.82rem", color: "#64748b" }}>الاسم الكامل</span>
-              <input value={profileForm.full_name} onChange={(e) => setProfileForm((f) => ({ ...f, full_name: e.target.value }))} style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "0.6rem 0.9rem", fontSize: "0.95rem", direction: "rtl" }} />
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-              <span style={{ fontSize: "0.82rem", color: "#64748b" }}>البريد الإلكتروني</span>
-              <input value={currentUser.email} disabled style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "0.6rem 0.9rem", fontSize: "0.95rem", direction: "ltr", background: "#f8fafc", color: "#94a3b8" }} />
-              <span style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "-0.3rem" }}>لتغيير البريد، تواصل مع المشرف الرئيسي</span>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-              <span style={{ fontSize: "0.82rem", color: "#64748b" }}>رقم الجوال</span>
-              <input value={profileForm.phone} onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))} placeholder="05XXXXXXXX" style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "0.6rem 0.9rem", fontSize: "0.95rem", direction: "ltr" }} />
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-              <span style={{ fontSize: "0.82rem", color: "#64748b" }}>الصلاحية</span>
-              <input value={roleLabels[currentUser.role as Role] ?? currentUser.role} disabled style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "0.6rem 0.9rem", fontSize: "0.95rem", background: "#f8fafc", color: "#94a3b8" }} />
-            </label>
-          </div>
-          <button type="submit" disabled={savingProfile} style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: "8px", padding: "0.65rem 1.5rem", fontWeight: 600, cursor: savingProfile ? "not-allowed" : "pointer", opacity: savingProfile ? 0.7 : 1, fontSize: "0.95rem", alignSelf: "flex-start" }}>
-            {savingProfile ? "جارٍ الحفظ..." : "حفظ التغييرات"}
-          </button>
-        </form>
-        <div style={{background:"#fff",border:"1px solid #e5ecf3",borderRadius:16,padding:"20px",boxShadow:"0 1px 3px rgba(0,0,0,.04)",marginTop:24}}>
-          <h3 style={{margin:"0 0 16px",fontSize:".82rem",color:"#073766",display:"flex",alignItems:"center",gap:8}}><ShieldCheck size={15} strokeWidth={2.2} /> تغيير كلمة المرور</h3>
-          <form onSubmit={handlePasswordChange}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-              <div>
-                <label style={{fontSize:".68rem",color:"#8b9dad",fontWeight:600,display:"block",marginBottom:4}}>كلمة المرور الجديدة</label>
-                <input type="password" value={pwForm.new} onChange={e=>setPwForm(f=>({...f,new:e.target.value}))} required minLength={6}
-                  style={{width:"100%",border:"1px solid #e5eaf0",borderRadius:10,padding:"10px 14px",font:"inherit",fontSize:".75rem",color:"#344d69",boxSizing:"border-box",outline:"none"}}/>
-              </div>
-              <div>
-                <label style={{fontSize:".68rem",color:"#8b9dad",fontWeight:600,display:"block",marginBottom:4}}>تأكيد كلمة المرور</label>
-                <input type="password" value={pwForm.confirm} onChange={e=>setPwForm(f=>({...f,confirm:e.target.value}))} required minLength={6}
-                  style={{width:"100%",border:"1px solid #e5eaf0",borderRadius:10,padding:"10px 14px",font:"inherit",fontSize:".75rem",color:"#344d69",boxSizing:"border-box",outline:"none"}}/>
-              </div>
-            </div>
-            <div style={{fontSize:".6rem",color:"#aab5c3",marginTop:8}}>يجب أن تحتوي كلمة المرور على 6 أحرف على الأقل.</div>
-            {pwError && <div style={{marginTop:10,padding:"10px 14px",borderRadius:8,background:"#fef2f2",color:"#dc2626",fontSize:".72rem",fontWeight:600}}>{pwError}</div>}
-            <div style={{marginTop:16}}>
-              <button type="submit" disabled={pwSaving}
-                style={{display:"flex",alignItems:"center",gap:6,height:40,padding:"0 18px",border:0,borderRadius:10,background:pwSaving||!pwForm.new||!pwForm.confirm?"#e5eaf0":"#073766",color:pwSaving||!pwForm.new||!pwForm.confirm?"#aab5c3":"#fff",cursor:pwSaving||!pwForm.new||!pwForm.confirm?"not-allowed":"pointer",font:"inherit",fontSize:".7rem",fontWeight:700,transition:"all .15s"}}>
-                <Lock size={13} strokeWidth={2.5}/> {pwSaving?"جاري التغيير...":"تغيير كلمة المرور"}
-              </button>
-            </div>
-          </form>
+          ))}
         </div>
-      </>
-    ) : <div className="follow-empty">جارٍ تحميل بيانات الحساب...</div>;
-  } else if (tab === "الفريق والصلاحيات") {
-    panel = team.map((member) => (
-      <div className="team-settings-row" key={member.id ?? member.contact}>
-        <i style={{ position: "relative", overflow: "hidden" }}>{member.avatar_url ? <img src={member.avatar_url} alt={member.full_name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} /> : member.full_name?.charAt(0) || "م"}</i>
-        <div><strong>{member.full_name}</strong><small>{member.contact}</small></div>
-        <select value={member.role} onChange={(e) => void changeRole(member, e.target.value as Role)}>
-          {(Object.keys(roleLabels) as Role[]).map((r) => <option value={r} key={r}>{roleLabels[r]}</option>)}
-        </select>
-        <span>{member.active ? "نشط" : "موقوف"}</span>
-        {member.role !== "admin" && (
-          <button onClick={() => void deleteMember(member)} title="حذف العضو"
-            style={{ background: "none", border: "1px solid #fecaca", borderRadius: 7, padding: "4px 8px", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center" }}>
-            <Trash2 size={13} />
-          </button>
-        )}
       </div>
-    ));
-  } else if (tab === "الأمان وسجل الدخول") {
-    panel = databaseMode ? (
-      <div style={{ border:"1px solid #e5eaf0", borderRadius:12, overflow:"hidden", background:"#fff" }}>
-        {auditLogs.map((log, idx) => {
-          const cfg = resolveAuditConfig(log);
-          const details = buildAuditDetails(log);
-          const actor = log.profiles?.full_name ?? "النظام";
-          const dt = new Date(log.created_at);
-          const dateStr = formatAppDate(dt);
-          const timeStr = dt.toLocaleTimeString("ar-SA", { hour:"2-digit", minute:"2-digit" });
-          return (
-            <div key={log.id} style={{ display:"grid", gridTemplateColumns:"28px 1fr auto auto", gap:"0 12px", alignItems:"center", padding:"9px 14px", borderBottom: idx < auditLogs.length - 1 ? "1px solid #f0f4f8" : "none", transition:"background .1s" }}
-              onMouseEnter={e => e.currentTarget.style.background="#fafbfd"}
-              onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-              <div style={{ width:28, height:28, borderRadius:8, background:cfg.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <cfg.Icon size={13} color={cfg.color} />
-              </div>
-              <div style={{ minWidth:0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
-                  <span style={{ fontSize:".62rem", fontWeight:700, color:"#0b1e36" }}>{cfg.label}</span>
-                  {details.map((d, i) => <span key={i} style={{ fontSize:".55rem", color:"#8b9dad" }}>· {d}</span>)}
+
+      {/* ── Body ── */}
+      <div className="sg-body">
+        <div className="sg-panel-head">
+          <div>
+            <div className="sg-panel-title">{TABS.find(t => t.key === tab)?.label}</div>
+            <div className="sg-panel-meta">
+              {tab === "emails" ? "كل قالب يُحفظ بشكل مستقل" : `آخر تعديل: ${fmtDate(updatedAt[tabKeys[tab]])}`}
+            </div>
+          </div>
+          {tab !== "emails" && <SaveBtn tabKey={tab} dataKey={tabKeys[tab]} data={tabData[tab]} />}
+        </div>
+
+        {/* ── General ── */}
+        {tab === "general" && (
+          <>
+            <Card title="معلومات الموقع">
+              <Row>
+                <FG>
+                  <Lbl>اسم الموقع / الشركة</Lbl>
+                  <Inp value={general.siteName} onChange={v => setGeneral(g => ({ ...g, siteName: v }))} placeholder="أتمم" />
+                </FG>
+                <FG>
+                  <Lbl>اللغة الافتراضية</Lbl>
+                  <select value={general.defaultLang} onChange={e => setGeneral(g => ({ ...g, defaultLang: e.target.value as "ar"|"en" }))}
+                    style={{ ...FIELD, height: 38 }}>
+                    <option value="ar">العربية</option>
+                    <option value="en">English</option>
+                  </select>
+                </FG>
+              </Row>
+              <Row>
+                <FG>
+                  <Lbl>رابط الشعار (Logo URL)</Lbl>
+                  <Inp value={general.logoUrl} onChange={v => setGeneral(g => ({ ...g, logoUrl: v }))} placeholder="/assets/logo/logo.png" dir="ltr" />
+                </FG>
+                <FG>
+                  <Lbl>رابط الـ Favicon</Lbl>
+                  <Inp value={general.faviconUrl} onChange={v => setGeneral(g => ({ ...g, faviconUrl: v }))} placeholder="/favicon.ico" dir="ltr" />
+                </FG>
+              </Row>
+            </Card>
+
+            <Card title="وضع الصيانة">
+              <div className="sg-toggle-row">
+                <div>
+                  <div className="sg-toggle-lbl">تفعيل وضع الصيانة</div>
+                  <div className="sg-toggle-sub">عند التفعيل يرى الزوار صفحة صيانة بدلاً من الموقع</div>
                 </div>
-                <span style={{ fontSize:".55rem", color:"#aab5c3", display:"flex", alignItems:"center", gap:4 }}>
-                  <ShieldCheck size={10} color="#c7d8f0" /> بواسطة: <strong style={{ color:"#6b829b", fontWeight:600 }}>{actor}</strong>
+                <span className={`sg-track${general.maintenanceMode ? " on" : ""}`} onClick={() => setGeneral(g => ({ ...g, maintenanceMode: !g.maintenanceMode }))}>
+                  <span className="sg-thumb" />
                 </span>
               </div>
-              <span style={{ fontSize:".52rem", color:"#aab5c3", whiteSpace:"nowrap" }}>{dateStr}</span>
-              <span style={{ fontSize:".52rem", color:"#c7d8f0", whiteSpace:"nowrap" }}>{timeStr}</span>
-            </div>
-          );
-        })}
-        {!auditLogs.length && <div className="follow-empty">لا توجد أحداث مسجلة بعد.</div>}
-      </div>
-    ) : <div className="follow-empty">سيظهر سجل التدقيق بعد ربط Supabase.</div>;
-  } else {
-    panel = <div className="follow-empty">تدار التنبيهات من المتابعات والمواعيد.</div>;
-  }
+            </Card>
+          </>
+        )}
 
-  if (authLoading) return <PageLoader text="جاري تحميل الإعدادات..." />;
-  return (
-      <><section className="settings-page">
-        <div className="settings-heading">
-          <p>إدارة النظام</p><h1>الإعدادات</h1>
-          <span>إدارة الفريق والصلاحيات والتنبيهات وبيانات الحساب.</span>
+        {/* ── Contact ── */}
+        {tab === "contact" && (
+          <>
+            <Card title="البريد الإلكتروني">
+              <Row>
+                <FG>
+                  <Lbl>البريد الرئيسي <span style={{ color: "#dc2626" }}>*</span></Lbl>
+                  <Inp value={contact.email} onChange={v => setContact(c => ({ ...c, email: v }))} placeholder="info@atmmam.com.sa" type="email" dir="ltr" />
+                  <Hint>هذا البريد يستقبل رسائل نموذج التواصل في الصفحة الرئيسية</Hint>
+                </FG>
+                <FG>
+                  <Lbl>بريد الدعم الفني</Lbl>
+                  <Inp value={contact.supportEmail} onChange={v => setContact(c => ({ ...c, supportEmail: v }))} placeholder="support@atmmam.com.sa" type="email" dir="ltr" />
+                  <Hint>يُستخدم في إشعارات التذاكر والمساعدة التقنية</Hint>
+                </FG>
+              </Row>
+            </Card>
+
+            <Card title="أرقام التواصل">
+              <Row>
+                <FG>
+                  <Lbl>رقم الهاتف</Lbl>
+                  <Inp value={contact.phone} onChange={v => setContact(c => ({ ...c, phone: v }))} placeholder="+966 5x xxx xxxx" dir="ltr" />
+                </FG>
+                <FG>
+                  <Lbl>رقم واتساب</Lbl>
+                  <Inp value={contact.whatsapp} onChange={v => setContact(c => ({ ...c, whatsapp: v }))} placeholder="+966 5x xxx xxxx" dir="ltr" />
+                  <Hint>يُستخدم في زر واتساب أسفل الصفحة</Hint>
+                </FG>
+              </Row>
+              <Row>
+                <FG>
+                  <Lbl>ساعات العمل</Lbl>
+                  <Inp value={contact.workingHours} onChange={v => setContact(c => ({ ...c, workingHours: v }))} placeholder="الأحد – الخميس، 9 ص – 6 م" />
+                </FG>
+                <FG>
+                  <Lbl>العنوان</Lbl>
+                  <Inp value={contact.address} onChange={v => setContact(c => ({ ...c, address: v }))} placeholder="الرياض، المملكة العربية السعودية" />
+                </FG>
+              </Row>
+            </Card>
+
+            <Card title="حسابات التواصل الاجتماعي">
+              {SOCIAL_PLATFORMS.map(({ key, logo, label, placeholder }) => (
+                <div key={key} className="sg-social-row">
+                  <div className="sg-social-ico">
+                    <span dangerouslySetInnerHTML={{ __html: logo }} />
+                  </div>
+                  <FG style={{ margin: 0 }}>
+                    <Lbl>{label}</Lbl>
+                    <Inp
+                      value={(contact as Record<string, string>)[key] || ""}
+                      onChange={v => setContact(c => ({ ...c, [key]: v }))}
+                      placeholder={placeholder} dir="ltr"
+                    />
+                  </FG>
+                </div>
+              ))}
+            </Card>
+          </>
+        )}
+
+        {/* ── SEO ── */}
+        {tab === "seo" && (
+          <>
+            <Card title="وصف الموقع">
+              <FG>
+                <Lbl>وصف الموقع (Meta Description)</Lbl>
+                <Textarea
+                  value={seo.siteDescription}
+                  onChange={v => setSeo(s => ({ ...s, siteDescription: v }))}
+                  placeholder="وصف مختصر يشرح ما تقدمه المنصة، يظهر في نتائج Google..."
+                />
+                <Hint>
+                  يُنصح بين 120–160 حرفاً ·&nbsp;
+                  <span style={{ fontWeight: 700, color: seo.siteDescription.length > 160 ? "#dc2626" : seo.siteDescription.length < 120 ? "#b45309" : "#15803d" }}>
+                    {seo.siteDescription.length} حرف {seo.siteDescription.length > 160 ? "⚠ طويل" : seo.siteDescription.length < 120 ? "⚠ قصير" : "✓ مثالي"}
+                  </span>
+                </Hint>
+              </FG>
+              <FG>
+                <Lbl>الكلمات المفتاحية (Keywords)</Lbl>
+                <Inp value={seo.keywords} onChange={v => setSeo(s => ({ ...s, keywords: v }))} placeholder="تأسيس شركات، تراخيص تجارية، إجراءات حكومية..." />
+                <Hint>افصل بين الكلمات بفاصلة. هذه الحقل أقل أهمية في SEO الحديث لكنه مفيد.</Hint>
+              </FG>
+            </Card>
+
+            <Card title="صورة المشاركة (OG Image)">
+              <FG>
+                <Lbl>رابط صورة الـ OG</Lbl>
+                <Inp value={seo.ogImage} onChange={v => setSeo(s => ({ ...s, ogImage: v }))} placeholder="/assets/og-image.jpg" dir="ltr" />
+                <Hint>تظهر عند مشاركة الموقع على وسائل التواصل. المقاس المثالي: 1200×630 بكسل</Hint>
+              </FG>
+            </Card>
+
+            <Card title="أدوات التحليل">
+              <Row>
+                <FG>
+                  <Lbl>Google Analytics ID</Lbl>
+                  <Inp value={seo.googleAnalytics} onChange={v => setSeo(s => ({ ...s, googleAnalytics: v }))} placeholder="G-XXXXXXXXXX" dir="ltr" />
+                </FG>
+                <FG>
+                  <Lbl>Google Tag Manager ID</Lbl>
+                  <Inp value={seo.googleTagManager} onChange={v => setSeo(s => ({ ...s, googleTagManager: v }))} placeholder="GTM-XXXXXXX" dir="ltr" />
+                </FG>
+              </Row>
+            </Card>
+          </>
+        )}
+
+        {/* ── Email Templates ── */}
+        {tab === "emails" && (
+          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
+            <div>
+              {templates.map(t => (
+                <div key={t.id} onClick={() => setActiveTemplate(t.id)}
+                  style={{
+                    padding: "10px 12px", borderRadius: 10, cursor: "pointer", marginBottom: 6,
+                    border: `1px solid ${activeTemplate === t.id ? "#bddcff" : "#e4ebf2"}`,
+                    background: activeTemplate === t.id ? "#eaf4ff" : "#fff",
+                  }}>
+                  <div style={{ fontSize: ".68rem", fontWeight: 700, color: "#1a2d40", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: t.enabled ? "#15803d" : "#c4cdd6", flexShrink: 0 }} />
+                    {t.label_ar}
+                  </div>
+                </div>
+              ))}
+              {templates.length === 0 && <div style={{ fontSize: ".62rem", color: "#a0adb8", padding: "10px 0" }}>لا قوالب محمّلة</div>}
+            </div>
+
+            <div>
+              {templates.filter(t => t.id === activeTemplate).map(t => (
+                <div key={t.id}>
+                  <Card title={t.label_ar}>
+                    <div className="sg-toggle-row" style={{ marginBottom: 14 }}>
+                      <div>
+                        <div className="sg-toggle-lbl">تفعيل هذا القالب</div>
+                        <div className="sg-toggle-sub">عند التعطيل لن يُرسل هذا الإيميل تلقائياً</div>
+                      </div>
+                      <span className={`sg-track${t.enabled ? " on" : ""}`}
+                        onClick={() => setTemplates(ts => ts.map(x => x.id === t.id ? { ...x, enabled: !x.enabled } : x))}>
+                        <span className="sg-thumb" />
+                      </span>
+                    </div>
+
+                    <FG>
+                      <Lbl>عنوان الرسالة (Subject)</Lbl>
+                      <Inp value={t.subject_ar} onChange={v => setTemplates(ts => ts.map(x => x.id === t.id ? { ...x, subject_ar: v } : x))} />
+                    </FG>
+                    <FG>
+                      <Lbl>محتوى الرسالة</Lbl>
+                      <Textarea value={t.body_ar} onChange={v => setTemplates(ts => ts.map(x => x.id === t.id ? { ...x, body_ar: v } : x))} rows={10} />
+                      <Hint>
+                        المتغيرات المتاحة: <code>{"{{client_name}}"}</code> <code>{"{{ticket_id}}"}</code> <code>{"{{ticket_title}}"}</code> <code>{"{{priority}}"}</code> <code>{"{{new_status}}"}</code> <code>{"{{sla_hours}}"}</code> <code>{"{{reply_preview}}"}</code>
+                      </Hint>
+                    </FG>
+
+                    <button className="sg-save" onClick={() => saveTemplate(t)} disabled={savingTemplate}>
+                      {savingTemplate
+                        ? <><span style={{ width:13,height:13,border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 1s linear infinite",display:"inline-block" }} /> جاري الحفظ...</>
+                        : <><Save size={13} /> حفظ القالب</>}
+                    </button>
+                  </Card>
+                </div>
+              ))}
+              {!activeTemplate && <div style={{ fontSize: ".66rem", color: "#a0adb8", textAlign: "center", padding: "40px 0" }}>اختر قالباً من القائمة</div>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {toast && (
+        <div className={`sg-toast ${toast.type}`}>
+          {toast.type === "ok" ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+          {toast.msg}
         </div>
-        <div className="settings-grid">
-          <nav className="settings-nav">
-            {tabs.map((item) => (
-              <button className={tab === item ? "active" : ""} onClick={() => setTab(item)} key={item}>{item}</button>
-            ))}
-          </nav>
-          <section className="settings-panel">
-            <h2>{tab}</h2>
-            <p>{tab === "الملف الشخصي" ? "بيانات حسابك الشخصي في النظام" : tab === "الفريق والصلاحيات" ? "الصلاحية تطبق على الخادم وقاعدة البيانات." : databaseMode ? "هذه الإعدادات متصلة بملف النظام." : "ستتصل هذه الإعدادات بملف النظام عند ربط Supabase."}</p>
-            {panel}
-          </section>
-        </div>
-      </section>
-      {notice ? <div className="ops-toast"><CheckCircle size={14} /> {notice}</div> : null}
-  </>);
+      )}
+    </div>
+  );
 }

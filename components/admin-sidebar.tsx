@@ -2,49 +2,60 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Settings, ChevronDown, Bell, LayoutDashboard, ClipboardList, Users, Ticket, RefreshCw, Package, FileText, BarChart3, UserCog, CreditCard, CircleDollarSign, Building2, MessageCircle, Star, ShoppingBag, AlertCircle, CheckCheck, CalendarClock, Receipt } from "lucide-react";
+import { LogOut, Settings, ChevronDown, Bell, LayoutDashboard, ClipboardList, Users, Ticket, RefreshCw, Package, FileText, BarChart3, UserCog, CreditCard, CircleDollarSign, Building2, MessageCircle, Star, ShoppingBag, AlertCircle, CheckCheck, CalendarClock, Receipt, SlidersHorizontal } from "lucide-react";
 
-type Section = "dashboard" | "orders" | "clients" | "tickets" | "consultations" | "followups" | "services" | "packages" | "subscriptions" | "invoices" | "content" | "reports" | "team";
+type Section = "dashboard" | "orders" | "clients" | "tickets" | "consultations" | "followups" | "services" | "packages" | "subscriptions" | "invoices" | "content" | "settings" | "reports" | "team";
 
 const roleLinks: Record<string, Section[]> = {
-  admin: ["dashboard", "orders", "clients", "tickets", "consultations", "followups", "services", "packages", "subscriptions", "invoices", "content", "reports", "team"],
-  manager: ["dashboard", "orders", "clients", "tickets", "consultations", "followups", "services", "packages", "subscriptions", "invoices", "content", "reports"],
+  admin:    ["dashboard", "orders", "clients", "tickets", "consultations", "followups", "subscriptions", "invoices", "services", "packages", "content", "settings", "reports", "team"],
+  manager:  ["dashboard", "orders", "clients", "tickets", "consultations", "followups", "subscriptions", "invoices", "services", "packages", "content", "reports"],
   operator: ["dashboard", "orders", "tickets", "consultations", "followups", "clients", "invoices"],
-  viewer: ["dashboard", "reports"],
+  viewer:   ["dashboard", "reports"],
 };
 
 const groups: { title: string; items: { key: Section; label: string; icon: React.ReactNode }[] }[] = [
   {
     title: "الرئيسية",
     items: [
-      { key: "dashboard", label: "لوحة التحكم", icon: <LayoutDashboard size={18} /> },
-      { key: "orders", label: "الطلبات", icon: <ClipboardList size={18} /> },
-      { key: "clients", label: "العملاء", icon: <Users size={18} /> },
+      { key: "dashboard",     label: "لوحة التحكم",    icon: <LayoutDashboard  size={18} /> },
+      { key: "orders",        label: "الطلبات",         icon: <ClipboardList    size={18} /> },
+      { key: "clients",       label: "العملاء",         icon: <Users            size={18} /> },
     ],
   },
   {
-    title: "المتابعة",
+    title: "خدمة العملاء",
     items: [
-      { key: "tickets", label: "التذاكر", icon: <Ticket size={18} /> },
-      { key: "consultations", label: "الاستشارات", icon: <CalendarClock size={18} /> },
-      { key: "followups", label: "المتابعات", icon: <RefreshCw size={18} /> },
+      { key: "tickets",       label: "تذاكر الدعم",    icon: <Ticket           size={18} /> },
+      { key: "consultations", label: "الاستشارات",      icon: <CalendarClock    size={18} /> },
+      { key: "followups",     label: "المتابعات",       icon: <RefreshCw        size={18} /> },
     ],
   },
   {
     title: "المالية",
     items: [
-      { key: "subscriptions", label: "الاشتراكات", icon: <CircleDollarSign size={18} /> },
-      { key: "invoices", label: "الفواتير", icon: <Receipt size={18} /> },
+      { key: "subscriptions", label: "الاشتراكات",      icon: <CircleDollarSign size={18} /> },
+      { key: "invoices",      label: "الفواتير",         icon: <Receipt          size={18} /> },
     ],
   },
   {
-    title: "الإعدادات",
+    title: "الخدمات والباقات",
     items: [
-      { key: "services", label: "الخدمات والباقات", icon: <Package size={18} /> },
-      { key: "packages", label: "الباقات", icon: <CreditCard size={18} /> },
-      { key: "content", label: "المحتوى", icon: <FileText size={18} /> },
-      { key: "reports", label: "التقارير", icon: <BarChart3 size={18} /> },
-      { key: "team", label: "الفريق", icon: <UserCog size={18} /> },
+      { key: "services",      label: "الخدمات",         icon: <Package          size={18} /> },
+      { key: "packages",      label: "الباقات",         icon: <CreditCard       size={18} /> },
+    ],
+  },
+  {
+    title: "إدارة الموقع",
+    items: [
+      { key: "content",       label: "محتوى الموقع",   icon: <FileText          size={18} /> },
+      { key: "settings",      label: "إعدادات الموقع", icon: <SlidersHorizontal size={18} /> },
+    ],
+  },
+  {
+    title: "الإدارة",
+    items: [
+      { key: "reports",       label: "التقارير",        icon: <BarChart3        size={18} /> },
+      { key: "team",          label: "الفريق",          icon: <UserCog          size={18} /> },
     ],
   },
 ];
@@ -60,9 +71,10 @@ const SECTION_PERMISSION: Record<Section, string> = {
   packages: "manage_services",
   subscriptions: "manage_services",
   invoices: "manage_services",
-  content: "manage_content",
-  reports: "view_reports",
-  team: "manage_team",
+  content:  "manage_content",
+  settings: "manage_content",
+  reports:  "view_reports",
+  team:     "manage_team",
 };
 
 type Props = {
@@ -267,8 +279,8 @@ export default function AdminSidebar({ role: propRole, name, email, avatarUrl, n
                       {email && <div className="adm-top-dropdown-email">{email}</div>}
                     </div>
                   </div>
-                  <a href="/admin/settings" className="adm-top-dropdown-item" onClick={() => setUserOpen(false)}>
-                    <Settings size={14} /> الإعدادات
+                  <a href="/admin/profile" className="adm-top-dropdown-item" onClick={() => setUserOpen(false)}>
+                    <Settings size={14} /> الملف الشخصي
                   </a>
                 </div>
               )}
